@@ -2,216 +2,116 @@
 class_name CharacterVisual
 extends Node3D
 
-## Shared block-built character renderer. The approved body remains the rig;
-## wardrobe pieces are fitted JSON shells attached to its animated anchors.
-
-const BODY_COLOR := Color("344653")
-const TEXTURE_MATERIAL_CATALOG := preload("res://scripts/core/texture_material_catalog.gd")
-
-var appearance: CharacterAppearance = CharacterAppearance.default_appearance()
-var _body_root: Node3D
-var _rig: ModelAssembler
+## One imported Blender skeleton shared by body, clothes and accessories.
+const MODEL = preload("res://resources/models/characters/mariner.glb")
+var appearance := CharacterAppearance.default_appearance()
+var skeleton: Skeleton3D
+var animation_player: AnimationPlayer
+var _model: Node3D
+var _meshes: Array[MeshInstance3D] = []
 var _decorated := true
-var _garments: Array[CharacterGarment] = []
-
+var _anchors: Dictionary = {}
 
 func _ready() -> void:
 	rebuild()
 
+func rebuild() -> void:
+	if _model != null:
+		_model.free()
+	_meshes.clear()
+	_anchors.clear()
+	_model = MODEL.instantiate()
+	add_child(_model)
+	for child in _model.find_children("*", "MeshInstance3D", true, false):
+		_meshes.append(child)
+		for surface in range(child.mesh.get_surface_count()):
+			var material: Material = child.mesh.surface_get_material(surface)
+			if material != null:
+				child.set_surface_override_material(surface, material.duplicate())
+	var rigs := _model.find_children("*", "Skeleton3D", true, false)
+	if not rigs.is_empty(): skeleton = rigs[0]
+	var players := _model.find_children("*", "AnimationPlayer", true, false)
+	if not players.is_empty():
+		animation_player = players[0]
+		for clip in animation_player.get_animation_list():
+			animation_player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
+	if skeleton != null:
+		for side in ["left", "right"]:
+			var anchor := BoneAttachment3D.new()
+			anchor.name = "HandAnchor_" + side
+			anchor.bone_name = "hand.L" if side == "left" else "hand.R"
+			skeleton.add_child(anchor)
+			_anchors[side] = anchor
+	apply_appearance(appearance)
+	play_motion(&"idle")
 
 func apply_appearance(value: CharacterAppearance) -> void:
 	appearance = value.duplicate() if value != null else CharacterAppearance.default_appearance()
-	if is_node_ready():
-		rebuild()
-
+	var visibility := {
+		"Body_Torso": not (_decorated and appearance.top_id == "sweater"),
+		"Body_Arms": not (_decorated and appearance.top_id == "sweater"),
+		"Body_Legs": not (_decorated and appearance.trousers_id == "work"),
+		"Body_Feet": not (_decorated and appearance.footwear_id == "boots"),
+		"Base_Shorts": not (_decorated and appearance.trousers_id == "work"),
+		"Hair_Crop": appearance.hair_id == "crop" and not (_decorated and appearance.headwear_id in ["cap", "hardhat"]),
+		"Top_Sweater": _decorated and appearance.top_id == "sweater",
+		"Top_Trim": _decorated and appearance.top_id == "sweater",
+		"Trousers_Work": _decorated and appearance.trousers_id == "work",
+		"Footwear_Boots": _decorated and appearance.footwear_id == "boots",
+		"Outerwear_Vest": _decorated and appearance.outerwear_id == "vest",
+		"Headwear_Cap": _decorated and appearance.headwear_id == "cap",
+		"Headwear_Hardhat": _decorated and appearance.headwear_id == "hardhat",
+		"FacialHair_Moustache": appearance.facial_hair_id == "moustache",
+		"Eyewear_Glasses": _decorated and appearance.eyewear_id == "glasses",
+		"Accessory_Pipe": _decorated and appearance.face_accessory_id == "pipe",
+		"Utility_Belt": _decorated and appearance.utility_id == "belt",
+	}
+	var age_weight := (appearance.age - 18.0) / 62.0
+	var colors := {
+		"Skin": appearance.skin_color, "Top": appearance.top_color,
+		"Trousers": appearance.trousers_color, "Footwear": appearance.footwear_color,
+		"Hair": appearance.hair_color.lerp(Color(.55,.55,.52), age_weight * .8),
+		"Headwear": appearance.headwear_color, "Outerwear": appearance.accent_color,
+		"Lips": appearance.skin_color.darkened(.28),
+	}
+	var morphs := {"Build": appearance.build, "Belly": appearance.belly, "Frame": appearance.frame, "Age": age_weight}
+	for item in _meshes:
+		item.visible = visibility.get(str(item.name), true)
+		for index in range(item.mesh.get_blend_shape_count()):
+			item.set_blend_shape_value(index, morphs.get(str(item.mesh.get_blend_shape_name(index)), 0.0))
+		for surface in range(item.mesh.get_surface_count()):
+			var material := item.get_surface_override_material(surface) as StandardMaterial3D
+			if material != null and colors.has(material.resource_name):
+				material.albedo_color = colors[material.resource_name]
 
 func set_decorated(value: bool) -> void:
-	if _decorated == value:
-		return
 	_decorated = value
-	if is_node_ready():
-		rebuild()
+	apply_appearance(appearance)
 
+func play_motion(state: StringName, playback_speed: float = 1.0) -> void:
+	if animation_player == null: return
+	for clip in animation_player.get_animation_list():
+		if str(clip).get_slice("/", str(clip).get_slice_count("/") - 1) == str(state):
+			animation_player.speed_scale = playback_speed
+			if animation_player.current_animation != clip:
+				var old := animation_player.current_animation
+				var phase := 0.0
+				if old in ["walk", "run"] and state in [&"walk", &"run"]:
+					phase = fposmod(animation_player.current_animation_position / animation_player.current_animation_length, 1.0)
+				animation_player.play(clip, .24)
+				if phase > 0.0: animation_player.seek(phase * animation_player.get_animation(clip).length, true)
+			return
 
-func rebuild() -> void:
-	_clear_body()
-	_body_root = Node3D.new()
-	_body_root.name = "BodyRoot"
-	add_child(_body_root)
-
-	_rig = ModelAssembler.new()
-	_rig.name = "BaseBody"
-	_rig.model_data_path = AssetPaths.NPC_CHARACTER_STUDY_MODEL
-	_rig.build_part_colliders = false
-	_body_root.add_child(_rig)
-
-	_apply_base_colors()
-	if _decorated:
-		_build_wardrobe()
-
+func set_walk_distance(distance_m: float) -> void:
+	play_motion(&"walk", 0.0)
+	if animation_player != null:
+		animation_player.seek(fposmod(distance_m, 1.0) * animation_player.get_animation("walk").length, true)
 
 func get_part(part_name: String) -> Node3D:
-	if _rig != null:
-		var base_part := _rig.get_part(part_name)
-		if base_part != null:
-			return base_part
-	return null
-
-
+	return _model.find_child(part_name, true, false) as Node3D if _model != null else null
 func get_base_assembler() -> ModelAssembler:
-	return _rig
-
-
+	return null
 func get_all_assemblers() -> Array[ModelAssembler]:
-	var out: Array[ModelAssembler] = []
-	if _rig != null:
-		out.append(_rig)
-	return out
-
-
+	return []
 func get_hand_anchor(side: String) -> Node3D:
-	return get_part("hand_%s" % side)
-
-
-func _clear_body() -> void:
-	if _body_root != null and is_instance_valid(_body_root):
-		remove_child(_body_root)
-		_body_root.free()
-	_body_root = null
-	_rig = null
-	_garments.clear()
-
-
-func _build_wardrobe() -> void:
-	for slot in [
-		&"trousers", &"footwear", &"tops", &"outerwear", &"hair",
-		&"facial_hair", &"headwear", &"eyewear", &"face_accessories",
-		&"neckwear", &"handwear", &"utility_accessories",
-	]:
-		var item_id := _appearance_id_for_slot(slot)
-		if item_id.is_empty() or item_id == "none":
-			continue
-		var model_path := CharacterCatalog.wardrobe_model_path(slot, item_id)
-		if model_path.is_empty() or not FileAccess.file_exists(model_path):
-			continue
-		var garment := CharacterGarment.new()
-		garment.name = "Wardrobe_%s_%s" % [String(slot), item_id]
-		_body_root.add_child(garment)
-		if garment.attach(self, model_path, _palette_for_slot(slot)):
-			_garments.append(garment)
-		else:
-			garment.queue_free()
-
-
-func _appearance_id_for_slot(slot: StringName) -> String:
-	match slot:
-		&"hair": return appearance.hair_id
-		&"facial_hair": return appearance.facial_hair_id
-		&"tops": return appearance.top_id
-		&"outerwear": return appearance.outerwear_id
-		&"trousers": return appearance.trousers_id
-		&"footwear": return appearance.footwear_id
-		&"headwear": return appearance.headwear_id
-		&"eyewear": return appearance.eyewear_id
-		&"face_accessories": return appearance.face_accessory_id
-		&"neckwear": return appearance.neckwear_id
-		&"handwear": return appearance.handwear_id
-		&"utility_accessories": return appearance.utility_id
-	return "none"
-
-
-func _palette_for_slot(slot: StringName) -> Dictionary:
-	var primary := appearance.accessory_color
-	var secondary := appearance.accent_color
-	match slot:
-		&"hair", &"facial_hair":
-			primary = appearance.hair_color
-			secondary = appearance.hair_color.darkened(0.22)
-		&"tops":
-			primary = appearance.top_color
-			# The reference sweater is a cream-and-charcoal micro-knit. It should
-			# not inherit a bright company accent and turn into a novelty jumper.
-			if appearance.top_id == "wool_sweater":
-				secondary = Color("191d20")
-			elif appearance.top_id == "plain_wool_sweater":
-				secondary = appearance.top_color.darkened(0.28)
-			else:
-				secondary = appearance.accent_color
-		&"outerwear":
-			primary = appearance.clothing_color
-			# Tailored wool uses tonal construction detail. A company accent is
-			# appropriate on safety gear and oilskins, but it made suit lapels and
-			# peacoat collars read like costume trim.
-			if appearance.outerwear_id in ["shore_suit_jacket", "wool_peacoat"]:
-				secondary = appearance.clothing_color.darkened(0.18)
-			elif appearance.outerwear_id in ["rain_jacket_yellow", "rain_jacket_orange"]:
-				# Oilskin construction details are tonal. Preset accents belong on
-				# company markings and accessories, not the whole storm closure.
-				secondary = appearance.clothing_color.darkened(0.12)
-			else:
-				secondary = appearance.accent_color
-		&"trousers":
-			primary = appearance.trousers_color
-			if appearance.trousers_id == "rain_trousers":
-				secondary = appearance.trousers_color.darkened(0.12)
-			else:
-				secondary = appearance.accent_color
-		&"footwear":
-			primary = appearance.footwear_color
-			secondary = appearance.footwear_color.darkened(0.25)
-		&"headwear":
-			primary = appearance.headwear_color
-			if appearance.headwear_id == "souwester":
-				secondary = appearance.headwear_color.darkened(0.10)
-			else:
-				secondary = appearance.accent_color
-		&"eyewear":
-			primary = appearance.accessory_color
-			secondary = appearance.accessory_color.darkened(0.18)
-		&"handwear":
-			primary = appearance.accessory_color
-			secondary = appearance.accessory_color.darkened(0.12)
-	return {
-		"primary_color": primary,
-		"secondary_color": secondary,
-	}
-
-
-func _apply_base_colors() -> void:
-	_tint_role(_rig, "body_upper", BODY_COLOR)
-	_tint_role(_rig, "body_lower", BODY_COLOR)
-	_tint_role(_rig, "skin", appearance.skin_color)
-	_tint_role(_rig, "skin_shadow", appearance.skin_color.darkened(0.06))
-	_tint_role(_rig, "nose", appearance.skin_color.darkened(0.08))
-	_tint_role(_rig, "face_ink", Color("14191c"))
-	_tint_role(_rig, "mouth", Color("493338"))
-	_tint_role(_rig, "footwear", BODY_COLOR.darkened(0.30))
-	_apply_face_surface()
-
-
-func _apply_face_surface() -> void:
-	if appearance.face_texture_profile_id == "none":
-		return
-	var head := get_part("head") as MeshTransformer
-	if head == null:
-		return
-	var profile := TEXTURE_MATERIAL_CATALOG.resolve(appearance.face_texture_profile_id)
-	if profile.is_empty():
-		return
-	# The mask supplies the skin palette. Keeping the solid part tint here would
-	# multiply the skin colour by itself and darken textured faces.
-	head.mesh_color = Color.WHITE
-	head.mesh_texture_path = str(profile.get("texture", ""))
-	head.mesh_texture_mask_path = str(profile.get("texture_mask", ""))
-	head.mesh_primary_color = appearance.skin_color
-	head.mesh_secondary_color = appearance.skin_color.darkened(0.08)
-	head.mesh_roughness = float(profile.get("roughness", head.mesh_roughness))
-	head.mesh_metallic = float(profile.get("metallic", head.mesh_metallic))
-
-
-func _tint_role(assembler: ModelAssembler, role: String, color: Color) -> void:
-	if assembler == null:
-		return
-	for part in assembler.get_parts_by_role(role):
-		if part is MeshTransformer:
-			(part as MeshTransformer).mesh_color = color
+	return _anchors.get(side)

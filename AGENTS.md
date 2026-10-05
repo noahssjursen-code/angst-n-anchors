@@ -410,3 +410,21 @@ Actions registered in `project.godot` that gameplay code reads via `Input.is_act
 | `boat_autopilot_toggle` | P | Engage/disengage active freight route autopilot |
 
 Add new actions to `project.godot` directly; there is no separate input-map JSON.
+
+
+## Character model teardown (2026-10-05)
+
+The JSON/cuboid character body, wardrobe, hats, texture library, generators,
+procedural rig posing and their old visual demos were intentionally deleted.
+Do not resurrect them or add primitive fallback people. CharacterVisual now loads
+the Blender mariner, and CharacterCatalog lists only the new imported wardrobe.
+The character studio uses the same rig as gameplay. New work must use Blender-authored
+models in resources/models/characters and source .blend files under
+resources/models/_source/characters. Player movement, NPC behavior/interaction,
+identity creation, appearance serialization and network contracts remain usable.
+Old saved appearance identifiers are inert migration data, not asset definitions.
+Follow resources/models/characters/README.md for the angular reference style,
+shared skeleton, independent morphs, material colours and clothing coverage.
+Run tests/blender_character_test.tscn and tests/captain_onboarding_test.tscn to
+verify the imported character and identity flow; use the existing
+--shipyard-playtest isolation flag when running these scenes to avoid live saves.

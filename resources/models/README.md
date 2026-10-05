@@ -387,10 +387,14 @@ the OS cache and launches a separate Godot process into
 changes the parent scene, or disconnects the parent's server. Closing the child
 returns to the original builder. One test child at a time; temporary snapshots
 are consumed on child startup. The normal WalkingHud, ShipHud, GameMenu and BoatCamera are retained. F targets
-the actual wheel to helm, chairs/bench sockets to sit, and doors to open/close.
+the wheel or a helm chair to drive, passenger chairs/bench sockets to sit, and
+doors to open/close. Helm chairs retain their seated eye position and occupancy
+state while activating the same BoatController and ShipHud as the wheel; leaving
+the chair releases helm control. Seat roles come from catalog style, not proximity
+to a wheel.
 F or Escape leaves the helm/seat; V switches the helm/seat camera. Home resets;
 the normal Escape menu offers Return to builder. There is no global H-to-drive
-shortcut. A draft needs an installed wheel to be driven. Falling overboard recovers the player; leaving
+shortcut. A draft needs an installed wheel or helm chair to be driven. Falling overboard recovers the player; leaving
 the 1.5 km test radius resets the vessel. Startup and reset set the local clock
 to noon and apply clear visibility, 25% cloud, 6 m/s wind and sea state 0.35
 through WeatherLighting, which drives the same FFT waves and buoyancy queries.
@@ -423,7 +427,8 @@ separate work. Do not describe this sandbox as a completed fleet migration.
 Verification: run the showcase with `-- --shipyard-playtest <snapshot.json>
 --verify-playtest` for deck walking, imported-part count, animated door collisions,
 snapshot immutability, isolation, pause, real F-to-helm/seat input, normal HUD,
-drive/turn, coasting on deck, and reset. The verification fixture needs a wheel.
+drive/turn, coasting on deck, and reset. The verification fixture needs a wheel or helm chair; a chair takes precedence
+so the full drive/steering/exit sequence exercises seated helm control.
 Optional `--capture <absolute.png>` saves a real rendered third-person view.
 Run `tests/shipyard_playtest_launch_test.tscn -- --shipyard-playtest
 --verify-playtest-launch` to exercise the actual button, child process, duplicate

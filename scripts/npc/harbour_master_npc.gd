@@ -4,7 +4,6 @@ extends NpcInteractable
 ## Harbour master — class-aware deploy, refuel, abandon.
 ## Harbour schematic lives on the marine chart (M → Harbour), not in dialogue.
 
-const PEAKED_CAP_PATH := AssetPaths.HAT_PEAKED_CAP
 
 @export var port_id: String = ""
 
@@ -39,8 +38,6 @@ func _on_vessels_synced() -> void:
 		_show_ship_select()
 
 
-func _add_hat() -> void:
-	add_overlay("hat", PEAKED_CAP_PATH)
 
 
 func _on_interact() -> void:
@@ -521,7 +518,6 @@ func _max_ship_class() -> ShipClass.Type:
 
 
 func _build_ui() -> void:
-	add_overlay("hat", PEAKED_CAP_PATH)
 	_dialogue = DialoguePanel.new("HARBOUR MASTER", Vector2(640.0, 480.0))
 	add_child(_dialogue)
 

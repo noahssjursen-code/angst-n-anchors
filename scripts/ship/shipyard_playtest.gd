@@ -211,8 +211,11 @@ func _verify() -> void:
 	var seat: ImportedSeatInteractable
 	for interaction in boat.get_bridge_stations():
 		if interaction is ImportedSeatInteractable:
-			seat = interaction
-		else:
+			if interaction.drives_ship:
+				helm = interaction
+			else:
+				seat = interaction
+		elif helm == null:
 			helm = interaction
 	if seat != null:
 		_aim_at_interaction(seat)
@@ -224,9 +227,11 @@ func _verify() -> void:
 		assert(not seat.is_occupied() and not player.is_vehicle_occupied())
 	assert(helm != null, "Verification fixture needs a helm")
 	_aim_at_interaction(helm)
-	assert(helm._boarding_player() == player, "Wheel must be targetable")
+	assert(helm._boarding_player() == player, "Helm chair or wheel must be targetable")
 	_press_f()
 	assert(helm.is_occupied() and controller._active, "F must enter the real helm")
+	if helm is ImportedSeatInteractable:
+		assert(helm.state_driver.state["occupied"], "Helm chair must report seated occupancy")
 	assert(controller._ship_hud != null and controller._hud_layer.visible, "Use normal game HUD")
 	controller.set_throttle_stage_idx(4)
 	for i in range(360):
@@ -249,6 +254,7 @@ func _verify() -> void:
 		get_viewport().get_texture().get_image().save_png(args[output + 1])
 	_press_f()
 	assert(not helm.is_occupied() and not player.is_vehicle_occupied())
+	assert(not controller._active, "Leaving the helm chair must release vessel controls")
 	_place_player()
 	for i in range(120):
 		await get_tree().physics_frame

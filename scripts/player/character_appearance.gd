@@ -4,20 +4,14 @@ extends RefCounted
 ## Shared, JSON-safe character appearance contract. NPCs and players use the
 ## same record so a server only needs to replicate data, never scene nodes.
 
-const SCHEMA_VERSION := 5
+const SCHEMA_VERSION := 6
 const CHARACTER_CATALOG := preload("res://scripts/character/character_catalog.gd")
 const HAT_NONE := ""
-const HAT_FLAT_CAP := "flat_cap"
-const HAT_PEAKED_CAP := "peaked_cap"
-const HAT_PATHS: Dictionary = {
-	HAT_FLAT_CAP: AssetPaths.HAT_FLAT_CAP,
-	HAT_PEAKED_CAP: AssetPaths.HAT_PEAKED_CAP,
-}
 
 var skin_color := Color(0.72, 0.55, 0.40)
 var clothing_color := Color(0.18, 0.20, 0.30)
-var top_color := Color(0.30, 0.34, 0.38)
-var trousers_color := Color(0.18, 0.18, 0.20)
+var top_color := Color(0.86, 0.87, 0.81)
+var trousers_color := Color(0.15, 0.23, 0.28)
 var hair_color := Color(0.12, 0.075, 0.045)
 var headwear_color := Color(0.16, 0.18, 0.20)
 var footwear_color := Color(0.075, 0.065, 0.055)
@@ -25,20 +19,23 @@ var accent_color := Color(0.92, 0.48, 0.08)
 var accessory_color := Color(0.20, 0.23, 0.25)
 var company_primary_color := Color(0.10, 0.22, 0.32)
 var company_secondary_color := Color(0.90, 0.45, 0.10)
-var body_id := "average"
-var hair_id := "cropped"
+var body_id := "mariner"
+var hair_id := "crop"
 var facial_hair_id := "none"
-var top_id := "wool_sweater"
-var outerwear_id := "deck_jacket"
-var trousers_id := "work_trousers"
-var footwear_id := "deck_boots"
+var top_id := "sweater"
+var outerwear_id := ""
+var trousers_id := "work"
+var footwear_id := "boots"
+## Authored morph weights. Visual proportions, not gameplay stats.
+var build := 0.2
+var belly := 0.0
+var frame := 0.0
+var age := 32.0
 var headwear_id := "none"
 var eyewear_id := "none"
 var face_accessory_id := "none"
-## Reusable texture profile for subtle skin grain, age and freckles. The base
-## profile is intentionally restrained so every new character benefits from
-## surface detail without changing the approved body or face silhouette.
-var face_texture_profile_id := "face_surface_base"
+## Opaque appearance identifier retained for save compatibility. No assets installed.
+var face_texture_profile_id := ""
 var neckwear_id := "none"
 var handwear_id := "none"
 var utility_id := "none"
@@ -53,6 +50,10 @@ static func default_appearance() -> CharacterAppearance:
 
 static func from_dict(d: Dictionary) -> CharacterAppearance:
 	var a := CharacterAppearance.new()
+	a.build = clampf(float(d.get("build", a.build)), 0.0, 1.0)
+	a.belly = clampf(float(d.get("belly", a.belly)), 0.0, 1.0)
+	a.frame = clampf(float(d.get("frame", a.frame)), 0.0, 1.0)
+	a.age = clampf(float(d.get("age", a.age)), 18.0, 80.0)
 	a.skin_color = _color_from_variant(d.get("skin_color", a.skin_color), a.skin_color)
 	a.clothing_color = _color_from_variant(d.get("clothing_color", a.clothing_color), a.clothing_color)
 	a.top_color = _color_from_variant(d.get("top_color", d.get("clothing_color", a.top_color)), a.top_color)
@@ -80,15 +81,13 @@ static func from_dict(d: Dictionary) -> CharacterAppearance:
 	a.face_texture_profile_id = CHARACTER_CATALOG.normalized_id(
 		&"face_surfaces",
 		str(d.get("face_texture_profile_id", a.face_texture_profile_id)).strip_edges(),
-		"face_surface_base"
+		""
 	)
 	a.neckwear_id = CHARACTER_CATALOG.normalized_id(&"neckwear", str(d.get("neckwear_id", a.neckwear_id)), "none")
 	a.handwear_id = CHARACTER_CATALOG.normalized_id(&"handwear", str(d.get("handwear_id", a.handwear_id)), "none")
 	a.utility_id = CHARACTER_CATALOG.normalized_id(&"utility_accessories", str(d.get("utility_id", a.utility_id)), "none")
 	a.uniform_id = CHARACTER_CATALOG.normalized_id(&"uniform_templates", str(d.get("uniform_id", a.uniform_id)), "none")
 	a.hat_id = str(d.get("hat_id", HAT_NONE))
-	if not HAT_PATHS.has(a.hat_id) and a.hat_id != HAT_NONE:
-		a.hat_id = HAT_NONE
 	return a
 
 
@@ -111,6 +110,10 @@ static func _color_from_variant(value: Variant, fallback: Color = Color.WHITE) -
 func to_dict() -> Dictionary:
 	return {
 		"schema_version": SCHEMA_VERSION,
+		"build": build,
+		"belly": belly,
+		"frame": frame,
+		"age": age,
 		"body_id": body_id,
 		"hair_id": hair_id,
 		"facial_hair_id": facial_hair_id,

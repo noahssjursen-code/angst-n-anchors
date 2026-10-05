@@ -27,7 +27,6 @@ func _ready() -> void:
 		_show_company("Maren Vik")
 	else:
 		_show_creator()
-		_apply_capture_options()
 	if "--capture-captain-onboarding" in OS.get_cmdline_user_args():
 		call_deferred("_capture_review_frame")
 	elif "--capture-company-onboarding" in OS.get_cmdline_user_args():
@@ -45,14 +44,6 @@ func _show_company(captain_name := "Maren Vik") -> void:
 	creator.visible = false
 	company.visible = true
 	company.open_for_captain(captain_name)
-
-
-func _apply_capture_options() -> void:
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--capture-onboarding-preset="):
-			creator.select_working_look(argument.trim_prefix("--capture-onboarding-preset="))
-		elif argument.begins_with("--capture-onboarding-tab="):
-			creator.select_editor_section(int(argument.trim_prefix("--capture-onboarding-tab=")))
 
 
 func _capture_review_frame() -> void:

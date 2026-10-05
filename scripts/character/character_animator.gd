@@ -1,84 +1,42 @@
 class_name CharacterAnimator
 extends Node
 
-## Shared animation state machine for body-only and decorated characters.
-## Pose generation is deterministic; callers replicate state + phase rather
-## than bone transforms. Preview mode exists for the body review showcase.
-
-const WALK_CYCLES_PER_M := 0.72
-const RUN_CYCLES_PER_M := 0.86
-
+## Gameplay state selects Blender-authored clips on the shared imported rig.
+var _state: StringName = &"idle"
 var _actor: NpcBase
-var _driver := WalkAnimator.new()
-var _state: StringName = WalkAnimator.IDLE
-var _phase := 0.0
-var _time_s := 0.0
-var _preview_mode := false
-var _preview_frozen := false
-
-
+var _speed := 0.0
+var _rate := 1.0
 func bind(actor: NpcBase) -> void:
 	_actor = actor
-	_driver.attach(actor)
-
-
+	refresh_rig()
 func refresh_rig() -> void:
-	if _actor != null:
-		_driver.attach(_actor)
-
-
+	if is_instance_valid(_actor) and _actor.visual != null:
+		_actor.visual.play_motion(_state, _rate)
 func set_locomotion(speed_m_s: float, delta: float) -> void:
-	_preview_mode = false
-	_preview_frozen = false
-	if speed_m_s <= 0.15:
-		_state = WalkAnimator.IDLE
+	_speed = lerpf(_speed, maxf(0.0, speed_m_s), 1.0 - exp(-10.0 * maxf(delta, 0.0)))
+	if _speed <= .15:
+		_state = &"idle"
 	else:
-		_state = WalkAnimator.RUN if speed_m_s >= 3.2 else WalkAnimator.WALK
-		var cycles := RUN_CYCLES_PER_M if _state == WalkAnimator.RUN else WALK_CYCLES_PER_M
-		_phase += speed_m_s * delta * cycles * TAU
-	_driver.apply_pose(_state, _phase, _time_s, delta)
-
-
+		var run_threshold := 1.9 if _state == &"run" else 2.3
+		_state = &"run" if _speed > run_threshold else &"walk"
+	# Nominal authored speeds: walk 1 m/s, run 3.75 m/s. Preserve game physics.
+	_rate = 1.0 if _state == &"idle" else clampf(_speed / (3.75 if _state == &"run" else 1.0), .35, 2.3)
+	refresh_rig()
 func set_walk_distance(distance_m: float) -> void:
-	_preview_mode = false
-	_preview_frozen = false
-	_state = WalkAnimator.WALK
-	_phase = distance_m * WALK_CYCLES_PER_M * TAU
-	_driver.apply_pose(_state, _phase, _time_s, 1.0 / 60.0)
-
-
+	_state = &"walk"
+	if is_instance_valid(_actor) and _actor.visual != null:
+		_actor.visual.set_walk_distance(distance_m)
 func set_idle() -> void:
-	_preview_mode = false
-	_preview_frozen = false
-	_state = WalkAnimator.IDLE
-
-
+	_state = &"idle"
+	_speed = 0.0
+	_rate = 1.0
+	refresh_rig()
 func set_preview_motion(state: StringName) -> void:
-	_preview_mode = true
-	_preview_frozen = false
 	_state = state
-	_phase = 0.0
-	_driver.apply_pose(_state, _phase, _time_s, 0.0, true)
-
-
-func set_preview_pose(state: StringName, phase: float, time_s := 0.8) -> void:
-	_preview_mode = true
-	_preview_frozen = true
+	_rate = 1.0
+	refresh_rig()
+func set_preview_pose(state: StringName, _phase: float, _time_s := .8) -> void:
 	_state = state
-	_phase = phase
-	_time_s = time_s
-	_driver.apply_pose(_state, _phase, _time_s, 0.0, true)
-
-
+	refresh_rig()
 func current_state() -> StringName:
 	return _state
-
-
-func _process(delta: float) -> void:
-	_time_s += delta
-	if _preview_mode and not _preview_frozen:
-		match _state:
-			WalkAnimator.WALK: _phase += delta * 4.2
-			WalkAnimator.RUN: _phase += delta * 7.0
-			WalkAnimator.JUMP: _phase += delta * 3.0
-	_driver.apply_pose(_state, _phase, _time_s, delta)

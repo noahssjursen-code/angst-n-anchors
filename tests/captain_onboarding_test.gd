@@ -23,16 +23,13 @@ func _validate_character_page() -> void:
 	await get_tree().process_frame
 	_check(panel.visible, "character page opens")
 	_check(_covers_viewport(panel), "character page covers the full screen")
-	for section in range(3):
-		panel.select_editor_section(section)
-		_check((panel.get("_tabs") as TabContainer).current_tab == section, "character editor section %d is selectable" % section)
-	for preset_id in ["harbour_captain", "company_ship_officer", "warehouse_forklift", "office_dispatcher"]:
-		panel.select_working_look(preset_id)
-		var appearance := panel.get("_appearance") as CharacterAppearance
-		var round_trip := CharacterAppearance.from_json_string(appearance.to_json_string()) if appearance != null else null
-		_check(round_trip != null and round_trip.to_dict() == appearance.to_dict(), "%s produces a serializable captain" % preset_id)
-	_check((panel.get("_selectors") as Dictionary).has("eyewear_id"), "glasses are available during captain creation")
-	_check((panel.get("_selectors") as Dictionary).has("face_accessory_id"), "face accessories are available during captain creation")
+	_check(not panel.find_children("*", "OptionButton", true, false).is_empty(), "Blender clothing options are selectable")
+	var appearance := panel.get("_appearance") as CharacterAppearance
+	_check(CharacterAppearance.from_json_string(appearance.to_json_string()).to_dict() == appearance.to_dict(), "appearance data still round-trips")
+	_check((panel.get("_confirm") as Button).disabled, "empty captain name cannot continue")
+	(panel.get("_name_field") as LineEdit).text = "Maren Vik"
+	(panel.get("_name_field") as LineEdit).text_changed.emit("Maren Vik")
+	_check(not (panel.get("_confirm") as Button).disabled, "named captain can continue without a model")
 	panel.queue_free()
 	await get_tree().process_frame
 

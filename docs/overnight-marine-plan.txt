@@ -1,0 +1,87 @@
+OVERNIGHT MARINE WORK PLAN — 5–6 October 2026 (Europe/Oslo)
+
+Authorization and scope
+Noah requested overnight recurring work on fishing trawler, cargo and bulk ship
+models, supporting equipment, research, lighting and project integration. He
+explicitly authorized commits and pushes along the way, after a planning pass.
+Stay on feature/3d-model-migration. No reset, force-push or merge to main.
+This plan precedes new marine implementation. Existing character/helm work is
+the initial checkpoint, not a completed overnight vessel deliverable.
+
+Planning findings from the current repository
+- ImportedDraftVessel, ImportedShipPartsEditor and ShipyardPlaytest are the current
+  imported builder/runtime path. Follow resources/models/README.md and AGENTS.md.
+- PropulsionComponent already exposes throttle, delivered_thrust_n and fuel-aware
+  thrust. Ahead throttle is NEGATIVE. Do not guess signs from variable names.
+- RudderComponent already owns rudder_input, max_rudder_angle_deg and physical
+  rudder_position. Render steering from this state; do not create new steering physics.
+- Existing Blender/GLB assets: marine_kit/bronze_propeller and marine_kit/rudder.
+  Inspect their axes, pivots and quality before deciding to reuse or revise them.
+- BulkCrane currently uses a JSON ModelAssembler and named mechanical transforms.
+  Its slew/boom/hoist/grab commands and authoritative cargo transfer must survive
+  a visual replacement. ProvisionCrane and equipment jobs are related interfaces.
+- FishLandingPump owns connecting, pumping, flushing and completion; CatchLot and
+  ShoreRswTankBank own transferred quantities. FishLandingLayout/service/job files
+  define the dock workflow. Model appearances must not duplicate inventory logic.
+- MooringComponent already derives ropes from cleat/bollard endpoints and enforces
+  line constraints. Keep dynamic sagging ropes; replace static fittings with Blender
+  assets and named attachment sockets instead of replacing ropes with rigid models.
+- Builder kit already covers structures, rails, floors, roofs and interiors. Ships
+  must remain assemblies of reusable parts, not single baked complete-ship meshes.
+- Existing editor-import warnings reference two missing unrelated showcase scripts
+  (vessel_skin_showcase.gd and ui_system_showcase.gd). Record rather than hide them.
+
+Ordered work packages (resume the earliest unfinished package each run)
+0. Save and push the tested current character migration and seated helm checkpoint.
+1. Audit hull catalog, builder catalog, vessel spawning, attachment state, navigation
+   lights, cranes, cargo holds, fishing machinery, ports and docking. Record exact
+   integration paths and current gaps. Research primary manufacturer/operator/class
+   references, including visual diagrams. Save source URLs and access dates.
+2. Default propulsion presentation: authored shaft/propeller/rudder mounts per hull,
+   named pivots, visible propeller animation during powered operation, reverse sense,
+   stopped/no-fuel behavior, rudder limits. Reuse existing physics and local/server
+   state. Test no duplicate mounts after reload and no changes to thrust/steering.
+3. Fishing trawler: validate the existing hull and build a usable example draft with
+   wheelhouse, safe deck circulation, rails, working deck, winch/net gear, catch-hold
+   and fish-unloading interfaces. Separate fixed frames, drums, sheaves and doors.
+4. General cargo vessel: derive dimensions from existing hull and cargo footprints;
+   create a distinct hull/platform if needed. Reuse structural parts; add reusable
+   hatch covers/coamings, holds or deck cargo provisions, access and handling gear.
+5. Bulk vessel: distinct hold arrangement with hatch covers and grab clearance;
+   integrate with existing bulk cargo and crane jobs. Do not fake functional transfer
+   by moving visible cargo while bypassing the authoritative records.
+6. Shared port/deck kit: crane pedestal/slew/boom/hoist/grab or hook, bollards,
+   cleats, fairleads, fenders, fish pump/hopper/hose connectors, shore equipment.
+   Prioritize pieces actually required by the three assembled vessel examples.
+7. Lighting and final verification: sourced navigation-light placement appropriate
+   to vessel dimensions and operating state, independent work/deck lights, practical
+   night render. Preserve existing light controls and gameplay state boundaries.
+
+Rules for every package
+- Research before inventing functional equipment dimensions or navigation-light rules.
+- Author individual reusable Blender models, keep .blend source and exported GLB,
+  metres/applied scale, named local pivots and sockets, independent paint regions.
+- Maintain the established deck lattice/edge angles, seamless joins and 1.8 m reference.
+- Never restore deleted legacy character/ship-brick models or flatten a UGC ship into
+  one mesh. Do not overwrite user drafts/saves or connect test scenes to live servers.
+- Verify imported geometry and material isolation; run relevant regression scenes,
+  save/load round-trips, state-driven animations and ocean/port playtests as applicable.
+- Inspect actual rendered results, including moving joints and collision clearance.
+  A generated file or passing parser is insufficient. Fix visible failures first.
+- Finish a coherent batch, update this progress log, commit scoped changes with a
+  meaningful message, push origin feature/3d-model-migration, and verify remote SHA.
+  If push fails, keep the local commit and record the exact blocker; never force-push.
+- Another task may share this checkout: inspect status before edits and preserve
+  unrelated work. Do not run competing writes or spawn agents without authorization.
+- Keep useful screenshots under the chat workspace outputs/marine; intermediate
+  fixtures/logs under work/. Record paths here, along with checks and commit IDs.
+- Continue substantial work each scheduled run; do not merely post status. When one
+  subsystem is blocked, progress an independent package and document the blocker.
+- Overnight scope ends at 08:00 Europe/Oslo on 6 October, or earlier if completed.
+  Leave a morning handoff: shipped/pushed commits, screenshots, tests, known gaps and
+  next steps. Do not claim all vessel families are finished unless verified.
+
+Progress
+Planning pass completed. Marine implementation not yet started.
+Character/rig and captain onboarding tests passed before this checkpoint.
+Next: package 1 audit/research, then package 2 default propulsion presentation.

@@ -3,7 +3,7 @@ class_name NpcBase
 extends Node3D
 
 ## Compatibility-facing character actor. Gameplay NPC subclasses still inherit
-## NpcBase, but their visual is now the same JSON-backed CharacterVisual used by
+## NpcBase, but their Blender visual is the same CharacterVisual used by
 ## captain creation and replicated players.
 
 @export var skin_color: Color = Color(0.72, 0.55, 0.40):

@@ -40,6 +40,7 @@ func configure(snapshot: Dictionary) -> void:
 		assembler.records[assembler.slot_key(record)] = record
 	for record: Dictionary in assembler.records.values():
 		var part := assembler.create_part(record)
+		part.set_meta("asset_id", record["asset_id"])
 		add_child(part)
 		part_roots.append(part)
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
@@ -86,7 +87,8 @@ func _add_interactions(part: Node3D, state: ShipPartState) -> void:
 		mount.add_child(eye)
 		var seat := ImportedSeatInteractable.new()
 		seat.name = "SeatInteraction"
-		seat.prompt_text = "Press F to sit"
+		seat.drives_ship = BrickCatalog.get_entry(str(part.get_meta("asset_id", ""))).get("style", "") == "helm_chair"
+		seat.prompt_text = "Press F to helm" if seat.drives_ship else "Press F to sit"
 		seat.interaction_volume_size = Vector3(.55, .6, .55)
 		seat.exit_height_offset = -.51
 		seat.exit_deck_offset = Vector2(.65, .45)

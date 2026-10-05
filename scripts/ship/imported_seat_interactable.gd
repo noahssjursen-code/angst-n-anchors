@@ -1,12 +1,14 @@
 class_name ImportedSeatInteractable
 extends BridgeInteractable
 
-## Same F/range/occlusion/exit interaction as the helm, without vessel controls.
+## Shared seating interaction. Only helm chairs activate vessel controls.
+var drives_ship := false
 var state_driver: ShipPartState
 
 func _cache_boat_nodes() -> void:
 	super._cache_boat_nodes()
-	_boat_controller = null
+	if not drives_ship:
+		_boat_controller = null
 
 func _board() -> void:
 	super._board()
