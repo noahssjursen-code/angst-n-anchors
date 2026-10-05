@@ -44,6 +44,7 @@ func configure(snapshot: Dictionary) -> void:
 		add_child(part)
 		part_roots.append(part)
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
+	(hull.get_node("DriveGear") as ShipDriveVisual).bind_local(self)
 	var camera := get_node("BoatCamera") as BoatCamera
 	camera.follow_distance = 19.0
 	camera.follow_height = 9.0
@@ -57,6 +58,7 @@ func configure(snapshot: Dictionary) -> void:
 	# Dynamic hull uses a convex shape; walking uses the actual imported triangles below.
 	var hull_points := PackedVector3Array()
 	for mesh: MeshInstance3D in hull.find_children("*", "MeshInstance3D", true, false):
+		if mesh.has_meta("stern_gear_visual"): continue
 		var transform := _relative_transform(mesh)
 		for point in assembler._deformed_faces(mesh):
 			hull_points.append(transform * point)
@@ -116,6 +118,8 @@ func _ensure_walk_deck() -> void:
 	_walk_deck.set_meta("align_player_capsule", true)
 	get_parent().add_child(_walk_deck)
 	for mesh: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
+		# Underwater moving hardware is presentation, not walkable deck triangles.
+		if mesh.has_meta("stern_gear_visual"): continue
 		# Small hinges/lever handles are visual hardware, not doorway obstacles.
 		# Keep the complete moving leaf, frame and header collidable.
 		if str(mesh.name).begins_with("Door hinge") or str(mesh.name).begins_with("Lever handle"):

@@ -47,6 +47,7 @@ func _physics_process(delta: float) -> void:
 	# this component only owns propulsion.
 	var fuel_pct := _body.get_fuel_fraction()
 	if fuel_pct <= 0.0:
+		delivered_thrust_n = 0.0
 		return
 
 	var burn := absf(throttle) * fuel_burn_l_per_sec_full * delta

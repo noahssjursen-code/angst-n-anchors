@@ -102,3 +102,22 @@ Captures: chat outputs/marine/stern-audit.png and stern-audit-hardware.png.
 NEXT RUN: package 2. Author properly mounted shaft/propeller/rudder hardware
 with documented pivots and swept clearance, then read-only state integration
 and dry-fuel/reverse/neutral tests. Do not repeat package 1 instead of building.
+
+6 October, second scheduled batch: package 2 implemented for the current imported
+14 m hull. Three separate Blender/GLB assets: shaft/support, cambered four-blade
+propeller, balanced rudder/stock. Explicit mounts_14m.json; named pivots; default
+builder and imported runtime installation. External transom prototype clears the
+closed hull; it extends aft of the deck, not a recessed stern aperture. Physics
+force points/deck outline unchanged. Moving gear excluded from walk/convex hull
+collision. Support/foil follow hull lower paint; metal finishes stay separate.
+ShipDriveVisual reads local propulsion/rudder/fuel; finite revisioned snapshots
+provide an external authority seam, not new multiplayer transport. Provisional
+visual RPM, not a shaft simulation. Fixed stale delivered-thrust telemetry when
+the fuel tank is dry. Did not retune rudder prop-wash or vessel handling.
+Checks: real Godot imported-draft showcase, ahead/reverse/neutral/dry fuel,
+invalid/stale remote snapshots, duplicate-free JSON draft reload, full propeller
+sweep and +/-28 degree rudder clearance. Actual builder launch + F helm, drive,
+turn, walking, door, pause/reset, unchanged parent draft regression passed.
+Captures: outputs/marine/stern-gear.png and stern-gear-reverse.png.
+NEXT RUN: package 3, an assembled reusable trawler draft plus fishing equipment
+using FishingSystem and CatchHoldComponent. Cargo/bulk and port kit still pending.

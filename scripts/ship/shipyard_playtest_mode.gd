@@ -15,6 +15,8 @@ static func active() -> bool:
 			return true
 		if arg.replace("\\", "/").ends_with(MARINE_AUDIT_SCENE):
 			return true
+		if arg.replace("\\", "/").ends_with("scenes/showcases/stern_gear_showcase.tscn"):
+			return true
 	return false
 
 static func snapshot_path() -> String:

@@ -22,7 +22,7 @@ func _ready() -> void:
 	sun.rotation_degrees = Vector3(-30, -35, 0)
 	sun.light_energy = 1.8
 	add_child(sun)
-	hull = TrawlerHullAsset.instantiate()
+	hull = TrawlerHullAsset.instantiate(false)
 	ModelPaint.apply(hull, {})
 	add_child(hull)
 	propeller = load("res://resources/models/parts/marine_kit/bronze_propeller/bronze_propeller.glb").instantiate()

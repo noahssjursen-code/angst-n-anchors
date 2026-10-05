@@ -5,9 +5,12 @@ const MODEL := "res://resources/models/vessels/trawler_hull_14m/trawler_hull_14m
 const OUTLINE := "res://resources/models/vessels/trawler_hull_14m/deck_outline.json"
 
 
-static func instantiate() -> Node3D:
+static func instantiate(include_drive: bool = true) -> Node3D:
 	var packed := load(MODEL) as PackedScene
-	return packed.instantiate() as Node3D if packed != null else null
+	if packed == null: return null
+	var hull := packed.instantiate() as Node3D
+	if include_drive: hull.add_child(ShipDriveVisual.new())
+	return hull
 
 
 static func make_build_grid() -> DeckGrid:

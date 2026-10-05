@@ -238,12 +238,15 @@ func _verify() -> void:
 		await get_tree().physics_frame
 	assert(boat.global_position.distance_to(initial) > 1.0, "Shared propulsion must move the draft")
 	assert(boat.linear_velocity.length() > .5)
+	var stern_gear := boat.get_node("HullVisual/DriveGear") as ShipDriveVisual
+	assert(stern_gear.signed_rpm > 0, "Powered ahead propulsion must animate the installed screw")
 	var old_yaw := boat.rotation.y
 	Input.action_press("move_right")
 	for i in range(240):
 		await get_tree().physics_frame
 	Input.action_release("move_right")
 	assert(absf(angle_difference(old_yaw, boat.rotation.y)) > .02, "Shared rudder must turn the draft")
+	assert(stern_gear.steering_degrees > 1, "Installed rudder must follow actual helm input")
 	camera._mode = BoatCamera.Mode.THIRD_PERSON
 	for i in range(120):
 		await get_tree().process_frame

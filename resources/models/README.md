@@ -1,5 +1,47 @@
 # Imported 3D models
 
+## Default imported stern gear (6 October 2026)
+
+`_source/stern_gear/build_stern_gear.py` authors three independent Blender files
+and GLBs in `parts/stern_gear`: fixed transom shaft/support, 1.04 m four-bladed
+cambered bronze propeller, and 0.95 m balanced rudder with stock. `ShaftAxis`
+and `StockAxis` are named local datums. The propeller root rotates about Godot
+Z; the rudder root about Godot Y. Never merge moving parts into the support.
+Fixed bronze, stainless and bearing materials remain independent of paint;
+support and foil expose `Paint_HullLower` and follow hull lower paint.
+
+`mounts_14m.json` is the explicit hull-specific placement contract. This first
+installation is an external transom prototype, extending aft of the 14 m deck;
+it is not a recessed conventional stern aperture. The closed hull and deck
+outline are unchanged. Do not claim hydrodynamic design validation. New hulls
+need their own mount/clearance contract rather than multiplying these coordinates.
+
+`TrawlerHullAsset.instantiate()` adds one `ShipDriveVisual` by default, including
+the builder; `instantiate(false)` is reserved for the historical fit audit.
+ImportedDraftVessel binds the visual to its existing propulsion/rudder components.
+The gear is not an editable draft placement and is regenerated once on load.
+Underwater gear meshes carry `stern_gear_visual` metadata and are excluded from
+the hull convex collision and walk-deck triangles; no stale spinning collider.
+Their collision/damage and exact hydrodynamic effects are not implemented.
+
+The visual adapter never changes thrust, force points, fuel, steering or draft
+data. Local throttle is negated into ahead-positive display state; zero fuel
+stops the screw, neutral stops it, astern reverses it. The provisional visual
+curve is linear to 240 RPM (not measured engine/shaft RPM). Rudder angle uses
+the existing component's limit. This is a fixed-pitch presentation choice.
+`apply_snapshot({throttle, steering, powered}, revision)` accepts confirmed state
+with increasing revision, finite numeric controls and a boolean powered field.
+Unbind `local_boat` before using remote snapshots. No multiplayer transport is
+added by this adapter. Existing dry-fuel prop-wash physics remains separate.
+
+Run `scenes/showcases/stern_gear_showcase.tscn` for actual imported-draft gear,
+automatic reversing and rudder sweep. It isolates saves/network at startup.
+Optional `-- --capture <absolute.png>` performs local/remote/stale/invalid-state,
+dry-fuel telemetry, draft reload/no duplicates and imported swept-vertex clearance
+checks, captures ahead/astern poses and exits. The ordinary isolated ocean
+playtest also verifies the screw and rudder respond to actual F-to-helm controls.
+Sources and rejected earlier mounts: `docs/marine-integration-audit.txt`.
+
 ## Ship model authoring contract
 
 The current reference assets are `vessels/trawler_hull_14m/` and `parts/trawler_rails/`.
