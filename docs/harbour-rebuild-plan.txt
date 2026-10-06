@@ -1,0 +1,115 @@
+HARBOUR REVIEW AND REBUILD PLAN - 6 October 2026
+
+Status: daylight review and foundation collision repair complete. The layout
+redesign and Blender kit below are proposed work, not finished assets.
+
+Observed baseline
+-----------------
+Inspected the actual Port Showcase: seed 424242, port-10 (Gronnvik), regional
+size 2, generation 46. Captures use frozen noon, not the live clock.
+Screenshot archive: C:/Users/noahs/Pictures/machinescreenshots/2026-10-06_port-collision-review
+Before: 1791312661-795-daylight-*.png
+After collision repair: 1791313022-657-daylight-*.png
+
+The harbour reads as three repeated fingers attached to a large black apron.
+Road strips stop without a connected inland route. Buildings and goods areas
+do not establish clear loading entrances, circulation or a waterfront street.
+Small repeated houses float visually apart from the industrial working area.
+Cyan/orange building blocks are temporary placeholders for archived legacy
+blueprints; they are not the intended finished building models.
+
+Asphalt is unshaded flat colour, unlike the lit quay surfaces. Raised road
+meshes are visual geometry without matching separate collision. There are few
+player-scale cues: coping, fenders, ladders, drains, markings and service points.
+The showcase's large diagnostic panels also obscure composition.
+
+Physics finding and repair
+--------------------------
+Visible foundation triangles previously used averaged rectangular collision
+slabs. At bends these left holes and could extend beyond the visible boundary.
+The real showcase had 75 unsupported points among 2,703 sampled asphalt points.
+A production player capsule dropped 2.79 m through one such location. Terrain
+collision is intentionally disabled in this showcase; this does not establish
+that players fall through the entire world in normal gameplay.
+
+Foundation collision now uses shallow convex prisms from the actual top-face
+triangles. The same showcase has zero missing support samples and zero sampled
+foundation support outside the visible outline. Shape count rose from 25 to
+100; broad performance testing across the largest ports remains necessary.
+This repairs the floor, not the full submerged quay-wall collision.
+
+Regression: tests/port_surface_collision_test.tscn, with --shipyard-playtest.
+The bent fixture previously missed 172 of 2,568 surface samples and produced
+25 outside-floor samples. Both counts are now zero. It also settles the actual
+production player at bends and the first previously unsupported fixture point.
+Walking across all seams, pier transitions and terrain remains a follow-up.
+
+Player capsule is 1.8 m high, radius 0.35 m. Visual clothing/body changes do not
+automatically change that envelope. Houses and several land trade props are
+visual-only in their construction code. Audit imported equipment individually
+before calling it solid. Keep interaction query shapes separate from physical
+obstacles; avoid tiny hoses and trim snagging the capsule.
+
+Design direction
+----------------
+Keep seeded coastlines, berth identities, authority commands and persisted
+port graphs. Rework the layout recipe and presentation around connected use:
+
+1. Plan navigable water, berth frontage, mooring leads and crane reach first.
+   Select continuous quay, basin, L-shaped quay or finger pier to suit the site.
+   Do not express every commodity as another copy of the same long pier.
+2. Allocate working yards behind the frontage: fish landing to sorting/cold
+   storage; general cargo to laydown/warehouse; bulk to handling/storage;
+   service berth to fuel, water, waste and repair access.
+3. Connect yards and building loading doors to a land entrance. Reserve vehicle
+   circulation, turning space and pedestrian access before placing decoration.
+4. Generate paving and walk collision from the same closed surface geometry.
+   Explicitly model grade changes, retaining edges and quay walls. Use markings
+   for painted lanes, not raised black blocks pretending to be roads.
+5. Place buildings facing their access routes. Give them loading doors, canopies,
+   foundations and appropriate service yards instead of scattered boxes.
+
+Primary reference: https://sortland-havn.no/kaier-og-kapasitet/
+The harbour authority describes distinct terminal, fishing, storage and service
+functions, including cold/dry storage and shore services. The connected-yard
+layout above is our game design interpretation, not a copied surveyed plan.
+
+Reusable Blender kit, in construction order
+-------------------------------------------
+A. Quay coping straight/corner/end pieces, seawall panels, rubber fenders and
+   brackets, rescue ladder, safety rail with deliberate openings at moorings.
+B. Curbs, ramps, drain channels/grates, manholes, shore-power/water cabinets,
+   light poles, hydrant/rescue stations and waste enclosures.
+C. Modular industrial building walls, corners, roofs, loading doors, personnel
+   doors, windows, canopies and dock platforms. Fish sheds and larger warehouses
+   should share construction rules without becoming identical silhouettes.
+D. Contextual yard objects: fish tubs, pallets, cages and handling equipment.
+   Reuse existing container, bollard and landing equipment assets where sound.
+
+Each model needs metric dimensions, predictable placement origin, exposed
+material regions where useful, documented sockets and intentional collision.
+Use authored Blender geometry with bevels, supports and proper joins. Keep
+small cosmetic detail out of walking collision. Doors/lights retain independent
+parts for interaction; decoration must not claim unavailable gameplay.
+Use lit rough asphalt with stable world scale, subtle aggregate and restrained
+repairs; concrete gets edge wear and a tidal band where appropriate. Avoid
+uniform noise covering every surface. Review from sea and actual eye height.
+
+Delivery order and acceptance
+-----------------------------
+1. DONE: repair foundation floor and add regression coverage.
+2. Make Port Showcase reproducible: explicit seed, noon preset, collapsed data
+   panels and a real-player walk mode alongside free camera/collision overlay.
+3. Build one complete mixed working harbour with connected routes and the first
+   edge/building kit. Check docking, crane reach and player movement in context.
+4. Generalize into small fishing, mixed coastal and industrial port profiles.
+   Changes to the layout recipe apply to new graphs; never silently regenerate
+   established player ports. Retain existing berth IDs and save compatibility.
+5. Populate decoration by function and clearances, then validate other seeds.
+
+Acceptance includes: supported paving; no invisible edge floor; walkable joins,
+ramps and doorways with the real player; intended obstacles solid; useful
+mooring/rope clearance; berth and crane access; stable reloads; render/collision
+budgets on large ports. Save daytime overview and close-up captures to the
+machine screenshot archive on every visual review. A passing functional test
+alone is not visual acceptance.

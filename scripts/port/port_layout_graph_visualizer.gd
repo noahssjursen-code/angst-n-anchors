@@ -248,40 +248,34 @@ func _stamp_foundation() -> void:
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh.extra_cull_margin = 24.0
 	add_child(mesh)
-	## Walk slabs only — trimesh cook was a first-frame hitch with little gameplay gain.
-	_stamp_foundation_walk_boxes(spine_pts, sea_top, inland_top, top_y)
+	_stamp_foundation_walk_collision(mesh.mesh, top_y)
 
 
-func _stamp_foundation_walk_boxes(
-		spine_pts: PackedVector2Array,
-		sea_top: PackedVector2Array,
-		inland_top: PackedVector2Array,
-		top_y: float,
-) -> void:
-	if spine_pts.size() < 2:
-		return
-	var root := Node3D.new()
+func _stamp_foundation_walk_collision(mesh: Mesh, top_y: float) -> void:
+	# Use the actual surface triangles. Averaged rectangular slabs left gaps
+	# on bends and invisible ledges outside the visible apron. Small convex
+	# prisms keep a thick walkable floor without cooking the buried 48 m mesh.
+	var root := StaticBody3D.new()
 	root.name = "FoundationWalkCollision"
+	root.collision_layer = 1
+	root.collision_mask = 0
 	add_child(root)
-	var slab_h := 0.55
-	for index in range(spine_pts.size() - 1):
-		var a_sea := sea_top[index]
-		var b_sea := sea_top[index + 1]
-		var a_in := inland_top[index]
-		var b_in := inland_top[index + 1]
-		var center := (a_sea + b_sea + a_in + b_in) * 0.25
-		var along := (b_sea - a_sea + b_in - a_in) * 0.5
-		var across := (a_in - a_sea + b_in - b_sea) * 0.5
-		var length := maxf(along.length(), 1.0)
-		var width := maxf(across.length(), 1.0)
-		var yaw := atan2(along.x, along.y)
-		_add_box_collision(
-			root,
-			"WalkSlab_%d" % index,
-			Vector3(width, slab_h, length),
-			Vector3(center.x, top_y - slab_h * 0.5, center.y),
-			yaw,
-		)
+	var faces := mesh.get_faces()
+	for index in range(0, faces.size(), 3):
+		var a := faces[index]
+		var b := faces[index + 1]
+		var c := faces[index + 2]
+		if not is_equal_approx(a.y, top_y) or not is_equal_approx(b.y, top_y) or not is_equal_approx(c.y, top_y):
+			continue
+		if (b - a).cross(c - a).length_squared() < 0.000001:
+			continue
+		var down := Vector3.DOWN * DECK_WALK_THICKNESS_M
+		var shape := ConvexPolygonShape3D.new()
+		shape.points = PackedVector3Array([a, b, c, a + down, b + down, c + down])
+		var collision := CollisionShape3D.new()
+		collision.name = "SurfaceTriangle_%d" % (index / 3)
+		collision.shape = shape
+		root.add_child(collision)
 
 
 func _foundation_surface_y() -> float:
