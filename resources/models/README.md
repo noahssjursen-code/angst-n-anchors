@@ -596,3 +596,39 @@ only), --capture <png> captures both. --verify-draft checks cross-hull switching
 87 records, floor/cell offsets, cover selection, invalid-load preservation and
 save/load. The normal shipyard_playtest supports both installed hulls. Production
 fleet commissioning remains outside this draft sandbox.
+
+### Divided bulk hold (6 October 2026)
+
+bulk_divider_5m is an individual Blender bulkhead, not a new baked ship. It fits
+the existing hull_24x8 opening and coaming at [0,3.6,0]; HoldForward/HoldAft sockets
+place two 5 x 3.9 x 2.7 m inventory compartments. The upper lip is y=4.3 and the
+tank top y=1.6. Each has a provisional 40 t payload limit. The separate divider
+slot must coexist with the coaming at the same origin. Do not overwrite one with
+the other in builder selection or save keys. The bulk example has 87 records,
+forward hatch removed for loading and aft cover installed.
+
+ImportedBulkHold extends the existing BulkHoldComponent inventory/transfer API.
+It replaces the old fake pit/coaming presentation with the real Blender hull and
+divider, places dynamic ore fill at the tank top, and registers cargo tonnes as
+kilograms in BoatBody's existing mass ledger. Dynamic ore is presentation only;
+its changing triangles are excluded from static WalkDeck collision. Cargo states
+round-trip with the existing BulkHoldState dictionary API. Builder drafts remain
+construction-only; this does not commission a ship or persist an active playtest.
+
+Installed hatch covers block accepting/withdrawing lots and crane target selection.
+Access is determined when the runtime draft is assembled. Removing a cover in the
+builder and relaunching opens it; powered hatch interactions remain unfinished.
+For compact imported holds, auto loading aims centrally, waits until the real grab
+mouth enters the opening with a 0.7 m edge margin, and releases at the actual mouth.
+An alignment timeout stops the operation instead of teleporting cargo to its target.
+Existing legacy open holds retain their former crane positioning behavior.
+
+bulk_kit_showcase.tscn verifies separate inventories, closed-hatch/mixed-commodity
+rejection, cargo mass, state round-trip, actual crane lot/drop conservation, and
+(with --verify-auto) a full existing operator load cycle. --verify-draft checks
+builder save/load. The crane shown is STILL the legacy model; it is not a newly
+Blender-authored crane. OreMound is the existing unlimited stockpile source, not
+a finite shore inventory. The showcase currently reports 14 orphan mesh/RID
+cleanup warnings from the legacy-crane verification path; functional assertions
+pass. The bulk ocean playtest exits cleanly. Crane replacement and port inventory
+remain separate work. Never describe this as completed harbour/economy migration.

@@ -77,14 +77,14 @@ func status_lines() -> PackedStringArray:
 
 func _has_loadable_hold(ship: BoatBody) -> bool:
 	for hold in ship.get_bulk_holds():
-		if hold.state.available_tonnes_t() > BulkCargoLot.TONNES_EPS:
+		if hold.cargo_accessible and hold.state.available_tonnes_t() > BulkCargoLot.TONNES_EPS:
 			return true
 	return false
 
 
 func _has_unloadable_hold(ship: BoatBody) -> bool:
 	for hold in ship.get_bulk_holds():
-		if not hold.state.is_empty():
+		if hold.cargo_accessible and not hold.state.is_empty():
 			return true
 	return false
 

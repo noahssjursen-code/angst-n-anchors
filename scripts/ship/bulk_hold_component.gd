@@ -29,6 +29,8 @@ signal fill_changed(state: BulkHoldState)
 		_rebuild_visual()
 
 var state := BulkHoldState.new()
+## Imported covered holds opt out of cargo handling; legacy open holds default on.
+var cargo_accessible := true
 
 var _visual_root: Node3D
 var _pit_mesh: MeshInstance3D
@@ -81,10 +83,11 @@ func apply_state(data: Dictionary) -> void:
 
 
 func can_accept_commodity(commodity_id: String) -> bool:
-	return state.can_accept_commodity(commodity_id)
+	return cargo_accessible and state.can_accept_commodity(commodity_id)
 
 
 func accept_lot(lot: BulkCargoLot) -> BulkCargoLot:
+	if not cargo_accessible: return lot.duplicate_lot() if lot != null else BulkCargoLot.empty()
 	var before := state.filled_tonnes_t
 	var overflow := state.accept_lot(lot)
 	if not is_equal_approx(before, state.filled_tonnes_t):
@@ -93,6 +96,7 @@ func accept_lot(lot: BulkCargoLot) -> BulkCargoLot:
 
 
 func withdraw_lot(max_tonnes_t: float) -> BulkCargoLot:
+	if not cargo_accessible: return BulkCargoLot.empty()
 	var before := state.filled_tonnes_t
 	var taken := state.withdraw_tonnes(max_tonnes_t)
 	if not is_equal_approx(before, state.filled_tonnes_t):
@@ -197,6 +201,7 @@ static func find_filled_hold_at(
 		var hold := node as BulkHoldComponent
 		if hold.state.is_empty():
 			continue
+		if not hold.cargo_accessible: continue
 		if not cid.is_empty() and hold.state.commodity_id != cid:
 			continue
 		if not hold.contains_world_point(world_pos):

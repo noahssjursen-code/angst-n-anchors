@@ -189,7 +189,7 @@ func _begin(
 		if _mound == null:
 			_mound = _crane.find_nearest_ore_mound(_commodity_id)
 
-	if _hold == null or _mound == null:
+	if _hold == null or _mound == null or not _hold.cargo_accessible:
 		return false
 
 	_clear_hold_gizmos()
@@ -338,7 +338,8 @@ func _tick(delta: float) -> void:
 				or _crane.is_bucket_at_target(0.08)
 				or _timer >= WORK_S + 0.35
 			):
-				_crane.force_release_at(point_b())
+				var release := _crane.get_bucket_mouth_global() if operation == Operation.LOAD and _hold is ImportedBulkHold else point_b()
+				_crane.force_release_at(release)
 				_did_act = true
 			if _did_act and (_crane.get_bucket_lot().is_empty() or _timer >= WORK_S + 0.6):
 				_set_phase(Phase.RAISE_B)
@@ -381,6 +382,12 @@ func _tick(delta: float) -> void:
 func _lower_ready(target: Vector3) -> bool:
 	if _crane == null:
 		return _timer >= LOWER_TIMEOUT_S
+	if _hold is ImportedBulkHold and ((_phase == Phase.LOWER_B and operation == Operation.LOAD) or (_phase == Phase.LOWER_A and operation == Operation.UNLOAD)):
+		# Never complete a compact imported hold operation by timing out and spawning
+		# the payload at a target point the actual grab has not reached.
+		if _hold.cargo_accessible and _hold.contains_grab_mouth(_crane.get_bucket_mouth_global()): return true
+		if _timer > TIMEOUT_S: stop()
+		return false
 	if _crane.is_bucket_near(target, NEAR_M):
 		return true
 	var bucket := _crane.get_bucket_global()
@@ -444,6 +451,7 @@ func _pick_hold(ship: BoatBody, commodity_id: String, loading: bool) -> BulkHold
 	var best_score := -INF
 	var hinge := _crane.get_boom_hinge_global()
 	for hold in ship.get_bulk_holds():
+		if not hold.cargo_accessible: continue
 		if loading:
 			if cid.is_empty() or not hold.can_accept_commodity(cid):
 				continue

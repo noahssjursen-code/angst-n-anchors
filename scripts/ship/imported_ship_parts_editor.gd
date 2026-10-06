@@ -384,6 +384,7 @@ func _distance(point: Vector3, record: Dictionary) -> float:
 
 func slot_key(record: Dictionary) -> String:
 	var a := _position(record)
+	if record["asset_id"] == "bulk_divider_5m": return "%.4f|bulk_divider|%.3f,%.3f" % [a.y,a.x,a.z]
 	if ShipSurfaceKit.is_surface(record["asset_id"]):
 		var vertices: Array[String] = []
 		for p in record.get("outline", []): vertices.append("%.3f,%.3f" % [p[0],p[1]])
@@ -1570,6 +1571,10 @@ func _furniture_family() -> bool:
 func _furniture_candidate(point: Vector3) -> Dictionary:
 	var p:=Vector3(snappedf(point.x,.1),floor_y(),snappedf(point.z,.1))
 	var id: String=editor.get("_brick_id")
+	if id == "bulk_divider_5m":
+		if hull_id != "hull_24x8" or active_floor != 0: return {}
+		# Separate slot from the coaming, sharing its authored centre datum.
+		return {"asset_id":id,"position":[0,deck_height,0],"yaw_degrees":0.0}
 	if id in ["hold_coaming_5x8", "hatch_cover_5x4"]:
 		if hull_id != "hull_24x8" or active_floor != 0: return {}
 		# Authored cover seats, not arbitrary placement floating over an opening.

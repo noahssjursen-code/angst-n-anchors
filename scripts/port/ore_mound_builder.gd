@@ -95,11 +95,10 @@ static func _build_pile_mesh(size: Vector3, commodity_id: String, seed: int) -> 
 	return mi
 
 
-## Outward-facing winding from pile base origin (MeshBuilder / island convention).
+## Height fields face upward, including flat perimeter triangles at y=0.
 static func _add_mound_triangle(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
-	var face_center := (a + b + c) / 3.0
 	var n := (b - a).cross(c - a)
-	if n.dot(face_center) > 0.0:
+	if n.y > 0.0:
 		st.add_vertex(a)
 		st.add_vertex(c)
 		st.add_vertex(b)

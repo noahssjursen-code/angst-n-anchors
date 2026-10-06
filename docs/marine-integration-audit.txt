@@ -165,3 +165,14 @@ Research page renders are scratch references in work/, not distributable assets.
 
 Next: package 2, with the stern-clearance and dry-fuel issues above as acceptance
 gates. Then package 3 trawler assembly and method-specific fishing machinery.
+
+6 October bulk follow-up research:
+https://www.macgregor.com/Product/merchant-cargo-and-passengers/bulk-carriers/
+https://www.macgregor.com/products/merchant/hatch-covers/folding-hatch-covers/
+Manufacturer describes coordinating hold openings, crane handling and deck stowage;
+folding pairs are compact alternatives. This iteration retains the existing
+lift-away cover kit and adds two compartments. Folding mechanisms were researched
+but are NOT implemented. Visual arrangement continues the previously inspected
+Damen cargo reference; dimensions/capacities remain game prototypes. Large
+MacGregor cargo handbook PDF exceeded the browser fetch limit; no inspection of
+that PDF's illustrations is claimed.

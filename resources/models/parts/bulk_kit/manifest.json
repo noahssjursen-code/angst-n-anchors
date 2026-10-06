@@ -1,0 +1,21 @@
+{
+  "assets": [
+    {
+      "id": "bulk_divider_5m",
+      "style": "bulk_divider",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/bulk_kit/bulk_divider_5m.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        5,
+        0.3
+      ],
+      "height_start_m": 0.74,
+      "height_end_m": 0.74,
+      "paintable": true
+    }
+  ]
+}

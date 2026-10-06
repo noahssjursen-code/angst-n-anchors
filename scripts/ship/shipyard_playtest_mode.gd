@@ -21,6 +21,8 @@ static func active() -> bool:
 			return true
 		if arg.replace("\\", "/").ends_with("scenes/showcases/cargo_kit_showcase.tscn"):
 			return true
+		if arg.replace("\\", "/").ends_with("scenes/showcases/bulk_kit_showcase.tscn"):
+			return true
 	return false
 
 static func snapshot_path() -> String:

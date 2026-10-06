@@ -1,0 +1,1005 @@
+{
+  "version": 1,
+  "hull": "hull_24x8",
+  "hull_colors": {
+    "upper": [
+      0.14,
+      0.26,
+      0.19
+    ],
+    "lower": [
+      0.36,
+      0.075,
+      0.043
+    ]
+  },
+  "parts": [
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        -1.5,
+        3.6,
+        10
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_door_straight",
+      "position": [
+        -0.5,
+        3.6,
+        10
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        0.5,
+        3.6,
+        10
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        1.5,
+        3.6,
+        10
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        1.5,
+        3.6,
+        9
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_short",
+      "position": [
+        1.5,
+        3.6,
+        8
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_26_starboard",
+      "position": [
+        1.5,
+        3.6,
+        7.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_45_port",
+      "position": [
+        1,
+        3.6,
+        6.5
+      ],
+      "yaw_degrees": 90,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        0.5,
+        3.6,
+        6
+      ],
+      "yaw_degrees": 90,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_45_port",
+      "position": [
+        -0.5,
+        3.6,
+        6
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_26_port",
+      "position": [
+        -1,
+        3.6,
+        6.5
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_short",
+      "position": [
+        -1.5,
+        3.6,
+        7.5
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        -1.5,
+        3.6,
+        8
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        -1.5,
+        3.6,
+        9
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_26p",
+      "position": [
+        -1.5,
+        3.6,
+        7.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_45p",
+      "position": [
+        -1,
+        3.6,
+        6.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_straight",
+      "position": [
+        -0.5,
+        3.6,
+        6
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_45p",
+      "position": [
+        0.5,
+        3.6,
+        6
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_26s",
+      "position": [
+        1,
+        3.6,
+        6.5
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "roof_tile",
+      "position": [
+        0,
+        5.8,
+        0
+      ],
+      "yaw_degrees": 0,
+      "outline": [
+        [
+          -1.5,
+          10
+        ],
+        [
+          1.5,
+          10
+        ],
+        [
+          1.5,
+          7.5
+        ],
+        [
+          1,
+          6.5
+        ],
+        [
+          0.5,
+          6
+        ],
+        [
+          -0.5,
+          6
+        ],
+        [
+          -1,
+          6.5
+        ],
+        [
+          -1.5,
+          7.5
+        ]
+      ],
+      "crown": true,
+      "colors": {
+        "surface": [
+          0.18,
+          0.26,
+          0.28
+        ],
+        "fascia": [
+          0.72,
+          0.76,
+          0.7
+        ]
+      }
+    },
+    {
+      "asset_id": "helm_chair",
+      "position": [
+        0,
+        3.6,
+        7.3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_wheel",
+      "position": [
+        0,
+        4.45,
+        6.3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_throttle",
+      "position": [
+        0.4,
+        4.45,
+        6.3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_display",
+      "position": [
+        -0.4,
+        4.45,
+        6.3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_10000_10000_0",
+      "position": [
+        -4,
+        3.6,
+        12
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        11
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        10
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        9
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        8
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        -1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        -2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        -3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        3.6,
+        -4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_-2361",
+      "position": [
+        -4,
+        3.6,
+        -5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_10000_-2361_8944_-4472",
+      "position": [
+        -4,
+        3.6,
+        -6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+      "position": [
+        -3.5,
+        3.6,
+        -7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+      "position": [
+        -3.0,
+        3.6,
+        -8
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_8944_-4472_8219_-5924",
+      "position": [
+        -2.5,
+        3.6,
+        -9
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_port_miter_8219_-5924_7071_-7071",
+      "position": [
+        -2.0,
+        3.6,
+        -10
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_port_miter_7071_-7071_7071_-7071",
+      "position": [
+        -1.5,
+        3.6,
+        -10.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_port_miter_7071_-7071_7071_-7071",
+      "position": [
+        -1.0,
+        3.6,
+        -11.0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_port_miter_7071_-7071_0_-14142",
+      "position": [
+        -0.5,
+        3.6,
+        -11.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_-10000_10000_0",
+      "position": [
+        4,
+        3.6,
+        12
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        11
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        10
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        9
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        8
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        -1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        -2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        -3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        4,
+        3.6,
+        -4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_2361",
+      "position": [
+        4,
+        3.6,
+        -5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_10000_2361_8944_4472",
+      "position": [
+        4,
+        3.6,
+        -6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+      "position": [
+        3.5,
+        3.6,
+        -7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+      "position": [
+        3.0,
+        3.6,
+        -8
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_8944_4472_8219_5924",
+      "position": [
+        2.5,
+        3.6,
+        -9
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_starboard_miter_8219_5924_7071_7071",
+      "position": [
+        2.0,
+        3.6,
+        -10
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_starboard_miter_7071_7071_7071_7071",
+      "position": [
+        1.5,
+        3.6,
+        -10.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_starboard_miter_7071_7071_7071_7071",
+      "position": [
+        1.0,
+        3.6,
+        -11.0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_starboard_miter_7071_7071_0_14142",
+      "position": [
+        0.5,
+        3.6,
+        -11.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_-10000_10000_0",
+      "position": [
+        -4,
+        3.6,
+        12
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -3,
+        3.6,
+        12
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -2,
+        3.6,
+        12
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -1,
+        3.6,
+        12
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        0,
+        3.6,
+        12
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        1,
+        3.6,
+        12
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        2,
+        3.6,
+        12
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_10000",
+      "position": [
+        3,
+        3.6,
+        12
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "hold_coaming_5x8",
+      "position": [
+        0,
+        3.6,
+        0
+      ],
+      "yaw_degrees": 0.0,
+      "colors": {
+        "wall": [
+          0.34,
+          0.4,
+          0.38
+        ]
+      }
+    },
+    {
+      "asset_id": "hatch_cover_5x4",
+      "position": [
+        0,
+        4.34,
+        2
+      ],
+      "yaw_degrees": 0.0,
+      "colors": {
+        "wall": [
+          0.34,
+          0.4,
+          0.38
+        ]
+      }
+    },
+    {
+      "asset_id": "bulk_divider_5m",
+      "position": [
+        0,
+        3.6,
+        0
+      ],
+      "yaw_degrees": 0.0,
+      "colors": {
+        "wall": [
+          0.34,
+          0.4,
+          0.38
+        ]
+      }
+    }
+  ],
+  "rising_bow": false,
+  "active_floor": 0,
+  "cell_offset": 0
+}

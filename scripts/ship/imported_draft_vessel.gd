@@ -44,6 +44,7 @@ func configure(snapshot: Dictionary) -> void:
 		add_child(part)
 		part_roots.append(part)
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
+	_configure_bulk_holds()
 	(hull.get_node("DriveGear") as ShipDriveVisual).bind_local(self)
 	var camera := get_node("BoatCamera") as BoatCamera
 	camera.follow_distance = length_m * 1.36
@@ -67,6 +68,26 @@ func configure(snapshot: Dictionary) -> void:
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	add_child(collision)
+
+func _configure_bulk_holds() -> void:
+	if draft.get("hull") != "hull_24x8": return
+	for part in part_roots:
+		if part.get_meta("asset_id") != "bulk_divider_5m": continue
+		# The divider must be at its authored seat; arbitrary imported records cannot
+		# create cargo capacity elsewhere or place inventory above a solid deck.
+		if not part.position.is_equal_approx(Vector3(0,3.6,0)) or not is_zero_approx(part.rotation.y): continue
+		for station in [-2.05,2.05]:
+			var socket := part.find_child("HoldForward" if station<0 else "HoldAft",true,false) as Node3D
+			assert(socket != null, "Bulk divider requires authored hold sockets")
+			var hold := ImportedBulkHold.new()
+			hold.name = "ForwardBulkHold" if station<0 else "AftBulkHold"
+			hold.boat = self
+			hold.configure("bulk_forward" if station<0 else "bulk_aft",5.0,3.9,2.7,40)
+			hold.transform = part.transform.affine_inverse() * _relative_transform(socket)
+			for cover in part_roots:
+				if cover.get_meta("asset_id") == "hatch_cover_5x4" and absf(cover.position.z-station)<.1 and absf(cover.position.x)<.1 and absf(cover.position.y-4.34)<.1:
+					hold.cargo_accessible = false
+			part.add_child(hold)
 
 func _add_interactions(part: Node3D, state: ShipPartState) -> void:
 	var style := str(BrickCatalog.get_entry(str(part.get_meta("asset_id", ""))).get("style", ""))
@@ -133,6 +154,7 @@ func _ensure_walk_deck() -> void:
 	for mesh: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
 		# Underwater moving hardware is presentation, not walkable deck triangles.
 		if mesh.has_meta("stern_gear_visual"): continue
+		if mesh.has_meta("bulk_fill_visual"): continue
 		# Small hinges/lever handles are visual hardware, not doorway obstacles.
 		# Keep the complete moving leaf, frame and header collidable.
 		if str(mesh.name).begins_with("Door hinge") or str(mesh.name).begins_with("Lever handle"):

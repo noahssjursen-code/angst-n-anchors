@@ -171,3 +171,32 @@ NEXT RUN: package 5 bulk arrangement and real BulkHoldComponent/crane transfer,
 then shared equipment and lighting. Trawler net/gantry and packages 6-7 still pending.
 
 Cargo batch pushed as 13e6db0. This follow-up records the headless-only cleanup warning accurately.
+
+6 October, fifth scheduled batch: package 5 divided-hold integration implemented.
+Separate Blender bulk_divider_5m with stiffeners, meeting seat and two named hold
+sockets. Reuses hull_24x8 and individual coaming/cover kit; bulk example has an
+open forward compartment and covered aft compartment, 87 editable placements.
+ImportedBulkHold uses BulkHoldComponent/BulkHoldState; two 40 t provisional holds,
+real fill below deck, JSON inventory round-trip and BoatBody cargo-mass ledger.
+Covered holds reject pickup/deposit and are excluded from crane job selection.
+Existing BulkCraneAutoOperator completed a load cycle: 12 t fixture -> 21.8 t;
+aft remained empty. Manual crane withdraw/falling-lot return conserves 12 t.
+Close render found two issues and both were corrected: inconsistent ore heightfield
+triangle winding at flat edges, and imported compact-hold auto handling alignment
+that could previously timeout/release at the target rather than actual grab mouth.
+Imported load release now uses actual mouth after clearance validation; timeout
+stops the operation. Legacy-hold positioning behavior is unchanged.
+Checks: Blender export; GUI draft save/load with coaming/divider coexistence;
+actual Godot whole/hold/crane-motion captures; inventory, mixed commodity and
+covered hatch rejection, mass, JSON state; complete bulk ocean playtest passes
+normal helm/HUD/door/walking/drive/steering/reset, no script errors.
+Bulk showcase functional tests pass but its legacy crane path leaks 14 orphan
+mesh/RIDs at process exit, including after explicit teardown. Documented pending
+replacement; no clean-shutdown claim for that showcase. Ocean/draft GUI tests clean.
+Captures: outputs/marine/bulk.png, bulk-hold.png, bulk-loading.png, bulk-crane.png,
+bulk-ocean.png. Logs under work/bulk-*.log.
+Limits: existing crane artwork, unlimited legacy shore stockpile, no finite port
+inventory, cover removal only in builder, no powered hatch operation or production
+fleet commissioning. Shared hull with distinct compartment arrangement, not a new
+larger bulk hull. NEXT: package 6 individual Blender crane/port hardware, then
+lighting, trawler shared-equipment followups and morning handoff by 08:00 Oslo.
