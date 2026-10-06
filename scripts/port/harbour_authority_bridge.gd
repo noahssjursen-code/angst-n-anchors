@@ -15,6 +15,12 @@ var _retained_scope := ""
 var _reconcile_queued := false
 
 
+func _exit_tree() -> void:
+	# Streaming can free the whole port without PortPlot._rebuild(). Remove
+	# subscriptions and retained interests while the bridge is still alive.
+	deactivate()
+
+
 func setup(controller: HarbourController) -> void:
 	_controller = controller
 	name = "HarbourAuthorityBridge"

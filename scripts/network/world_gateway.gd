@@ -214,7 +214,7 @@ func projections(kind: String = "") -> Array:
 
 
 func subscribe(event_type: String, owner: Object, callback: Callable) -> void:
-	if owner == null or not callback.is_valid():
+	if not is_instance_valid(owner) or not callback.is_valid():
 		return
 	var type := event_type.strip_edges()
 	var listeners := _subscriptions.get(type, []) as Array
@@ -227,14 +227,17 @@ func subscribe(event_type: String, owner: Object, callback: Callable) -> void:
 
 
 func unsubscribe_owner(owner: Object) -> void:
-	if owner == null:
+	if not is_instance_valid(owner):
 		return
 	for type in _subscriptions.keys():
 		var kept: Array = []
 		for listener_variant in _subscriptions[type] as Array:
 			var listener := listener_variant as Dictionary
-			var candidate: Object = listener.get("owner") as Object
-			if candidate != owner and is_instance_valid(candidate):
+			# A freed Object still occupies its Variant slot. Casting it throws
+			# before is_instance_valid can run, so validate the raw value first.
+			var candidate: Variant = listener.get("owner")
+			var callback: Callable = listener.get("callback") as Callable
+			if is_instance_valid(candidate) and candidate != owner and callback.is_valid():
 				kept.append(listener)
 		if kept.is_empty():
 			_subscriptions.erase(type)
@@ -328,10 +331,19 @@ func _dispatch(type: String, event: Dictionary) -> void:
 	var listeners := (_subscriptions.get(type, []) as Array).duplicate()
 	for listener_variant in listeners:
 		var listener := listener_variant as Dictionary
-		var owner: Object = listener.get("owner") as Object
+		# Callbacks may unsubscribe or free later listeners while this snapshot
+		# is being delivered. Consult the current list before each invocation.
+		var current := _subscriptions.get(type, []) as Array
+		if not current.has(listener):
+			continue
+		var owner: Variant = listener.get("owner")
 		var callback: Callable = listener.get("callback") as Callable
-		if owner != null and is_instance_valid(owner) and callback.is_valid():
-			callback.call(event.duplicate(true))
+		if not is_instance_valid(owner) or not callback.is_valid():
+			current.erase(listener)
+			if current.is_empty():
+				_subscriptions.erase(type)
+			continue
+		callback.call(event.duplicate(true))
 
 
 func _on_projection_changed(kind: String, id: String, projection_value: Dictionary) -> void:
