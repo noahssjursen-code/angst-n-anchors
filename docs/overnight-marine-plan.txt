@@ -161,10 +161,13 @@ tank top while side walkway remains solid; full cargo ocean playtest passes
 F helm, HUD, walking, doors, driving, rudder, pause/reset. Builder passes cross-hull
 load/save/reload, floor/cell offsets, selectable covers and invalid-load preservation.
 Trawler real-button child-process regression passed, unchanged unsaved parent.
-Explicit editor teardown eliminates the earlier thumbnail environment leak in
-this cargo verification scene; no general cleanup change to older scenes claimed.
+GUI builder verification exits cleanly after explicit editor teardown. The final
+headless run still reports 18 thumbnail Environment RID leaks at shutdown;
+assertions pass, but headless thumbnail cleanup remains unresolved.
 Captures: outputs/marine/cargo.png, cargo-hold.png, cargo-builder.png, cargo-ocean.png.
 Remaining: cargo inventory/handling gear; covers have LiftPoint sockets but no
 crane operation; provisional handling/prop sizing. No fleet commissioning.
 NEXT RUN: package 5 bulk arrangement and real BulkHoldComponent/crane transfer,
 then shared equipment and lighting. Trawler net/gantry and packages 6-7 still pending.
+
+Cargo batch pushed as 13e6db0. This follow-up records the headless-only cleanup warning accurately.
