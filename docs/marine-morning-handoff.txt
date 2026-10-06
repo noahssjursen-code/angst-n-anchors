@@ -40,7 +40,8 @@ resources/models/examples/coastal_bulk_draft.json
 Known gaps / next work
 - No new navigation/deck lighting kit or night acceptance pass was completed.
 - Trawler net, trawl doors, gantry and refined deployment remain unfinished.
-- Mooring ropes can cross solid half-walls: add fairleads and appropriate openings.
+- New deck roller guides clear the tested flat half-wall perimeter. Arbitrary
+  user structures, extreme shore heights and physical rope wrap remain unresolved.
 - More accurate stern aperture/gear installation and machinery sizing remain.
 - Hatch covers are removed in the builder; no powered hatch or crane-lift interaction.
 - Cargo/bulk share one new hull platform; no larger dedicated bulk hull was built.
@@ -51,7 +52,7 @@ Known gaps / next work
 - No final art approval implied: plant supports, reeving and service access are
   simplified, capacities inherited from gameplay rather than engineering ratings.
 
-Pushed milestones (final port/handoff commit follows this file)
+Pushed milestones
 8ce7a08 initial character/helm checkpoint and plan
 ed6cf14 marine audit
 015411c stern gear
@@ -60,6 +61,7 @@ ed6cf14 marine audit
 ec11112 accurate headless cleanup note
 d8dec8a bulk holds/inventory/crane transfer
 4fe8747 articulated Blender bulk crane
+ec1c94c initial port kit, mooring sockets and morning checkpoint
 
 Review captures (absolute directory)
 C:\Users\noahs\Documents\Codex\2026-10-05\referenced-chatgpt-conversation-this-is-an\outputs\marine
@@ -67,5 +69,25 @@ trawler.png / cargo.png / bulk.png — vessel examples
 stern-gear.png / stern-gear-reverse.png — drive hardware
 crane.png / crane-open.png / crane-closed.png / crane-cabin.png — crane
 bulk-blender-crane-loading.png — real auto handling
-port-kit.png / port-kit-pump.png / port-kit-mooring.png — final port kit
+port-kit*.png — earlier port baseline
+port-refined.png / port-refined-pump.png / port-refined-service.png /
+port-refined-mooring.png — morning quality pass
+fairlead-ocean.png — ocean regression after fitting guides
 Logs and source-reference renders are in the adjacent work directory.
+
+Morning quality pass, 07:40 Oslo
+Rebuilt landing plant proportions and construction against an actual IRAS PV
+system diagram: lower domed tank, fitted saddles/straps, supported cabinet,
+separate vacuum motor/air line and full-bore fish path, curved pipework/bolted
+couplings, braced trough and detailed running gear. Continuous hose replaces
+visible individual cylinders and leaves the coupling axially before bending.
+Added four supported roller guides per imported vessel, inboard rope tails and
+external force/length attachment at each guide. Reviewed close and in-context
+Godot captures; corrected supports, pipe junctions and hose departure during
+iteration. No new catalog expansion or final art acceptance claim.
+Expanded port showcase passes both hulls, bounded rope pool, transformed anchors,
+flat perimeter clearance, continuous hose endpoints, partial and full 250 kg
+transfer and disconnect. Actual ocean regression passes helm/seats/doors/HUD,
+walking, drive/rudder and reset. Both rendered runs exit without script errors.
+Remaining priorities: crane detail/reeving, vessel equipment, lighting and broader
+mooring route validation. Their earlier gaps remain open.

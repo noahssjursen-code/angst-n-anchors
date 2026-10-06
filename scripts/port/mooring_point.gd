@@ -8,6 +8,8 @@ const _CLEAT_GROUP := "ship_mooring_cleat"
 const DEFAULT_BOLLARD_MODEL := "res://resources/data/meshes/docks/docking_bollard.json"
 const IMPORTED_BOLLARD := "res://resources/models/parts/port_kit/deck_double_bitt.glb"
 var _rope_anchor: Node3D
+## Optional authored guide: external rope force/length acts here, not through a wall.
+var rope_lead: Node3D
 
 @export_file("*.json") var bollard_model_path: String = DEFAULT_BOLLARD_MODEL:
 	set(v):
@@ -53,6 +55,11 @@ func _ready() -> void:
 
 
 func get_anchor_global_position() -> Vector3:
+	if is_instance_valid(rope_lead):
+		return rope_lead.global_position
+	return get_inboard_anchor_global_position()
+
+func get_inboard_anchor_global_position() -> Vector3:
 	if is_instance_valid(_rope_anchor):
 		return _rope_anchor.global_position
 	return to_global(anchor_local_position)

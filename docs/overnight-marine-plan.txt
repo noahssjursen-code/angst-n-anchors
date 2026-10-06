@@ -253,3 +253,23 @@ routing through solid bulwarks, then crane and vessel detail. Inspect primary
 visual references and close actual Godot renders. Passing gameplay checks alone
 does not constitute art acceptance. Do not stop after a token short batch if
 visible problems remain. Prior 08:00 Oslo cutoff remains unless Noah extends it.
+
+6 October, morning quality pass (05:24–05:40 UTC): package 6 refinement.
+Primary IRAS PV diagram page 4 inspected, then reworked plant geometry rather than
+adding catalog items: lower domed tank, matched saddles/straps, braced trough,
+small separate vacuum power unit, distinct fish and air routes, bolted flanges,
+continuous curved pipes, cabinet supports and running gear. Added HoseDeparture
+socket and continuous runtime hose; axial coupling departure corrected in render.
+Seven port assets now include a supported deck roller guide. Four guides installed
+per imported hull, fixed inboard rope tails and guide-based external constraint
+attachment. Existing authority, transfer state machine and save schema retained.
+Close pump/service/mooring renders inspected and iterated. Tested flat perimeter
+clears ropes, but arbitrary structures/extreme shore geometry and actual wrap
+contact remain unresolved. No universal collision routing or engineering claim.
+Expanded port rendered check passed both hulls' fittings, transformed anchors,
+bounded maximum rope pool, hose surface endpoints/finite vertices, real partial
+and completed 250 kg transfer, disconnect and release. Ocean regression passed
+F helm/seats, doors, walking, normal HUD, drive/rudder and reset. Clean exits.
+Captures: port-refined*.png and fairlead-ocean.png. Logs: port-refined-verified.log,
+fairlead-ocean.log; source diagram: work/iras-pump-reference.png.
+NEXT: crane/vessel details and lighting remain unfinished; preserve 08:00 cutoff.

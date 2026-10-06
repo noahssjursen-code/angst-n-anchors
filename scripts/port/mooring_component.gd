@@ -1029,14 +1029,14 @@ func _update_rope_visuals() -> void:
 	if bow_line_tied and _bow_point != null and _front_post != null:
 		var a := _cleat_anchor(_bow_point)
 		var b := _post_anchor(_front_post)
-		_draw_curve_on_holder(_bow_rope_holder, _bow_rope_segments, a, b)
+		_draw_curve_on_holder(_bow_rope_holder, _bow_rope_segments, a, b, _bow_point)
 	elif _bow_rope_holder != null:
 		_hide_rope_segments(_bow_rope_segments)
 
 	if stern_line_tied and _stern_point != null and _rear_post != null:
 		var a2 := _cleat_anchor(_stern_point)
 		var b2 := _post_anchor(_rear_post)
-		_draw_curve_on_holder(_stern_rope_holder, _stern_rope_segments, a2, b2)
+		_draw_curve_on_holder(_stern_rope_holder, _stern_rope_segments, a2, b2, _stern_point)
 	elif _stern_rope_holder != null:
 		_hide_rope_segments(_stern_rope_segments)
 
@@ -1046,8 +1046,15 @@ func _draw_curve_on_holder(
 	pool: Array[MeshInstance3D],
 	start: Vector3,
 	end_: Vector3,
+	cleat: Node3D = null,
 ) -> void:
 	var pts := _rope_sample_points(start, end_)
+	if cleat is MooringPoint and is_instance_valid((cleat as MooringPoint).rope_lead):
+		# Fixed inboard run terminates at the same guide used by the constraint.
+		# Keep the existing bounded pool even at the maximum sampling setting.
+		if pts.size() >= _MAX_SEGMENT_POOL_PER_ROPE + 1:
+			pts.remove_at(1)
+		pts.insert(0,(cleat as MooringPoint).get_inboard_anchor_global_position())
 	var segment_count := maxi(pts.size() - 1, 1)
 	if segment_count > _MAX_SEGMENT_POOL_PER_ROPE:
 		push_warning(

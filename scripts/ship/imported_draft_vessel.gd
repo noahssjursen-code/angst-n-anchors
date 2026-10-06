@@ -85,6 +85,12 @@ func _add_mooring_fittings(hull_id: String, deck_y: float) -> void:
 			point.position=Vector3(side*inset_x,deck_y,stations[index])
 			point.bollard_scale=.85
 			root.add_child(point)
+			var guide: Node3D = (load("res://resources/models/parts/port_kit/deck_roller_fairlead.glb") as PackedScene).instantiate()
+			guide.name=point.name+"Fairlead"
+			guide.position=Vector3(side*(2.34 if hull_id=="trawler_hull_14m" else 3.84),deck_y,stations[index])
+			root.add_child(guide)
+			point.rope_lead=guide.find_child("RopeLead",true,false) as Node3D
+			assert(point.rope_lead != null)
 
 func _configure_bulk_holds() -> void:
 	if draft.get("hull") != "hull_24x8": return

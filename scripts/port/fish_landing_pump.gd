@@ -26,9 +26,10 @@ var _landed_mass_kg := 0.0
 var _landed_value_marks := 0.0
 var _landed_lots := 0
 var _hose_root: Node3D
-var _hose_segments: Array[MeshInstance3D] = []
+var _hose_mesh: MeshInstance3D
 var _receiver_fill: MeshInstance3D
 var _connection_marker: Node3D
+var _connection_direction: Node3D
 
 
 func _ready() -> void:
@@ -214,7 +215,9 @@ func _build_visual() -> void:
 		assert(scene != null)
 		models.add_child(scene.instantiate())
 	_connection_marker = models.find_child("HoseConnection",true,false) as Node3D
+	_connection_direction = models.find_child("HoseDeparture",true,false) as Node3D
 	assert(_connection_marker != null, "Landing drive requires an authored suction socket")
+	assert(_connection_direction != null, "Landing drive requires an axial hose departure")
 	var fill_datum := models.find_child("FillDatum",true,false) as Node3D
 	assert(fill_datum != null)
 	# Transient fill and deforming hose remain gameplay presentation, not static fittings.
@@ -225,15 +228,19 @@ func _build_visual() -> void:
 	_hose_root = Node3D.new()
 	_hose_root.name = "FlexibleSuctionHose"
 	add_child(_hose_root)
-	for i in range(14):
-		var segment := MeshBuilder.cylinder(.16,1.0,Color(.035,.055,.06),.82,.04)
-		segment.name = "Hose_%02d" % i
-		_hose_root.add_child(segment)
-		_hose_segments.append(segment)
+	_hose_mesh = MeshInstance3D.new()
+	_hose_mesh.name = "ContinuousHose"
+	var material:=StandardMaterial3D.new()
+	material.albedo_color=Color(.035,.055,.06);material.roughness=.82
+	_hose_mesh.material_override=material
+	_hose_root.add_child(_hose_mesh)
 	_set_hose_visible(false)
 
 func _update_hose(extension: float) -> void:
 	if _connection_marker == null:
+		return
+	if extension<=.001:
+		_set_hose_visible(false)
 		return
 	_set_hose_visible(true)
 	var start := _connection_marker.global_position
@@ -246,30 +253,44 @@ func _update_hose(extension: float) -> void:
 	var horizontal := end - start
 	horizontal.y = 0.0
 	var forward := horizontal.normalized() if horizontal.length_squared() > 0.001 else Vector3.RIGHT
-	var control_a := start + Vector3.UP * lift + forward * minf(span * 0.20, 2.5)
+	var departure:=(_connection_direction.global_position-start).normalized()
+	var bend:=start+departure*.8+Vector3.UP*.8
+	var control_a := bend + Vector3.UP * lift + forward * minf(span * 0.20, 2.5)
 	var control_b := end + Vector3.UP * (lift + 0.8) - forward * minf(span * 0.08, 1.2)
 	var points: Array[Vector3] = []
-	for i in range(_hose_segments.size() + 1):
-		var t := float(i) / float(_hose_segments.size())
-		var point := start.bezier_interpolate(control_a, control_b, end, t)
-		points.append(point)
-	for i in range(_hose_segments.size()):
-		_pose_cylinder_between(_hose_segments[i], points[i], points[i + 1])
+	for i in range(9):
+		points.append(start.bezier_interpolate(start+departure*.5,bend-Vector3.UP*.4,bend,float(i)/8))
+	for i in range(1,33):
+		points.append(bend.bezier_interpolate(control_a,control_b,end,float(i)/32))
+	_build_hose_surface(points)
 
 
-func _pose_cylinder_between(segment: MeshInstance3D, a: Vector3, b: Vector3) -> void:
-	var delta := b - a
-	var length := maxf(delta.length(), 0.001)
-	var direction := delta / length
-	var x_axis := direction.cross(Vector3.FORWARD)
-	if x_axis.length_squared() < 0.001:
-		x_axis = direction.cross(Vector3.RIGHT)
-	x_axis = x_axis.normalized()
-	var z_axis := x_axis.cross(direction).normalized()
-	segment.global_transform = Transform3D(Basis(x_axis, direction, z_axis), (a + b) * 0.5)
-	var mesh := segment.mesh as CylinderMesh
-	if mesh != null:
-		mesh.height = length * 1.03
+func _build_hose_surface(points: Array[Vector3]) -> void:
+	const SIDES := 16
+	var vertices:=PackedVector3Array();var normals:=PackedVector3Array();var indices:=PackedInt32Array()
+	var local_from_world:=_hose_mesh.global_transform.affine_inverse()
+	var previous_axis:=Vector3.ZERO
+	for i in points.size():
+		var tangent:Vector3=(points[mini(i+1,points.size()-1)]-points[maxi(i-1,0)]).normalized()
+		# Parallel-transport the ring frame to avoid flips at vertical bends.
+		var u:=previous_axis-tangent*previous_axis.dot(tangent)
+		if u.length_squared()<.001:
+			u=tangent.cross(Vector3.UP)
+			if u.length_squared()<.001:u=tangent.cross(Vector3.RIGHT)
+		u=u.normalized();previous_axis=u
+		var v:=tangent.cross(u).normalized()
+		for j in SIDES:
+			var angle:=TAU*float(j)/SIDES
+			var normal:=u*cos(angle)+v*sin(angle)
+			vertices.append(local_from_world*(points[i]+normal*.16))
+			normals.append((local_from_world.basis*normal).normalized())
+			if i<points.size()-1:
+				var a:=i*SIDES+j;var b:=i*SIDES+(j+1)%SIDES
+				indices.append_array(PackedInt32Array([a,a+SIDES,b,b,a+SIDES,b+SIDES]))
+	var arrays:=[];arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX]=vertices;arrays[Mesh.ARRAY_NORMAL]=normals;arrays[Mesh.ARRAY_INDEX]=indices
+	var mesh:=ArrayMesh.new();mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	_hose_mesh.mesh=mesh
 
 
 func _set_hose_visible(value: bool) -> void:

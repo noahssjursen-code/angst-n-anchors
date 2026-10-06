@@ -32,7 +32,9 @@ func _ready() -> void:
 	assert(mooring._ship_cleat_nodes().size()==4)
 	for point: MooringPoint in mooring._ship_cleat_nodes():
 		assert(point._rope_anchor != null)
-		assert(point.to_local(point.get_anchor_global_position()).is_equal_approx(Vector3(0,.52*.85,0)))
+		assert(point.to_local(point.get_inboard_anchor_global_position()).is_equal_approx(Vector3(0,.52*.85,0)))
+		assert(point.rope_lead != null)
+		assert(is_equal_approx(boat.to_local(point.get_anchor_global_position()).y,2.92+1.12))
 		var shape:=ImportedHullCatalog.make_grid("trawler_hull_14m").deck_polygon
 		assert(Geometry2D.is_point_in_polygon(Vector2(point.position.x,point.position.z),shape))
 	posts[0].bollard_scale=1.2
@@ -46,6 +48,12 @@ func _ready() -> void:
 	var start:=mooring._cleat_anchor(mooring._bow_point)
 	var sampled:=mooring._rope_sample_points(start,posts[0].get_anchor_global_position())
 	assert(sampled[0].is_equal_approx(start) and sampled[-1].is_equal_approx(posts[0].get_anchor_global_position()))
+	# At the port deck edge the whole rope must pass above the flat wall/rail.
+	for j in range(sampled.size()-1):
+		var a:=boat.to_local(sampled[j]);var b:=boat.to_local(sampled[j+1])
+		if a.x>=-2.5 and b.x<=-2.5:
+			var edge_y:=lerpf(a.y,b.y,(-2.5-a.x)/(b.x-a.x))
+			assert(edge_y-mooring.rope_radius>2.92+1.015,"Fairlead must clear the flat perimeter")
 	boat.position.y+=.25;boat.rotation.z=.025;mooring._update_rope_visuals()
 	assert(mooring._cleat_anchor(mooring._bow_point).distance_to(start)>.15)
 	boat.position.y=0;boat.rotation.z=0;mooring._update_rope_visuals()
@@ -57,6 +65,16 @@ func _ready() -> void:
 	assert(is_equal_approx(hold.state.total_mass_kg(),150))
 	assert(pump._connection_marker.global_position.is_equal_approx(pump.to_global(Vector3(3.72,1.35,-.82))))
 	assert(pump._hose_root.visible)
+	var hose_arrays:=pump._hose_mesh.mesh.surface_get_arrays(0)
+	var hose_vertices:PackedVector3Array=hose_arrays[Mesh.ARRAY_VERTEX]
+	assert(hose_vertices.size()==41*16)
+	var inlet_center:=Vector3.ZERO;var outlet_center:=Vector3.ZERO
+	for j in 16:
+		inlet_center+=hose_vertices[j]/16
+		outlet_center+=hose_vertices[hose_vertices.size()-16+j]/16
+	assert(pump._hose_mesh.to_global(inlet_center).distance_to(pump._connection_marker.global_position)<.001)
+	assert(pump._hose_mesh.to_global(outlet_center).distance_to(hold.get_hose_drop_world())<.001)
+	for vertex in hose_vertices:assert(vertex.is_finite())
 	var args:=OS.get_cmdline_user_args();var index:=args.find("--capture")
 	if index>=0:
 		var path:=args[index+1]
@@ -64,6 +82,9 @@ func _ready() -> void:
 		camera.size=12;camera.position=Vector3(0,11,-12);camera.look_at(pump.position+Vector3(-.4,2,0))
 		label.text="LANDING PLANT / separate skid, separator, drive and receiving trough\n100 kg received / 150 kg aboard / live flexible hose"
 		await _capture(path.get_basename()+"-pump.png")
+		camera.size=9;camera.position=pump.position+Vector3(-8,5,8);camera.look_at(pump.position+Vector3(-.4,1.5,0))
+		label.text="PRESSURE / VACUUM PLANT\nProfiled saddles / separate fish and air routes / service side"
+		await _capture(path.get_basename()+"-service.png")
 		camera.size=5;camera.position=Vector3(1,7,10);camera.look_at(Vector3(-3.2,3.2,6))
 		label.text="MOORING / authored rope sockets / existing dynamic line"
 		await _capture(path.get_basename()+"-mooring.png")
@@ -74,7 +95,21 @@ func _ready() -> void:
 	assert(pump.state_label()==FishLandingPump.STATE_COMPLETE and not pump._hose_root.visible)
 	mooring.release_mooring();assert(not mooring.bow_line_tied and not mooring.stern_line_tied)
 	for mesh in mooring._bow_rope_segments:assert(not mesh.visible)
-	print("PORT KIT PASS: four discovered cleats, transformed sockets, rebuilt prompt, tie/release and moving anchors, actual 250 kg transfer and hose disconnect")
+	# The other platform receives its own inboard positions, never a scaled trawler layout.
+	var cargo:=ImportedDraftVessel.new()
+	cargo.configure(JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/examples/coastal_cargo_draft.json")))
+	cargo.freeze=true;cargo.process_mode=Node.PROCESS_MODE_DISABLED;add_child(cargo);cargo.hide()
+	for i in 3:await get_tree().process_frame
+	var cargo_mooring:=cargo.find_child("MooringComponent",true,false) as MooringComponent
+	assert(cargo_mooring._ship_cleat_nodes().size()==4)
+	for point:MooringPoint in cargo_mooring._ship_cleat_nodes():
+		var lead:=cargo.to_local(point.get_anchor_global_position())
+		assert(is_equal_approx(absf(lead.x),3.84) and is_equal_approx(lead.y,4.72))
+	mooring.rope_visual_points=33
+	mooring.moor_to_posts(posts[0],posts[1]);mooring._update_rope_visuals()
+	assert(mooring._bow_rope_segments.size()<=32)
+	mooring.release_mooring();cargo.queue_free()
+	print("PORT KIT PASS: both hulls' cleats/guides, perimeter clearance, bounded rope pool, transformed sockets, tie/release, continuous hose endpoints, 250 kg transfer and disconnect")
 	if index>=0:
 		boat.queue_free();pump.queue_free();bank.queue_free()
 		for post in posts:post.queue_free()
