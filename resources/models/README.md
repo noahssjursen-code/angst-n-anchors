@@ -920,3 +920,27 @@ walk_exclude_materials manifest contract. Only meshes entirely made of those
 materials skip walk collision. The actual eleven imported tread pans, stringers,
 rails and supports remain physical; there is no invisible ramp. Final refined
 geometry repeats the full access checks successfully.
+
+### Ventilation fittings (6 October afternoon)
+
+ventilation_kit contains separately authored deck_mushroom_vent and wall_vent_louvre
+GLB/Blender assets. The 0.8 m-wide, 1.01 m-tall deck head has a hollow flanged
+trunk, eight holding bolts, weather hood, stays and a separate screened throat.
+Hard fabricated profile breaks split normals while the hood remains smooth.
+The wall intake has downturned blades, a dark throat, rain eyebrow, drip sill
+and corner screws. Its origin is the standard wall centreline at floor height;
+the visible mounting back lies 60 mm forward, matching the standard wall skin.
+Ventilators face Godot -Z. Housings expose wall paint; screen and blade finishes
+are fixed. These are static fittings, not an airflow or flooding subsystem.
+
+The coaster now has 165 placements: two portside deck vents and an intake on a
+solid lower front panel. The portside route was checked with the real player.
+coaster_kit_showcase verifies per-instance paint and captures both details; key 5
+shows the deck vent. The floor visibility threshold now matches its existing
+selection tolerance, preserving the 5 mm finish at Floor 1. Save/reload checks
+explicitly verify that finished surface remains visible/selectable.
+
+Visual reference: Sealux Marine 2022 catalogue page 49, mushroom weather hoods,
+fly-screen gaps and slatted wall openings. This is original, larger game-scale
+fabrication; it is not a scaled copy or rated version of that small-vessel product.
+https://www.sealuxmarine.com/wp-content/uploads/2022-METS-CATALOUE-07-High.pdf

@@ -12,7 +12,7 @@ func _ready() -> void:
 		for i in 8: await get_tree().process_frame
 		var parts := editor.get("_imported_parts_editor") as ImportedShipPartsEditor
 		parts.load_draft(DRAFT)
-		assert(parts.draft_path == DRAFT and parts.records.size() == 162)
+		assert(parts.draft_path == DRAFT and parts.records.size() == 165)
 		assert(parts.hull_id == "hull_32x10" and is_equal_approx(parts.floor_y(),4.5))
 		assert(editor._grid.half_loa == 16 and editor._grid.half_beam == 5)
 		for model in parts.parts_root.get_children():
@@ -26,6 +26,10 @@ func _ready() -> void:
 		for station in [-4.5,-1.5,1.5,4.5]:
 			var candidate := parts._furniture_candidate(Vector3(1,4.5,station+.2))
 			assert(candidate.asset_id=="hatch_cover_6x3" and is_equal_approx(candidate.position[0],0) and is_equal_approx(candidate.position[1],5.24) and is_equal_approx(candidate.position[2],station))
+		parts.set_floor(1,0)
+		for model in parts.parts_root.get_children():
+			if parts.records[str(model.get_meta("record_key"))].asset_id=="floor_tile":
+				assert(model.visible and parts._on_active_floor(model),"Finished floor must be visible and selectable on its nominal level")
 		parts.set_floor(1,2)
 		assert(is_equal_approx(parts.floor_y(),6.9))
 		var temporary := OS.get_cache_dir().path_join("coaster-kit-%d.json" % OS.get_process_id())
@@ -33,7 +37,7 @@ func _ready() -> void:
 		parts.load_draft("res://resources/models/examples/coastal_trawler_draft.json")
 		assert(parts.hull_id == "trawler_hull_14m" and is_equal_approx(parts.floor_y(),2.92))
 		parts.load_draft(temporary)
-		assert(parts.hull_id == "hull_32x10" and parts.records.size() == 162)
+		assert(parts.hull_id == "hull_32x10" and parts.records.size() == 165)
 		assert(is_equal_approx(parts.floor_y(),6.9))
 		var before := parts._draft_state()
 		var invalid := parts._draft_data().duplicate(true)
@@ -44,14 +48,15 @@ func _ready() -> void:
 		assert(before == parts._draft_state(), "Invalid hull must preserve current draft")
 		DirAccess.remove_absolute(temporary)
 		parts.set_floor(0,0)
-		editor.call("_show_toast", "Coaster draft verified: 32 × 10 m · 162 editable parts")
+		editor.call("_show_toast", "Coaster draft verified: 32 × 10 m · 165 editable parts")
 		var capture_args := OS.get_cmdline_user_args()
 		var capture_index := capture_args.find("--capture")
 		if capture_index >= 0:
+			parts.set_floor(1,0)
 			for i in 12: await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(capture_args[capture_index+1])
-		print("COASTER DRAFT PASS: cross-hull, 162 records, floor datum, opening, save/load and invalid-load preservation")
+		print("COASTER DRAFT PASS: cross-hull, 165 records, floor datum, opening, save/load and invalid-load preservation")
 		editor.queue_free()
 		for i in 4: await get_tree().process_frame
 		get_tree().quit()
@@ -75,7 +80,15 @@ func _ready() -> void:
 	boat.process_mode = Node.PROCESS_MODE_DISABLED
 	add_child(boat)
 	assert(boat.length_m == 32 and boat.beam_m == 10 and boat.depth_m == 4.5)
-	assert(boat.part_roots.size() == 162)
+	assert(boat.part_roots.size() == 165)
+	var vents: Array[Node3D]=[]
+	for part in boat.part_roots:
+		if part.get_meta("asset_id")=="deck_mushroom_vent":vents.append(part)
+	assert(vents.size()==2)
+	var vent_tint:=_panel_color(vents[1])
+	ModelPaint.apply(vents[0],{"wall":Color(.4,.25,.12)})
+	assert(_panel_color(vents[1]).is_equal_approx(vent_tint),"Vent housings must paint independently")
+	ModelPaint.apply(vents[0],{"wall":vent_tint})
 	var covers: Array[Node3D] = []
 	for part in boat.part_roots:
 		if part.get_meta("asset_id")=="hatch_cover_6x3":covers.append(part)
@@ -115,7 +128,7 @@ func _ready() -> void:
 	camera.look_at(Vector3(0,2,0));camera.make_current()
 	var canvas := CanvasLayer.new();add_child(canvas)
 	var label := Label.new();label.position=Vector2(24,70)
-	label.text="COASTAL PLATFORM / 32 x 10 m editable platform\n162 separate placements / two levels / walkable stair flight\n1: vessel   2: open hold   3: stairs   4: bridge cutaway   Esc: close"
+	label.text="COASTAL PLATFORM / 32 x 10 m editable platform\n165 separate placements / two levels / walkable stair flight\n1: vessel   2: open hold   3: stairs   4: bridge cutaway   Esc: close"
 	label.add_theme_font_size_override("font_size",20);canvas.add_child(label)
 	print("COASTER ASSEMBLY PASS: actual hull dimensions, separate covers, mounted propeller and rudder motion")
 	var args := OS.get_cmdline_user_args();var index := args.find("--capture")
@@ -143,6 +156,14 @@ func _ready() -> void:
 		for i in 12:await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(args[index+1].get_basename()+"-bridge.png")
+		_vent_view()
+		for i in 12:await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(args[index+1].get_basename()+"-vent.png")
+		camera.size=3;camera.position=Vector3(2,7,6);camera.look_at(Vector3(0,5.7,9))
+		for i in 12:await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(args[index+1].get_basename()+"-louvre.png")
 		boat.queue_free()
 		for i in 4:await get_tree().process_frame
 		get_tree().quit()
@@ -160,12 +181,17 @@ func _bridge_view() -> void:
 	for part in boat.part_roots:part.visible=part.get_meta("asset_id")!="roof_tile"
 	camera.size=8;camera.position=Vector3(8,14,16);camera.look_at(Vector3(0,7.1,11.7))
 
+func _vent_view() -> void:
+	for part in boat.part_roots:part.show()
+	camera.size=2.4;camera.position=Vector3(-6,6.4,9.5);camera.look_at(Vector3(-3.6,5,11))
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"): get_tree().quit()
 	if event is InputEventKey and event.pressed:
 		if event.keycode==KEY_2:_open_view()
 		if event.keycode==KEY_3:_access_view()
 		if event.keycode==KEY_4:_bridge_view()
+		if event.keycode==KEY_5:_vent_view()
 		if event.keycode==KEY_1:
 			for p in boat.part_roots:p.show()
 			camera.size=33;camera.position=Vector3(34,29,-39);camera.look_at(Vector3(0,2,0))

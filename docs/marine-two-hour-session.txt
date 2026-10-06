@@ -85,3 +85,9 @@ coplanar grip mats and floor finish after close visual review. Forward+ close
 stairs/bridge/full vessel and actual ocean F-to-helm/HUD/drive/reset pass.
 Completing regression checks and pushing; then a small reusable ventilation kit
 will add useful manufactured roof/deck detail, followed by final handoff.
+
+18:13 Final fittings: two separate Blender ventilation assets, added as three
+placements on the coaster (165 total). Inspected manufacturer photographs;
+corrected hood centre/shading and wall mounting depth after close renders.
+Player test confirms portside passage; per-instance paint is isolated. Final
+library/upper-floor save-load capture and source/import checks in progress.

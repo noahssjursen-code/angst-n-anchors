@@ -1478,7 +1478,8 @@ func _apply_floor_view() -> void:
 	for model in parts_root.get_children():
 		var id := str(records.get(str(model.get_meta("record_key")),{}).get("asset_id",""))
 		var offset := .86 if id in ["helm_wheel","helm_throttle","helm_display"] else (.75 if BrickCatalog.get_entry(id).get("style","") == "cargo_hatch" else .01)
-		model.visible = model.position.y <= floor_y() + offset
+		# Match selection tolerance, including a few millimetres of floor finish.
+		model.visible = model.position.y <= floor_y() + offset + .01
 
 
 func _surface_family() -> bool:

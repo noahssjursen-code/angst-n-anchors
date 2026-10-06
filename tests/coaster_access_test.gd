@@ -64,6 +64,11 @@ func _ready() -> void:
 	await walk_to(Vector3(3.5,6.7,12.55),100)
 	check(player.position.z<9.1 and player.position.y<4.6,"Step climbing must respect head clearance")
 	ceiling.queue_free()
+	# New portside ventilation must preserve the outside route around the house.
+	player.position=Vector3(-4.4,4.56,9.5);player.velocity=Vector3.ZERO
+	for i in 20:await get_tree().physics_frame
+	await walk_to(Vector3(-4.4,4.5,14.6),200)
+	check(player.position.z>14.2 and absf(player.position.y-4.5)<.15,"Ventilators must leave the port walkway usable")
 	# A separate tall obstacle on a plain pad remains unclimbable without jumping.
 	var pad:=obstacle(Vector3(40,4.4,0),Vector3(8,.2,8))
 	var wall:=obstacle(Vector3(40,5.2,0),Vector3(2,1.4,.3))

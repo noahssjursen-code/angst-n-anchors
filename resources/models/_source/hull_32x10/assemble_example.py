@@ -55,6 +55,8 @@ for x in [-2.5,-1.5,-.5,.5,1.5,2.5,3.5]:add('rail_straight_100cm',x,6.7,15,270)
 add('rail_straight_100cm',-2.5,6.7,15,0)
 add('rail_straight_50cm',2.5,6.7,12,270)
 add('rail_straight_50cm',4,6.7,12,270)
+for z in [11,13]:add('deck_mushroom_vent',-3.6,4.5,z,colors={'wall':[.36,.48,.48]})
+add('wall_vent_louvre',0,4.5,9,colors=paint)
 parts+=json.loads((ROOT/'vessels/hull_32x10/halfwall_flat_assembly.json').read_text(encoding='utf-8'))['placements']
 add('hold_coaming_6x12',0,4.5,0,colors={'wall':[.30,.38,.40]})
 for z in [-4.5,-1.5,1.5,4.5]:add('hatch_cover_6x3',0,5.24,z,colors={'wall':[.40,.47,.47]})

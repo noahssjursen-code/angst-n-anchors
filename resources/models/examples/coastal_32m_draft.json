@@ -1123,6 +1123,54 @@
       "yaw_degrees": 270
     },
     {
+      "asset_id": "deck_mushroom_vent",
+      "position": [
+        -3.6,
+        4.5,
+        11
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.36,
+          0.48,
+          0.48
+        ]
+      }
+    },
+    {
+      "asset_id": "deck_mushroom_vent",
+      "position": [
+        -3.6,
+        4.5,
+        13
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.36,
+          0.48,
+          0.48
+        ]
+      }
+    },
+    {
+      "asset_id": "wall_vent_louvre",
+      "position": [
+        0,
+        4.5,
+        9
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.73,
+          0.78,
+          0.76
+        ]
+      }
+    },
+    {
       "asset_id": "halfwall_straight_100cm_miter_10000_10000_10000_0",
       "position": [
         -5,
