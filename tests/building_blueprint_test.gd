@@ -1,58 +1,70 @@
-extends SceneTree
+extends Node
+
+const ARCHIVE := "res://resources/data/buildings/archive/"
 
 
-func _initialize() -> void:
-	var door_fp := BrickCatalog.footprint_of("block_door")
-	assert(door_fp == Vector3i(2, 3, 1), "door footprint must be 2×3×1")
-	assert(not BrickCatalog.has_tag("block", "ship_only"))
-	assert(BrickCatalog.has_tag("helm", "ship_only"))
-	assert(BrickCatalog.has("foundation"))
-	assert(BrickCatalog.has("roof_flat"))
-	assert(BrickCatalog.has("roof_slope_inv"))
-	assert(BrickCatalog.ids_for_buildings().has("block"))
-	assert(not BrickCatalog.ids_for_buildings().has("helm"))
-	assert(not BrickCatalog.ids_for_buildings().has("trommel_small"))
+func _ready() -> void:
+	call_deferred("_run")
 
-	var layout := BuildingLayout.new()
-	layout.blueprint_id = "roundtrip_house"
-	layout.display_name = "Roundtrip House"
-	layout.role = "decorative"
-	layout.grid_size = Vector3i(8, 6, 8)
-	var grid := layout.grid()
-	assert(layout.place_footprint(Vector3i(1, 0, 1), "foundation", 0, grid))
-	assert(layout.place_footprint(Vector3i(1, 1, 1), "block", 90, grid))
-	assert(layout.place_footprint(Vector3i(3, 0, 1), "block_door", 0, grid))
-	assert(layout.count() == 1 + 1 + 6, "door occupies six cells at 2×3×1")
-	assert(layout.place_footprint(Vector3i(0, 0, 3), "block", 0, null, Color(0.7, 0.2, 0.15)))
-	var painted := layout.get_brick(Vector3i(0, 0, 3))
-	assert(painted.has("color"), "painted brick stores colour")
-	assert(BuildingLayout.color_from_entry(painted, "block").is_equal_approx(Color(0.7, 0.2, 0.15)))
-	assert(layout.place_footprint(Vector3i(0, 0, 4), "floor", 0))
-	assert(layout.place_footprint(Vector3i(0, 0, 4), "block", 0))
-	var stacked := layout.get_brick(Vector3i(0, 0, 4))
-	assert(str(stacked.get("brick_id", "")) == "block")
-	assert(stacked.has("surface"), "floor remains under content in the same cell")
-	assert(str((stacked["surface"] as Dictionary).get("brick_id", "")) == "floor")
-	assert(layout.erase_footprint_at(Vector3i(0, 0, 4)))
-	var floor_left := layout.get_brick(Vector3i(0, 0, 4))
-	assert(BuildingLayout.entry_is_surface_only(floor_left), "erase strips content first, keeps floor")
-	assert(not layout.place_footprint(Vector3i(9, 0, 0), "block", 0, grid))
-	var restored := BuildingLayout.from_dict(layout.to_dict())
-	assert(restored.iter_primary_cells().size() == 5, "primary cells skip occupied fillers")
-	assert(int(restored.get_brick(Vector3i(1, 1, 1)).get("yaw", 0)) == 90)
-	assert(bool(BuildingRules.validate(restored).get("ok", false)))
 
-	var fitout := BuildingFitout.build(restored)
-	assert(fitout.get_meta("building_blueprint_id", "") == "roundtrip_house")
-	## foundation, wall block, door, painted block, floor-only leftover, + collision
-	assert(fitout.get_child_count() == 5 + 1, "primary visuals plus collision root")
-	fitout.free()
+func _run() -> void:
+	# Old layouts remain recoverable without reviving the removed block library.
+	assert(not BrickCatalog.has("block"))
+	for blueprint_id in ["harbouroffice", "warehouse"]:
+		assert(not BuildingBlueprintCatalog.ids().has(blueprint_id))
+		assert(BuildingBlueprintCatalog.by_id(blueprint_id) == null)
+		assert(BuildingBlueprintCatalog.build(blueprint_id) == null)
+		assert(BuildingBlueprintCatalog.by_id("archive/" + blueprint_id) == null)
+		var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
+			ARCHIVE + blueprint_id + ".json"))
+		var archived := BuildingLayout.from_dict(raw)
+		assert(not archived.cells.is_empty())
+		assert(archived.to_dict()["cells"] == raw["cells"], "archive round-trip must retain placements")
+		var report := BuildingRules.validate(archived)
+		assert(not report.ok, "retired layouts must still fail explicit validation")
+		assert(report.errors.size() < 20, "report asset types, not thousands of cells")
 
-	assert(BuildingBlueprintCatalog.by_id("harbourmaster_house") == null)
-	# Filename stem is the public id.
+	assert(BuildingBlueprintCatalog.by_id("missing_building") == null)
+	assert(BuildingBlueprintCatalog.by_id("  ") == null)
+	for specimen in PerfShowcase.SPECIMENS:
+		assert(specimen.id not in ["harbouroffice", "warehouse"], "retired buildings cannot be preview choices")
 	for blueprint_id in BuildingBlueprintCatalog.ids():
 		var loaded := BuildingBlueprintCatalog.by_id(blueprint_id)
-		assert(loaded != null)
-		assert(loaded.blueprint_id == blueprint_id)
+		assert(loaded != null and loaded.blueprint_id == blueprint_id)
 
-	quit()
+	# Repeated bad placements stay invalid, with one counted diagnostic per type.
+	var invalid := BuildingLayout.new()
+	for index in range(100):
+		invalid.cells[BuildingLayout.cell_key(Vector3i(index, 0, 0))] = {
+			"brick_id": "missing_test_brick", "yaw": 0,
+		}
+	var report := BuildingRules.validate(invalid)
+	assert(not report.ok and report.errors.size() == 1)
+	assert(report.errors[0] == "Unknown brick 'missing_test_brick' (100 placements).")
+	invalid.cells = {"0,0,0": {"brick_id": "cabin_wall_straight", "yaw": 0}}
+	report = BuildingRules.validate(invalid)
+	assert(not report.ok and report.errors.size() == 1)
+	assert(report.errors[0].begins_with("Ship-only brick"))
+
+	# Exercise the exact failing runtime path: rebuilding harbour apron pads.
+	var graph := PortLayoutGraph.new()
+	graph.initial_attributes = {"land_plan": {"apron_pads": {"pads": [
+		{"id": "office", "role": "harbour_office", "pad_template_id": "pad_2x3",
+			"origin": [0.0, 0.0], "size_m": [20.0, 30.0]},
+		{"id": "warehouse", "role": "general_warehouse", "pad_template_id": "pad_2x2",
+			"origin": [30.0, 0.0], "size_m": [20.0, 20.0]},
+	]}}}
+	var original := graph.initial_attributes.duplicate(true)
+	var visual := PortLayoutGraphVisualizer.new()
+	add_child(visual)
+	for rebuild in range(3):
+		visual.configure(graph)
+		assert(visual.get_node("ApronPads").get_child_count() == 2)
+		for site_name in ["office", "warehouse"]:
+			var site := visual.get_node("ApronPads/" + site_name)
+			assert(site.has_node("PadSlab") and site.has_node("PadMass"))
+			assert(not site.has_node("BuildingLod"))
+	assert(graph.initial_attributes == original, "presentation must not alter saved port data")
+	visual.free()
+	print("building_blueprint_test: PASS (archived layouts, strict validation, repeated port rebuilds)")
+	get_tree().quit(0)

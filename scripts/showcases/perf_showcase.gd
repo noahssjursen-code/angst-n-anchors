@@ -23,8 +23,6 @@ const SPECIMENS: Array[Dictionary] = [
 	{"id": "provision_crane", "title": "Provision crane"},
 	{"id": "bulk_crane", "title": "Bulk crane"},
 	{"id": "cargo_pad", "title": "Cargo yard pad"},
-	{"id": "warehouse", "title": "Warehouse (brick)"},
-	{"id": "harbouroffice", "title": "Harbour office (brick)"},
 	{"id": "land_decor", "title": "Village house (decor)"},
 	{"id": "foghorn", "title": "Foghorn building"},
 	{"id": "lighthouse", "title": "Lighthouse"},
@@ -555,10 +553,6 @@ func _full_builder_for(id: String) -> Callable:
 				pad.deck_width_m = 16.0
 				pad.deck_length_m = 24.0
 				return pad
-		"warehouse":
-			return func() -> Node3D: return _build_brick_building("warehouse")
-		"harbouroffice":
-			return func() -> Node3D: return _build_brick_building("harbouroffice")
 		"land_decor":
 			return func() -> Node3D: return LandDecorCache.house_instance(2, 0.35, 0.6) as Node3D
 		"foghorn":
@@ -650,18 +644,6 @@ func _spawn_specimen(id: String, tier: int) -> Node:
 			return await _spawn_bulk_crane(tier)
 		"cargo_pad":
 			return await _spawn_cargo_pad(tier)
-		"warehouse":
-			return await _spawn_with_impostor(
-				"warehouse",
-				tier,
-				func() -> Node3D: return _build_brick_building("warehouse"),
-			)
-		"harbouroffice":
-			return await _spawn_with_impostor(
-				"harbouroffice",
-				tier,
-				func() -> Node3D: return _build_brick_building("harbouroffice"),
-			)
 		"land_decor":
 			return await _spawn_with_impostor(
 				"land_house",
@@ -796,14 +778,6 @@ func _spawn_cargo_pad(tier: int) -> Node:
 	_apply_cargo_pad_tier(pad, tier)
 	await get_tree().process_frame
 	return pad
-
-
-func _build_brick_building(blueprint_id: String) -> Node3D:
-	var layout := BuildingBlueprintCatalog.by_id(blueprint_id)
-	if layout == null:
-		push_warning("PerfShowcase: missing blueprint %s" % blueprint_id)
-		return Node3D.new()
-	return BuildingCache.instance(layout, true) as Node3D
 
 
 func _find_land_chunk_coord() -> Vector2i:
