@@ -12,9 +12,9 @@ var local_boat: BoatBody
 var max_rpm := 240.0
 var max_rudder_degrees := 28.0
 
-func _init() -> void:
+func _init(mount_file: String = "mounts_14m.json") -> void:
 	name = "DriveGear"
-	var mounts: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(DIRECTORY + "mounts_14m.json"))
+	var mounts: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(DIRECTORY + mount_file))
 	max_rpm = float(mounts["visual_max_rpm"])
 	max_rudder_degrees = float(mounts["max_rudder_degrees"])
 	for spec in [["support", "transom_shaft_support"], ["propeller", "propeller_1040"], ["rudder", "rudder_0950"]]:

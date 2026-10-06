@@ -18,6 +18,7 @@ var half_loa: float = 0.5
 var bow_taper_cells: int = 0
 ## Imported hulls provide the actual deck boundary in local X/Z metres.
 var deck_polygon := PackedVector2Array()
+var deck_openings: Array[PackedVector2Array] = []
 
 enum CellShape {
 	NONE,

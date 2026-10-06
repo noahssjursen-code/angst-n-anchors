@@ -557,3 +557,42 @@ provisional handling settings, not per-part weight simulation.
 collision sweeps: both door drawing orientations, both approach sides, level,
 +/-12 degree roll and combined +/-8 degree pitch. Closed doors must block;
 opened doors must pass the unchanged 0.7 m diameter / 1.8 m player capsule.
+
+### Multiple imported hulls and cargo hatch kit (6 October 2026)
+
+ImportedHullCatalog is an authoring/playtest descriptor, separate from the legacy
+owned-fleet catalog. Keep existing trawler_hull_14m draft IDs stable. hull_24x8 is
+24 x 8 m, deck 3.6 m, provisional 180 t / 2 m draft / 700 kW. Never infer this
+from a legacy hull's 2x dimensions or scale the metre-based equipment with it.
+Builder loading validates the complete draft before replacing hull/grid/records.
+Floor controls use each hull's deck datum. Runtime physics and spawn searches use
+that same descriptor; gear mounts come from mounts_24m.json. The shared propeller
+hardware is a prototype installation, not validated real-world propulsion sizing.
+
+The cargo platform has a REAL 5 x 8 m opening at x +/-2.5, z +/-4; tank top y=1.6.
+Side walkways are 1.5 m before the coaming's small outboard projections. Grid lines
+and lower-deck placement exclude the opening. WalkDeck ray tests verify the tank
+top and side deck separately. Do not replace these triangles with a full deck slab.
+The collision hull remains convex, separate from player-facing walking surfaces.
+
+Separate Blender source/export assets: hull_24x8, hold_coaming_5x8 and
+hatch_cover_5x4. Coaming sits at deck level; two covers sit at y=deck+0.74 and
+z +/-2. Placement snaps to these authored seats. Covers are individually selected,
+erased, saved, painted and reloaded. Lifting eyes/LiftPoint are future crane hooks;
+there is NO powered cover operation, inventory, cargo authority or crane transfer
+implemented by these visuals. The later bulk package must integrate real records.
+
+Hull perimeter corners use the 0.5 m lattice, 2:1 then 1:1 bow runs. Existing rail
+cross sections are reused; four extra half-wall miter variants have their own
+Blender sources and GLBs. Flat perimeter only on this platform; Rising bow is
+hidden until a matching profile is authored. Do not stretch the trawler's rising
+parts to fit a different bow. build_perimeter.py loads only shared authoring
+primitives from build_rails.py and verifies the mathematical miter rings.
+
+Load resources/models/examples/coastal_cargo_draft.json through Drafts > Open.
+It has 87 separate placements, an aft bridge and two central covers. Review with
+scenes/showcases/cargo_kit_showcase.tscn: 1 whole boat, 2 uncover hold (visual review
+only), --capture <png> captures both. --verify-draft checks cross-hull switching,
+87 records, floor/cell offsets, cover selection, invalid-load preservation and
+save/load. The normal shipyard_playtest supports both installed hulls. Production
+fleet commissioning remains outside this draft sandbox.

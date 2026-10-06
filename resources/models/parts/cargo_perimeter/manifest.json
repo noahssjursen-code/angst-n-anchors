@@ -1,0 +1,72 @@
+{
+  "assets": [
+    {
+      "id": "halfwall_straight_100cm_miter_10000_0_10000_-2361",
+      "style": "halfwall",
+      "kind": "panel",
+      "model": "res://resources/models/parts/cargo_perimeter/halfwall_straight_100cm_miter_10000_0_10000_-2361.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.0,
+        -1.0
+      ],
+      "height_start_m": 0.75,
+      "height_end_m": 0.75,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+      "style": "halfwall",
+      "kind": "panel",
+      "model": "res://resources/models/parts/cargo_perimeter/halfwall_26_port_miter_8944_-4472_8944_-4472.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -1.0
+      ],
+      "height_start_m": 0.75,
+      "height_end_m": 0.75,
+      "angle_deg": 26.56505117707799
+    },
+    {
+      "id": "halfwall_straight_100cm_miter_10000_0_10000_2361",
+      "style": "halfwall",
+      "kind": "panel",
+      "model": "res://resources/models/parts/cargo_perimeter/halfwall_straight_100cm_miter_10000_0_10000_2361.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.0,
+        -1.0
+      ],
+      "height_start_m": 0.75,
+      "height_end_m": 0.75,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+      "style": "halfwall",
+      "kind": "panel",
+      "model": "res://resources/models/parts/cargo_perimeter/halfwall_26_starboard_miter_8944_4472_8944_4472.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -1.0
+      ],
+      "height_start_m": 0.75,
+      "height_end_m": 0.75,
+      "angle_deg": 26.56505117707799
+    }
+  ]
+}

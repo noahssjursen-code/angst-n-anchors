@@ -141,3 +141,30 @@ These are follow-up shared-equipment/final-polish items, not finished assets.
 NEXT RUN: package 4 cargo hull/descriptor and editable cargo example; preserve
 the metre-scale kit and avoid the legacy 2x scale catalog shortcut. Packages
 5-7 and the trawler follow-ups above remain outstanding.
+
+6 October, fourth scheduled batch: package 4 platform/example is implemented.
+New Blender hull_24x8, real 5 x 8 m hold opening, separate coaming and two lift-away
+hatch-cover models. Reuses accepted wall/roof/interior kit and 26.565/45 degree
+perimeter sections with four new exact miter variants. Cargo example has 87
+editable placements, aft bridge, side access and default moving stern gear.
+Generalized imported builder/runtime via ImportedHullCatalog: deck height, grid
+boundary/opening, physical profile, fuel, camera, spawn and mount positions now
+come from the selected draft hull. Old trawler draft IDs are preserved.
+Palette contains coaming/cover families with authored seats; hatch selection and
+floor visibility fixed. Cargo rising-bow toggle hidden (flat profile only).
+Reference: earlier Damen CF3850 visual arrangement and MacGregor lift-away cover
+research in marine-integration-audit.txt; compact game dimensions, not certified
+ship engineering. The cargo deck reuses the accepted nonslip texture/paint region.
+Checks: Blender export/miter assertions; actual Godot whole-boat and open-hold
+renders; prop/rudder movement; ray collision through uncovered opening hits the
+tank top while side walkway remains solid; full cargo ocean playtest passes
+F helm, HUD, walking, doors, driving, rudder, pause/reset. Builder passes cross-hull
+load/save/reload, floor/cell offsets, selectable covers and invalid-load preservation.
+Trawler real-button child-process regression passed, unchanged unsaved parent.
+Explicit editor teardown eliminates the earlier thumbnail environment leak in
+this cargo verification scene; no general cleanup change to older scenes claimed.
+Captures: outputs/marine/cargo.png, cargo-hold.png, cargo-builder.png, cargo-ocean.png.
+Remaining: cargo inventory/handling gear; covers have LiftPoint sockets but no
+crane operation; provisional handling/prop sizing. No fleet commissioning.
+NEXT RUN: package 5 bulk arrangement and real BulkHoldComponent/crane transfer,
+then shared equipment and lighting. Trawler net/gantry and packages 6-7 still pending.

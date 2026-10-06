@@ -1,0 +1,39 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "hold_coaming_5x8",
+      "style": "cargo_coaming",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/cargo_kit/hold_coaming_5x8.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        5.44,
+        8.24
+      ],
+      "height_start_m": 0.74,
+      "height_end_m": 0.74,
+      "paintable": true
+    },
+    {
+      "id": "hatch_cover_5x4",
+      "style": "cargo_hatch",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/cargo_kit/hatch_cover_5x4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        5.28,
+        4
+      ],
+      "height_start_m": 0.32,
+      "height_end_m": 0.32,
+      "paintable": true
+    }
+  ]
+}

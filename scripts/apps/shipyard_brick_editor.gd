@@ -162,18 +162,10 @@ func _boot_standalone_tool() -> void:
 
 func _show_trawler_hull() -> void:
 	_show_model_migration_empty_state()
-	_imported_hull_preview = TrawlerHullAsset.instantiate()
-	if _imported_hull_preview == null:
-		return
-	_world.add_child(_imported_hull_preview)
-	_grid = TrawlerHullAsset.make_build_grid()
 	_layout = BrickLayout.new()
-	_layout.hull_id = "trawler_hull_14m"
+	set_imported_hull("trawler_hull_14m")
 	_layer_y = 0
 	_brick_id = ""
-	_grid_overlay = TrawlerHullAsset.make_grid_overlay(_grid)
-	_world.add_child(_grid_overlay)
-	_hull_option.add_item("Fishing trawler — 14 × 5 m")
 	_hull_lbl.text = "Fishing trawler hull · 14 × 5 m · 10 cm snap · 1 m guides"
 	_status_lbl.text = "10 cm placement · 1 m guides · M select cells · [ ] build layer · RMB orbit · Scroll zoom"
 	_cam_target = Vector3(0, 1.8, 0)
@@ -189,6 +181,22 @@ func _show_trawler_hull() -> void:
 	_confirm_btn.disabled = false
 	_confirm_btn.text = "Save draft"
 	_status_lbl.text = "Choose railing or half-wall, then click any hull edge. The piece fits automatically."
+
+func set_imported_hull(id: String) -> void:
+	assert(ImportedHullCatalog.has(id))
+	if is_instance_valid(_imported_hull_preview): _imported_hull_preview.queue_free()
+	if is_instance_valid(_grid_overlay): _grid_overlay.queue_free()
+	_imported_hull_preview = ImportedHullCatalog.instantiate(id)
+	_world.add_child(_imported_hull_preview)
+	_grid = ImportedHullCatalog.make_grid(id)
+	_grid_overlay = TrawlerHullAsset.make_grid_overlay(_grid)
+	_world.add_child(_grid_overlay)
+	_layout.hull_id = id
+	_hull_option.clear()
+	_hull_option.add_item(ImportedHullCatalog.ENTRIES[id].label)
+	_cam_dist = float(ImportedHullCatalog.ENTRIES[id].loa_m) * 1.6
+	_cam_target = Vector3(0, _grid.deck_y, 0)
+	_update_camera()
 
 func _show_model_migration_empty_state() -> void:
 	_clear_preview()

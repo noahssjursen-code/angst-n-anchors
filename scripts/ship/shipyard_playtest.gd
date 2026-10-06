@@ -23,7 +23,7 @@ func _ready() -> void:
 	var path := ShipyardPlaytestMode.snapshot_path()
 	if not path.is_empty():
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-		if not parsed is Dictionary or parsed.get("hull") != "trawler_hull_14m" or not parsed.get("parts") is Array:
+		if not parsed is Dictionary or not ImportedHullCatalog.has(str(parsed.get("hull", ""))) or not parsed.get("parts") is Array:
 			push_error("Cannot read the playtest snapshot.")
 			get_tree().quit(1)
 			return
@@ -117,15 +117,21 @@ func _find_spawn() -> void:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = capsule
 	query.collision_mask = BoatBody.LAYER_BOAT_WALK
-	for z in range(11, -10, -1):
+	var grid := ImportedHullCatalog.make_grid(str(boat.draft.hull))
+	for z in range(int(boat.length_m)-3, -int(boat.length_m)+3, -1):
 		for x in [0.0, -1.0, 1.0, -1.8, 1.8]:
-			var candidate := Vector3(x, 3.0, float(z) * .5)
+			var candidate := Vector3(x, boat.depth_m + .08, float(z) * .5)
+			if not Geometry2D.is_point_in_polygon(Vector2(candidate.x,candidate.z),grid.deck_polygon): continue
+			var over_opening := false
+			for opening in grid.deck_openings:
+				if Geometry2D.is_point_in_polygon(Vector2(candidate.x,candidate.z),opening): over_opening = true
+			if over_opening: continue
 			query.transform = boat.global_transform * Transform3D(Basis(), candidate + Vector3(0, .9, 0))
 			if get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
 				spawn_point = candidate
 				return
 	# Fully occupied lower decks: find the highest walkable surface from above.
-	var ray := PhysicsRayQueryParameters3D.create(boat.to_global(Vector3(0, 60, 0)), boat.to_global(Vector3(0, 2.8, 0)), BoatBody.LAYER_BOAT_WALK)
+	var ray := PhysicsRayQueryParameters3D.create(boat.to_global(Vector3(0, 60, 0)), boat.to_global(Vector3(0, boat.depth_m-.1, 0)), BoatBody.LAYER_BOAT_WALK)
 	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
 	if not hit.is_empty():
 		spawn_point = boat.to_local(hit.position) + Vector3(0, .1, 0)

@@ -13,26 +13,26 @@ func configure(snapshot: Dictionary) -> void:
 	mesh_data_path = ""
 	model_data_path = ""
 	automatic_physics_lod = false
-	physics_profile = CatalogHullVessel.make_physics_profile({
-		"loa_m":14.0, "beam_m":5.0, "depth_m":2.92, "draft_m":1.6,
-		"displacement_t":58.0, "default_shaft_power_kw":300.0,
-	})
+	var hull_id := str(snapshot.get("hull", "trawler_hull_14m"))
+	assert(ImportedHullCatalog.has(hull_id))
+	var platform: Dictionary = ImportedHullCatalog.ENTRIES[hull_id]
+	physics_profile = CatalogHullVessel.make_physics_profile(platform)
 	physics_profile.roll_gyradius_fraction = .40
 	physics_profile.pitch_gyradius_fraction = .32
 	physics_profile.heave_damping_ratio = 1.0
 	angular_damp_coeff = .9
 	process_physics_priority = -10
-	length_m = 14.0
-	beam_m = 5.0
-	depth_m = 2.92
-	draft_m = 1.6
-	displacement_t = 58.0
-	hull_size = Vector3(5, 2.92, 14)
-	hull_center = Vector3(0, 1.46, 0)
+	length_m = platform.loa_m
+	beam_m = platform.beam_m
+	depth_m = platform.depth_m
+	draft_m = platform.draft_m
+	displacement_t = platform.displacement_t
+	hull_size = Vector3(beam_m, depth_m, length_m)
+	hull_center = Vector3(0, depth_m / 2, 0)
 	hull_stations = physics_profile.make_stations()
-	fuel_capacity_l = 600.0
-	fuel_l = 600.0
-	var hull := TrawlerHullAsset.instantiate()
+	fuel_capacity_l = platform.fuel_l
+	fuel_l = fuel_capacity_l
+	var hull := ImportedHullCatalog.instantiate(hull_id)
 	hull.name = "HullVisual"
 	ModelPaint.apply(hull, snapshot.get("hull_colors", {}))
 	add_child(hull)
@@ -46,8 +46,8 @@ func configure(snapshot: Dictionary) -> void:
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
 	(hull.get_node("DriveGear") as ShipDriveVisual).bind_local(self)
 	var camera := get_node("BoatCamera") as BoatCamera
-	camera.follow_distance = 19.0
-	camera.follow_height = 9.0
+	camera.follow_distance = length_m * 1.36
+	camera.follow_height = length_m * .64
 	camera.min_distance = 4.0
 	camera.look_height_offset = 3.5
 	for part in part_roots:

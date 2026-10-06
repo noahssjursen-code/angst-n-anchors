@@ -6,6 +6,8 @@ const FLOOR_HEIGHT := 2.2
 const CELL_HEIGHT := 0.1
 const CELLS_PER_FLOOR := 22
 const DECK_HEIGHT := 2.92
+var deck_height := DECK_HEIGHT
+var hull_id := "trawler_hull_14m"
 const MAX_FLOOR := 24
 const SAVE_PATH := "user://imported_trawler_draft.json"
 var editor: ShipyardBrickEditor
@@ -122,9 +124,7 @@ func setup(owner_editor: ShipyardBrickEditor) -> void:
 	parts_root = Node3D.new()
 	parts_root.name = "ImportedPlacedParts"
 	editor.get("_world").add_child(parts_root)
-	for variant in ["rail_flat", "rail_rising", "halfwall_flat", "halfwall_rising"]:
-		var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ROOT + variant + "_assembly.json"))
-		recipes[variant] = data["placements"]
+	recipes = ImportedHullCatalog.rail_recipes(hull_id)
 	for slot in ["upper", "lower", "deck"]:
 		hull_colors[slot] = ModelPaint.encode(ModelPaint.DEFAULTS[slot])
 	var col := editor.get("_context_drawer").get_child(0) as VBoxContainer
@@ -625,7 +625,7 @@ func reset_colors() -> void:
 
 
 func _draft_data() -> Dictionary:
-	return {"version":1,"hull":"trawler_hull_14m","hull_colors":hull_colors,"parts":records.values(),"rising_bow":placement_rising,"active_floor":active_floor,"cell_offset":cell_offset}
+	return {"version":1,"hull":hull_id,"hull_colors":hull_colors,"parts":records.values(),"rising_bow":placement_rising,"active_floor":active_floor,"cell_offset":cell_offset}
 
 
 func _draft_state() -> String:
@@ -686,7 +686,7 @@ func load_draft(path: String = SAVE_PATH) -> void:
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path)) if FileAccess.file_exists(path) else null
 	var valid: bool = data is Dictionary
 	if valid:
-		valid = data.get("version",0) == 1 and data.get("hull","") == "trawler_hull_14m" and data.get("parts") is Array and _valid_colors(data.get("hull_colors",{}))
+		valid = data.get("version",0) == 1 and ImportedHullCatalog.has(str(data.get("hull",""))) and data.get("parts") is Array and _valid_colors(data.get("hull_colors",{}))
 	if valid:
 		var stored_floor: Variant = data.get("active_floor", 0)
 		valid = (stored_floor is int or stored_floor is float) and is_finite(float(stored_floor)) and float(stored_floor) == floor(float(stored_floor)) and stored_floor >= 0 and stored_floor <= MAX_FLOOR
@@ -725,8 +725,16 @@ func load_draft(path: String = SAVE_PATH) -> void:
 	cancel_placement()
 	undo_stack.clear()
 	redo_stack.clear()
+	hull_id = data.hull
+	deck_height = float(ImportedHullCatalog.ENTRIES[hull_id].depth_m)
+	active_floor = 0
+	cell_offset = 0
+	editor.set_imported_hull(hull_id)
+	recipes = ImportedHullCatalog.rail_recipes(hull_id)
+	rising_bow.visible = ImportedHullCatalog.ENTRIES[hull_id].rising
+	if is_instance_valid(reference_root): reference_root.position = Vector3(0,deck_height,7 if hull_id == "hull_24x8" else 3.5)
 	records = loaded
-	placement_rising = bool(data.get("rising_bow", false))
+	placement_rising = bool(data.get("rising_bow", false)) and ImportedHullCatalog.ENTRIES[hull_id].rising
 	rising_bow.set_pressed_no_signal(placement_rising)
 	selected = ""
 	hull_colors = data.get("hull_colors",{}).duplicate(true)
@@ -1011,6 +1019,7 @@ func _sync_bow_control() -> void:
 		rising_bow.visible = false
 		for key in selection:
 			if records.has(key) and not _bow_variants(records[key]).is_empty(): rising_bow.visible = true
+	rising_bow.visible = rising_bow.visible and ImportedHullCatalog.ENTRIES[hull_id].rising
 	if int(editor.get("_tool")) == ShipyardBrickEditor.Tool.PLACE:
 		rising_bow.disabled = _structural_family()
 		rising_bow.set_pressed_no_signal(placement_rising)
@@ -1067,6 +1076,9 @@ func _snap_structure(point: Vector3) -> Vector3:
 
 func _on_deck(point: Vector3) -> bool:
 	var grid := editor.get("_grid") as DeckGrid
+	if point.y < deck_height + .5:
+		for opening in grid.deck_openings:
+			if Geometry2D.is_point_in_polygon(Vector2(point.x,point.z),opening): return false
 	return Geometry2D.is_point_in_polygon(Vector2(point.x, point.z), grid.deck_polygon)
 
 
@@ -1146,7 +1158,7 @@ func _build_scale_reference() -> void:
 	reference_root = Node3D.new()
 	reference_root.name = "PlayerScaleReference"
 	editor.get("_world").add_child(reference_root)
-	reference_root.position = Vector3(0, 2.92, 3.5)
+	reference_root.position = Vector3(0, deck_height, 3.5)
 	var npc := NpcBase.new()
 	npc.name = "ReferenceCaptain"
 	reference_root.add_child(npc)
@@ -1386,7 +1398,7 @@ func _update_draft_title() -> void:
 		return
 	var dirty := _draft_state() != saved_state
 	var title := "Untitled ship" if draft_path.is_empty() else draft_path.get_file().get_basename()
-	editor.get("_hull_lbl").text = title + (" · Unsaved changes" if dirty else (" · New draft" if draft_path.is_empty() else " · Saved")) + " · 14 × 5 m"
+	editor.get("_hull_lbl").text = title + (" · Unsaved changes" if dirty else (" · New draft" if draft_path.is_empty() else " · Saved")) + " · " + str(ImportedHullCatalog.ENTRIES[hull_id].label)
 	editor.get("_confirm_btn").text = "Save *" if dirty else "Save"
 
 
@@ -1404,7 +1416,7 @@ func tool_hint() -> String:
 
 
 func floor_y() -> float:
-	return DECK_HEIGHT + active_floor * FLOOR_HEIGHT + cell_offset * CELL_HEIGHT
+	return deck_height + active_floor * FLOOR_HEIGHT + cell_offset * CELL_HEIGHT
 
 
 func _horizontal_key(record: Dictionary) -> String:
@@ -1412,7 +1424,10 @@ func _horizontal_key(record: Dictionary) -> String:
 
 
 func _on_active_floor(model: Node3D) -> bool:
-	return model.visible and model.has_meta("record_key") and absf(model.position.y - (.85 if BrickCatalog.get_entry(records.get(str(model.get_meta("record_key")),{}).get("asset_id","")).get("style","") in ["wheel","throttle","display"] else 0.0) - floor_y()) < 0.01
+	if not model.visible or not model.has_meta("record_key"): return false
+	var style := str(BrickCatalog.get_entry(records.get(str(model.get_meta("record_key")),{}).get("asset_id","")).get("style",""))
+	var offset := .85 if style in ["wheel","throttle","display"] else (.74 if style == "cargo_hatch" else 0.0)
+	return absf(model.position.y - offset - floor_y()) < 0.01
 
 
 func step_cell(direction: int) -> void:
@@ -1423,7 +1438,7 @@ func step_cell(direction: int) -> void:
 func set_floor(value: int, offset: int = 0) -> void:
 	var next_floor := clampi(value, 0, MAX_FLOOR)
 	var next_cell := clampi(offset, 0, CELLS_PER_FLOOR - 1) if next_floor < MAX_FLOOR else 0
-	var difference := DECK_HEIGHT + next_floor * FLOOR_HEIGHT + next_cell * CELL_HEIGHT - floor_y()
+	var difference := deck_height + next_floor * FLOOR_HEIGHT + next_cell * CELL_HEIGHT - floor_y()
 	finish_gesture()
 	structure_anchor = null
 	surface_outline.clear()
@@ -1442,17 +1457,19 @@ func set_floor(value: int, offset: int = 0) -> void:
 
 func _apply_floor_view() -> void:
 	var floor_name := "Deck" if active_floor == 0 else "Floor %d" % active_floor
-	floor_label.text = "%s +%.1f m" % [floor_name, floor_y()-DECK_HEIGHT]
+	floor_label.text = "%s +%.1f m" % [floor_name, floor_y()-deck_height]
 	floor_label.tooltip_text = "Shift + Page Up / Down: one 10 cm cell."
 	floor_down.disabled = active_floor == 0
 	floor_up.disabled = active_floor == MAX_FLOOR
 	var grid: Node3D = editor.get("_grid_overlay")
 	if is_instance_valid(grid):
-		grid.position.y = floor_y() - DECK_HEIGHT
+		grid.position.y = floor_y() - deck_height
 	if is_instance_valid(reference_root):
 		reference_root.position.y = floor_y()
 	for model in parts_root.get_children():
-		model.visible = model.position.y <= floor_y() + (0.86 if model.get_node_or_null("PartState")!=null and records.get(str(model.get_meta("record_key")),{}).get("asset_id","") in ["helm_wheel","helm_throttle","helm_display"] else .01)
+		var id := str(records.get(str(model.get_meta("record_key")),{}).get("asset_id",""))
+		var offset := .86 if id in ["helm_wheel","helm_throttle","helm_display"] else (.75 if id == "hatch_cover_5x4" else .01)
+		model.visible = model.position.y <= floor_y() + offset
 
 
 func _surface_family() -> bool:
@@ -1553,6 +1570,11 @@ func _furniture_family() -> bool:
 func _furniture_candidate(point: Vector3) -> Dictionary:
 	var p:=Vector3(snappedf(point.x,.1),floor_y(),snappedf(point.z,.1))
 	var id: String=editor.get("_brick_id")
+	if id in ["hold_coaming_5x8", "hatch_cover_5x4"]:
+		if hull_id != "hull_24x8" or active_floor != 0: return {}
+		# Authored cover seats, not arbitrary placement floating over an opening.
+		p = Vector3(0,deck_height,0) if id == "hold_coaming_5x8" else Vector3(0,deck_height+.74,-2 if point.z<0 else 2)
+		return {"asset_id":id,"position":[p.x,p.y,p.z],"yaw_degrees":0.0}
 	if not _on_deck(p): return {}
 	if id in ["trawl_winch", "insulated_catch_tank"]:
 		var bounds := Rect2(-.55,-1.16,1.10,2.13) if id=="trawl_winch" else Rect2(-.72,-.62,1.64,1.24)
