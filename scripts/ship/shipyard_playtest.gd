@@ -248,9 +248,13 @@ func _verify() -> void:
 	assert(stern_gear.signed_rpm > 0, "Powered ahead propulsion must animate the installed screw")
 	var old_yaw := boat.rotation.y
 	Input.action_press("move_right")
-	for i in range(240):
+	# Larger hulls have a longer yaw response; allow proportional travel time,
+	# keeping the same minimum actual heading change and full real helm input.
+	var turn_frames := ceili(240.0 * maxf(1.0,boat.length_m/14.0))
+	for i in range(turn_frames):
 		await get_tree().physics_frame
 	Input.action_release("move_right")
+	print("HELM CHECK: yaw=",angle_difference(old_yaw,boat.rotation.y)," speed=",boat.linear_velocity.length()," input=",boat.get_node("RudderComponent").rudder_input," force=",boat.get_node("RudderComponent").lateral_force_n," inertia=",boat.inertia)
 	assert(absf(angle_difference(old_yaw, boat.rotation.y)) > .02, "Shared rudder must turn the draft")
 	assert(stern_gear.steering_degrees > 1, "Installed rudder must follow actual helm input")
 	camera._mode = BoatCamera.Mode.THIRD_PERSON

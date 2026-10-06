@@ -6,7 +6,7 @@ static var _imported: Dictionary = {}
 
 static func imported_entries() -> Dictionary:
 	if _imported.is_empty():
-		for path in ["res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
+		for path in ["res://resources/models/parts/coaster_kit/manifest.json", "res://resources/models/parts/coaster_perimeter/manifest.json","res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
 			var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 			for raw in data["assets"]:
 				var entry: Dictionary = raw.duplicate(true)
@@ -63,7 +63,7 @@ static func yaw_step_of(brick_id: String) -> int:
 	return maxi(int(get_entry(brick_id).get("yaw_step", 90)), 1)
 
 static func display_name(brick_id: String) -> String:
-	var names := {"helm_chair":"Helm chair", "passenger_seat":"Passenger seat", "helm_wheel":"Steering wheel", "helm_throttle":"Throttle", "helm_display":"Display"}
+	var names := {"hold_coaming_5x8":"Hold coaming", "hatch_cover_5x4":"Hatch cover","helm_chair":"Helm chair", "passenger_seat":"Passenger seat", "helm_wheel":"Steering wheel", "helm_throttle":"Throttle", "helm_display":"Display"}
 	if names.has(brick_id): return names[brick_id]
 	if brick_id in ["floor_tile", "roof_tile"]:
 		return "Floor" if brick_id == "floor_tile" else "Roof"

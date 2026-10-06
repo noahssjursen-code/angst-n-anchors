@@ -1,0 +1,39 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "hold_coaming_6x12",
+      "style": "cargo_coaming",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/coaster_kit/hold_coaming_6x12.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        6.6,
+        12.24
+      ],
+      "height_start_m": 0.74,
+      "height_end_m": 0.74,
+      "paintable": true
+    },
+    {
+      "id": "hatch_cover_6x3",
+      "style": "cargo_hatch",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/coaster_kit/hatch_cover_6x3.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        6.3,
+        3
+      ],
+      "height_start_m": 0.37,
+      "height_end_m": 0.37,
+      "paintable": true
+    }
+  ]
+}

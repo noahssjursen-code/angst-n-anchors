@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hull": "hull_32x10",
+  "units": "metres",
+  "support": [
+    0,
+    1.2,
+    15.0
+  ],
+  "propeller": [
+    0,
+    1.2,
+    15.48
+  ],
+  "rudder": [
+    0,
+    1.85,
+    16.03
+  ],
+  "max_rudder_degrees": 28,
+  "visual_max_rpm": 240,
+  "note": "32 m raked stern installation, explicit metre coordinates. Shared hardware sizing remains provisional."
+}

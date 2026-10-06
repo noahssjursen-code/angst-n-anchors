@@ -731,3 +731,43 @@ builder save/load. The default crane is now the Blender kit described above;
 the former crane cleanup warnings no longer occur in the rendered verification.
 OreMound remains an unlimited stockpile source, not finite shore inventory.
 Never describe this as completed harbour/economy migration.
+
+
+### 32 x 10 m platform (6 October afternoon session)
+
+`_source/hull_32x10/build_hull.py` authors a new hull with broad tank bottom,
+rounded bilges and a raked underwater transom. The deck is exactly 32 x 10 m at
+4.5 m, with shoulder at z=-8, 2:1 run to (+/-2,-14), and 1:1 stem to (0,-16).
+All deck corners remain on the 0.5 m lattice. build_perimeter.py reuses the
+existing independent angle/miter assets and verifies every adjacent profile;
+no hull-wide wall mesh or extra palette variants are needed.
+
+The real opening is 6 x 12 m, tank top 1.4 m, with 2 m side decks before coaming
+projections. Separate hold_coaming_6x12 and four hatch_cover_6x3 placements sit at
+[0,4.5,0] and [0,5.24,z], z=-4.5/-1.5/1.5/4.5. The same Hold coaming / Hatch cover
+palette families resolve the fitting size from ImportedHullCatalog. Floor
+visibility uses cargo_hatch style, not one older filename. Material paintability
+comes from the asset manifest as well as the existing structural families.
+
+`examples/coastal_32m_draft.json` is 107 editable placements with an aft bridge;
+all covers are independently selected, erased, painted and saved. It adds no
+operational inventory or powered hatch mechanism. Provisional handling is 420 t,
+2.6 m draft, 1100 kW and 4500 l fuel using the existing physics components.
+Mooring positions now belong to each platform descriptor. Stern gear is still
+prototype shared hardware, installed at explicit positions behind the raked hull.
+Owned-fleet commissioning and multiplayer transport remain separate work.
+
+`coaster_kit_showcase.tscn` checks dimensions, actual tank-top/walkway ray hits,
+gear motion, per-instance cover paint and captures whole/bow/hold/stern views.
+`--verify-draft` checks 107 placements, hull switching, floor datum, fitting cover
+seats, cover visibility/selectability, save/load and invalid-load preservation.
+The real ocean playtest passed helm/seats, doors, walking, normal HUD, drive,
+steering and reset. Its steering observation period now scales with hull length;
+the same heading threshold is retained, without increasing game steering forces.
+The initial 4-second small-boat window measured only .006 rad on this 32 m hull;
+9.15 seconds measured .037 rad. Handling remains provisional rather than tuned.
+
+Primary visual reference inspected: Damen Combi Freighter 3850 sheet page 1,
+https://medialibrary.damen.com/m/4537b8913b7e976d/original/product-sheet-combi-freighter-3850.pdf
+Used for open-hold / coaming / separate-cover / aft-bridge arrangement only.
+Our much smaller hull is an original game platform, not a scaled manufacturer copy.

@@ -733,7 +733,7 @@ func load_draft(path: String = SAVE_PATH) -> void:
 	editor.set_imported_hull(hull_id)
 	recipes = ImportedHullCatalog.rail_recipes(hull_id)
 	rising_bow.visible = ImportedHullCatalog.ENTRIES[hull_id].rising
-	if is_instance_valid(reference_root): reference_root.position = Vector3(0,deck_height,7 if hull_id == "hull_24x8" else 3.5)
+	if is_instance_valid(reference_root): reference_root.position = Vector3(0,deck_height,float(ImportedHullCatalog.ENTRIES[hull_id].reference_z))
 	records = loaded
 	placement_rising = bool(data.get("rising_bow", false)) and ImportedHullCatalog.ENTRIES[hull_id].rising
 	rising_bow.set_pressed_no_signal(placement_rising)
@@ -1064,7 +1064,7 @@ func _set_bow_profile(enabled: bool) -> void:
 
 
 func _paintable(id: String) -> bool:
-	return id.begins_with("halfwall") or id.begins_with("cabin_") or id in ["helm_wheel","helm_throttle","helm_chair","passenger_seat"]
+	return bool(BrickCatalog.get_entry(id).get("paintable",false)) or id.begins_with("halfwall") or id.begins_with("cabin_") or id in ["helm_wheel","helm_throttle","helm_chair","passenger_seat"]
 
 
 func _structural_family() -> bool:
@@ -1469,7 +1469,7 @@ func _apply_floor_view() -> void:
 		reference_root.position.y = floor_y()
 	for model in parts_root.get_children():
 		var id := str(records.get(str(model.get_meta("record_key")),{}).get("asset_id",""))
-		var offset := .86 if id in ["helm_wheel","helm_throttle","helm_display"] else (.75 if id == "hatch_cover_5x4" else .01)
+		var offset := .86 if id in ["helm_wheel","helm_throttle","helm_display"] else (.75 if BrickCatalog.get_entry(id).get("style","") == "cargo_hatch" else .01)
 		model.visible = model.position.y <= floor_y() + offset
 
 
@@ -1576,9 +1576,17 @@ func _furniture_candidate(point: Vector3) -> Dictionary:
 		# Separate slot from the coaming, sharing its authored centre datum.
 		return {"asset_id":id,"position":[0,deck_height,0],"yaw_degrees":0.0}
 	if id in ["hold_coaming_5x8", "hatch_cover_5x4"]:
-		if hull_id != "hull_24x8" or active_floor != 0: return {}
-		# Authored cover seats, not arbitrary placement floating over an opening.
-		p = Vector3(0,deck_height,0) if id == "hold_coaming_5x8" else Vector3(0,deck_height+.74,-2 if point.z<0 else 2)
+		var platform: Dictionary = ImportedHullCatalog.ENTRIES[hull_id]
+		if not platform.has("coaming") or active_floor != 0: return {}
+		# One palette family resolves the matching authored hull-specific size.
+		if id == "hold_coaming_5x8":
+			id=platform.coaming;p=Vector3(0,deck_height,0)
+		else:
+			id=platform.hatch
+			var nearest: float=platform.hatch_stations[0]
+			for station: float in platform.hatch_stations:
+				if absf(point.z-station)<absf(point.z-nearest):nearest=station
+			p=Vector3(0,deck_height+.74,nearest)
 		return {"asset_id":id,"position":[p.x,p.y,p.z],"yaw_degrees":0.0}
 	if not _on_deck(p): return {}
 	if id in ["trawl_winch", "insulated_catch_tank"]:

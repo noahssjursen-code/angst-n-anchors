@@ -39,3 +39,14 @@ existing lip/mouth/jaw/slew/luff checks. Existing auto crane loading passes real
 lot/mass conservation. Still simplified sheave contact and missing power umbilical;
 ladder is visual rather than a new climbing interaction. Next: final rear capture,
 scoped push, then 32 x 10 hull work. No whole-session completion claim.
+
+32 m hull batch: built independent 32 x 10 x 4.5 m platform, shaped/raked stern,
+6 x 12 hold with real tank top, separate coaming and four 6 x 3 covers. All 78
+perimeter placements reuse mathematically matching existing miter variants.
+107-record draft, contextual family placement, per-platform mooring positions.
+Found/fixed hatch floor visibility hardcoded to one ID, plus equipment paint flag
+ignored by editor assembly. Material isolation and unchanged 24 m save/load pass.
+Rendered assembly/bow/hold/stern, real open-hold ray hits, and ocean interaction
+checks pass. Larger vessel steering observation scales with length; force logic
+unchanged. Handling/hardware still provisional. No bulk inventory for this hull.
+Next: useful editable lighting and vessel detail; remain active through 18:24.

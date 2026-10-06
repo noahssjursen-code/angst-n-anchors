@@ -74,8 +74,9 @@ func _add_mooring_fittings(hull_id: String, deck_y: float) -> void:
 	# Explicit inboard positions: the former length/beam fractions put bow cleats
 	# outside the tapered deck. These are regenerated utilities, not draft records.
 	var root:=Node3D.new();root.name="MooringFittings";add_child(root)
-	var inset_x:=1.95 if hull_id=="trawler_hull_14m" else 3.45
-	var stations:=[-2.8,6.0] if hull_id=="trawler_hull_14m" else [-5.1,10.8]
+	var config: Dictionary = ImportedHullCatalog.ENTRIES[hull_id]
+	var inset_x: float = config.mooring_inset
+	var stations: Array = config.mooring_stations
 	for side in [-1,1]:
 		for index in 2:
 			var point:=MooringPoint.new()
@@ -87,7 +88,7 @@ func _add_mooring_fittings(hull_id: String, deck_y: float) -> void:
 			root.add_child(point)
 			var guide: Node3D = (load("res://resources/models/parts/port_kit/deck_roller_fairlead.glb") as PackedScene).instantiate()
 			guide.name=point.name+"Fairlead"
-			guide.position=Vector3(side*(2.34 if hull_id=="trawler_hull_14m" else 3.84),deck_y,stations[index])
+			guide.position=Vector3(side*float(config.mooring_guide),deck_y,stations[index])
 			root.add_child(guide)
 			point.rope_lead=guide.find_child("RopeLead",true,false) as Node3D
 			assert(point.rope_lead != null)
