@@ -110,7 +110,8 @@ func handle_input(event: InputEvent) -> bool:
 
 		if _mode == CameraMode.THIRD_PERSON:
 			_orbit_yaw -= event.relative.x * sens
-			_orbit_pitch = clampf(_orbit_pitch - dy, TP_MIN_PITCH, TP_MAX_PITCH)
+			# Orbit elevation has the opposite sign to first-person camera pitch.
+			_orbit_pitch = clampf(_orbit_pitch + dy, TP_MIN_PITCH, TP_MAX_PITCH)
 		else:
 			_player.rotate_y(-event.relative.x * sens)
 			_fp_pitch = clampf(_fp_pitch - dy, -FP_MAX_PITCH, FP_MAX_PITCH)
