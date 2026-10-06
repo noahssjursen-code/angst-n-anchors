@@ -10,6 +10,8 @@ enum MooringVisual {
 }
 
 const DEFAULT_DOCKING_BOLLARD_MODEL := "res://resources/data/meshes/docks/docking_bollard.json"
+const IMPORTED_BOLLARD := "res://resources/models/parts/port_kit/quay_tee_bollard.glb"
+var _rope_anchor: Node3D
 
 ## Line attachment height differs per visual; docking bollard follows `MooringPoint` cleat height.
 @export var anchor_local_position: Vector3 = Vector3(0.0, 0.52, 0.0)
@@ -115,6 +117,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func get_anchor_global_position() -> Vector3:
+	if is_instance_valid(_rope_anchor):
+		return _rope_anchor.global_position
 	return to_global(anchor_local_position)
 
 
@@ -176,7 +180,11 @@ func _refresh_editor_range_gizmo() -> void:
 
 
 func _rebuild() -> void:
+	_rope_anchor = null
 	for child in get_children():
+		if child == _prompt_layer:
+			continue
+		remove_child(child)
 		child.queue_free()
 
 	match mooring_visual:
@@ -199,7 +207,14 @@ func _rebuild_docking_bollard() -> void:
 	box.position = Vector3.UP * (shape.size.y * 0.5)
 	add_child(box)
 
-	var visual := ModelCache.instance(bollard_model_path, sc)
+	var visual: Node3D
+	if bollard_model_path == DEFAULT_DOCKING_BOLLARD_MODEL:
+		visual = (load(IMPORTED_BOLLARD) as PackedScene).instantiate()
+		visual.scale = Vector3.ONE * sc
+		_rope_anchor = visual.find_child("RopeAnchor",true,false) as Node3D
+		assert(_rope_anchor != null)
+	else:
+		visual = ModelCache.instance(bollard_model_path, sc)
 	visual.name = "DockingBollard"
 	visual.rotation_degrees = bollard_rotation_degrees
 	add_child(visual)

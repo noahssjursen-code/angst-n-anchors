@@ -6,6 +6,8 @@ extends Node3D
 const _CLEAT_GROUP := "ship_mooring_cleat"
 
 const DEFAULT_BOLLARD_MODEL := "res://resources/data/meshes/docks/docking_bollard.json"
+const IMPORTED_BOLLARD := "res://resources/models/parts/port_kit/deck_double_bitt.glb"
+var _rope_anchor: Node3D
 
 @export_file("*.json") var bollard_model_path: String = DEFAULT_BOLLARD_MODEL:
 	set(v):
@@ -51,6 +53,8 @@ func _ready() -> void:
 
 
 func get_anchor_global_position() -> Vector3:
+	if is_instance_valid(_rope_anchor):
+		return _rope_anchor.global_position
 	return to_global(anchor_local_position)
 
 
@@ -70,6 +74,7 @@ func _rebuild_bollard_visual() -> void:
 		return
 
 	_remove_legacy_marker()
+	_rope_anchor = null
 
 	var existing := get_node_or_null("DockingBollard")
 	if existing != null:
@@ -79,7 +84,14 @@ func _rebuild_bollard_visual() -> void:
 	if not build_visual:
 		return
 
-	var visual := ModelCache.instance(bollard_model_path, bollard_scale)
+	var visual: Node3D
+	if bollard_model_path == DEFAULT_BOLLARD_MODEL:
+		visual = (load(IMPORTED_BOLLARD) as PackedScene).instantiate()
+		visual.scale = Vector3.ONE * bollard_scale
+		_rope_anchor = visual.find_child("RopeAnchor",true,false) as Node3D
+		assert(_rope_anchor != null)
+	else:
+		visual = ModelCache.instance(bollard_model_path, bollard_scale)
 	visual.name = "DockingBollard"
 	visual.rotation_degrees = bollard_rotation_degrees
 	add_child(visual)
@@ -88,4 +100,3 @@ func _rebuild_bollard_visual() -> void:
 		visual.owner = tree.edited_scene_root
 		for child in visual.get_children():
 			child.owner = tree.edited_scene_root
-

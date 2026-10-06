@@ -224,3 +224,32 @@ crane sway or moving-part collision, no ProvisionCrane migration. Port fittings,
 fish unloading artwork, mooring hardware, lights and trawler net/gantry remain.
 NEXT: continue package 6 fittings attached to existing rope/pump systems, then
 package 7 lighting and final handoff. Do not treat all overnight work as complete.
+
+6 October morning wrap, at Noah's explicit request: overnight schedule PAUSED.
+Crane batch pushed as 4fe8747576a05ee72b220a25e422d93bb4fd7558.
+Final package 6 slice: six Blender parts (deck bitt, quay tee bollard, four landing
+plant components), default model integration and authored rope/hose/fill sockets.
+Imported vessels were missing discoverable cleats; installed four at explicit
+inboard positions per hull. Default scale follows socket geometry, existing
+authority/solver retained. Post rebuild preserves interaction prompt. Alternate
+legacy model paths and timber posts retained. Pump transfer logic unchanged.
+Actual Godot port showcase passes tie/release, transformed/moving anchors,
+250 kg CatchLot transfer, completion/hose disconnect; exits cleanly.
+Initial completion assertion was a showcase stepping error: it kept manually
+calling _process after completion; loop now stops at completion as normal engine
+processing does. No pump state-machine change was required.
+Captures: port-kit.png, port-kit-pump.png, port-kit-mooring.png in outputs/marine.
+Known visible gap: direct mooring ropes intersect solid half-walls; fairlead
+routing/openings remain. No claim of final polished or physically validated plant.
+Morning trawler ocean regression also passed F helm/seats, doors, walking, HUD,
+drive/rudder and reset after installing the default cleats.
+See docs/marine-morning-handoff.txt for the checkpoint review.
+
+MORNING STEERING: Noah subsequently resumed work while leaving for work, requested
+a 30-minute cadence, and explicitly rejected the current model quality as subpar.
+Automation is ACTIVE every 30 minutes. Prioritize substantial visual rework over
+catalog expansion: landing plant supports/pipework/proportions, rope fairlead
+routing through solid bulwarks, then crane and vessel detail. Inspect primary
+visual references and close actual Godot renders. Passing gameplay checks alone
+does not constitute art acceptance. Do not stop after a token short batch if
+visible problems remain. Prior 08:00 Oslo cutoff remains unless Noah extends it.

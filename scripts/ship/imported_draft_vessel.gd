@@ -44,6 +44,7 @@ func configure(snapshot: Dictionary) -> void:
 		add_child(part)
 		part_roots.append(part)
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
+	_add_mooring_fittings(hull_id, float(ImportedHullCatalog.outline(hull_id).deck_y))
 	_configure_bulk_holds()
 	(hull.get_node("DriveGear") as ShipDriveVisual).bind_local(self)
 	var camera := get_node("BoatCamera") as BoatCamera
@@ -68,6 +69,22 @@ func configure(snapshot: Dictionary) -> void:
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	add_child(collision)
+
+func _add_mooring_fittings(hull_id: String, deck_y: float) -> void:
+	# Explicit inboard positions: the former length/beam fractions put bow cleats
+	# outside the tapered deck. These are regenerated utilities, not draft records.
+	var root:=Node3D.new();root.name="MooringFittings";add_child(root)
+	var inset_x:=1.95 if hull_id=="trawler_hull_14m" else 3.45
+	var stations:=[-2.8,6.0] if hull_id=="trawler_hull_14m" else [-5.1,10.8]
+	for side in [-1,1]:
+		for index in 2:
+			var point:=MooringPoint.new()
+			point.name=("Port" if side<0 else "Starboard")+("Bow" if index==0 else "Stern")
+			point.side="port" if side<0 else "starboard"
+			point.station="bow" if index==0 else "stern"
+			point.position=Vector3(side*inset_x,deck_y,stations[index])
+			point.bollard_scale=.85
+			root.add_child(point)
 
 func _configure_bulk_holds() -> void:
 	if draft.get("hull") != "hull_24x8": return

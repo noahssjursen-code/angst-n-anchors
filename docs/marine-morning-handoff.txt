@@ -1,0 +1,71 @@
+MARINE OVERNIGHT HANDOFF — 6 October 2026
+
+Morning checkpoint: Noah subsequently resumed work and requested a 30-minute
+cadence with substantially more effort on visual quality. Automation is ACTIVE.
+The previous 08:00 Oslo cutoff remains unless Noah extends it. This file records
+the overnight baseline, not completed art acceptance.
+Branch: feature/3d-model-migration. No reset, force-push or merge to main.
+
+Delivered and checked
+- 14 x 5 m trawler draft: 60 separate editable placements, wheelhouse/interior,
+  rising perimeter, Blender fishing winch with rotating drum, two catch tanks.
+- 24 x 8 m cargo platform: real hold opening, separate coaming/covers, 87 editable
+  placements, aft bridge and matching perimeter. It is not a production fleet ship.
+- Bulk example on that same hull: separate divider, open forward and covered aft
+  holds, real inventory, cargo mass, covered-hatch rejection and crane loading.
+- Default Blender propellers/rudders on both hulls, fuel-aware rotation, reversing
+  and steering. Existing propulsion physics retained; visual RPM is provisional.
+- Default bulk crane: nine separate Blender models, slew/luff/hoist, independent
+  jaws, telescoping cylinder. Existing bulk operator completed an actual load.
+- Mooring/landing kit: deck bitts, quay bollard, four-part fish landing plant;
+  imported boats now have four discoverable cleats. Actual 250 kg unloading and
+  rope tie/release checks pass. Dynamic ropes/hoses still use existing gameplay.
+- Blender sources, reproducible generators and future-agent model contracts saved.
+
+Checks
+Earlier batches passed real builder draft round-trips and isolated ocean tests
+for helm, seating/doors, walking, movement/steering, HUD and reset. Stern gear was
+checked for swept clearance, stop/reverse/no-fuel and revisioned presentation state.
+Bulk tests covered 12 t conservation, mass, incompatible lots, covered holds,
+inventory dictionary round-trip and 12 -> 21.8 t auto loading. Crane/port kit
+rendered showcases exit cleanly. Some earlier headless builder thumbnail tests
+still reported Environment/RID cleanup warnings, despite passing assertions.
+This is not a complete-world, production-save or multiplayer acceptance test.
+
+Open in the builder through Drafts > Open
+resources/models/examples/coastal_trawler_draft.json
+resources/models/examples/coastal_cargo_draft.json
+resources/models/examples/coastal_bulk_draft.json
+
+Known gaps / next work
+- No new navigation/deck lighting kit or night acceptance pass was completed.
+- Trawler net, trawl doors, gantry and refined deployment remain unfinished.
+- Mooring ropes can cross solid half-walls: add fairleads and appropriate openings.
+- More accurate stern aperture/gear installation and machinery sizing remain.
+- Hatch covers are removed in the builder; no powered hatch or crane-lift interaction.
+- Cargo/bulk share one new hull platform; no larger dedicated bulk hull was built.
+- Shore bulk stockpile remains unlimited. No finite-port-inventory/economy migration.
+- Provision crane, fenders and shore tank artwork remain old or unfinished.
+- Imported drafts remain builder/playtest assemblies. Owned-fleet commissioning,
+  persistent operational inventory and multiplayer transport were not migrated.
+- No final art approval implied: plant supports, reeving and service access are
+  simplified, capacities inherited from gameplay rather than engineering ratings.
+
+Pushed milestones (final port/handoff commit follows this file)
+8ce7a08 initial character/helm checkpoint and plan
+ed6cf14 marine audit
+015411c stern gear
+9902ce7 trawler and fishing kit
+13e6db0 cargo platform/example
+ec11112 accurate headless cleanup note
+d8dec8a bulk holds/inventory/crane transfer
+4fe8747 articulated Blender bulk crane
+
+Review captures (absolute directory)
+C:\Users\noahs\Documents\Codex\2026-10-05\referenced-chatgpt-conversation-this-is-an\outputs\marine
+trawler.png / cargo.png / bulk.png — vessel examples
+stern-gear.png / stern-gear-reverse.png — drive hardware
+crane.png / crane-open.png / crane-closed.png / crane-cabin.png — crane
+bulk-blender-crane-loading.png — real auto handling
+port-kit.png / port-kit-pump.png / port-kit-mooring.png — final port kit
+Logs and source-reference renders are in the adjacent work directory.
