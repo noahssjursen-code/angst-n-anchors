@@ -1294,3 +1294,12 @@ just because its highest frequencies become subpixel. All water tiers use the
 same weather roughness driver. The review fixture verifies GPU mip averages;
 --surface-review and --drive-review still require visual inspection. Added memory
 is2.667MiB; measured mip compute0.049ms on RTX5070 is not a universal frame budget.
+
+### Antifouling finish
+
+Paint_HullLower is a non-metallic coating: metallic0, roughness.72. Preserve its
+separate user colour slot on hulls, rudders and shaft supports. Exposed bronze
+propellers and stainless shafts retain their metal response. A metallic lower
+hull creates an artificial pale sky-reflection band through transparent water;
+do not hide that material problem by disabling transmission. The --waterline-review
+fixture compares opaque/transmissive/hidden water and asserts the imported finish.

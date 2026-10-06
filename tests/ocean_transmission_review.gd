@@ -67,6 +67,29 @@ func review() -> void:
 	camera.position=Vector3(9,2,13)
 	camera.look_at(Vector3(-5,-1.5,0))
 	await capture("waterline-day")
+	if OS.get_cmdline_user_args().has("--waterline-review"):
+		renderer._ocean_clipmap.visible=false
+		await capture("waterline-no-water")
+		renderer._ocean_clipmap.visible=true
+		renderer._ocean_shader_material.set_shader_parameter("transmission_strength",0.0)
+		await capture("waterline-opaque")
+		renderer._ocean_shader_material.set_shader_parameter("transmission_strength",1.0)
+		camera.position=Vector3(9,6,13)
+		camera.look_at(Vector3(-5,-1.5,0))
+		await capture("waterline-elevated")
+		for node in boat.find_children("*", "MeshInstance3D", true, false):
+			var mesh := node as MeshInstance3D
+			for surface in mesh.mesh.get_surface_count():
+				var material := mesh.get_active_material(surface) as StandardMaterial3D
+				if material != null and material.resource_name.begins_with("Paint_HullLower"):
+					print("LOWER MATERIAL ",material.resource_name," metallic=",material.metallic," roughness=",material.roughness)
+					assert(material.metallic < .01 and material.roughness >= .7)
+		camera.position=Vector3(9,2,13)
+		camera.look_at(Vector3(-5,-1.5,0))
+		await capture("waterline-imported-antifoul")
+		print("WATERLINE REVIEW PASS")
+		get_tree().quit()
+		return
 	WorldClock.snap_time_of_day(0)
 	WeatherLighting.time_of_day=0
 	renderer._apply_weather_lighting()

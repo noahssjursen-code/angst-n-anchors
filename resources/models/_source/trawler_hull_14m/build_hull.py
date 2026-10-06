@@ -66,6 +66,8 @@ for link in list(paint.node_tree.links):
     if link.to_socket.name=='Base Color':paint.node_tree.links.remove(link)
 paint.diffuse_color=(.075,.25,.29,1)
 lower=paint.copy();lower.name='Paint_HullLower';lower.diffuse_color=(.36,.075,.043,1)
+lower.node_tree.nodes['Principled BSDF'].inputs['Metallic'].default_value=0.0
+lower.node_tree.nodes['Principled BSDF'].inputs['Roughness'].default_value=.72
 lower.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value=(.36,.075,.043,1)
 stripe=paint.copy();stripe.name='Fixed_BootStripe';stripe.diffuse_color=(.035,.045,.045,1)
 stripe.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value=(.035,.045,.045,1)

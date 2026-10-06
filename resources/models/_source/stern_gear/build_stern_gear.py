@@ -57,7 +57,7 @@ def export(asset, socket):
 clear()
 bronze=material('Fixed_PropellerBronze',(.52,.30,.095),.82,.28)
 steel=material('Fixed_ShaftStainless',(.44,.50,.53),.85,.25)
-paint=material('Paint_HullLower',(.36,.075,.043),.32,.46)
+paint=material('Paint_HullLower',(.36,.075,.043),0.0,.72)
 rubber=material('Fixed_Bearing',(.024,.027,.03),.25,.62)
 
 # Shaft axis through local origin; four cambered, twisted blades, not flat paddles.

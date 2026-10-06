@@ -18,7 +18,7 @@ def normals():
 clear()
 bronze=material('Fixed_PropellerBronze',(.48,.29,.105),.82,.3)
 steel=material('Fixed_ShaftStainless',(.40,.47,.50),.85,.3)
-paint=material('Paint_HullLower',(.29,.07,.045),.26,.57)
+paint=material('Paint_HullLower',(.29,.07,.045),0.0,.72)
 seal=material('Fixed_BearingSeal',(.02,.025,.025),.1,.67)
 zinc=material('Fixed_SacrificialZinc',(.54,.57,.55),.65,.72)
 

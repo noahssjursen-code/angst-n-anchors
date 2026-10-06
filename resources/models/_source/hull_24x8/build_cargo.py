@@ -16,6 +16,8 @@ def material(name,c,metal=.35):
     m=bpy.data.materials.new(name);m.diffuse_color=(*c,1);m.use_nodes=True
     p=m.node_tree.nodes.get('Principled BSDF');p.inputs['Base Color'].default_value=(*c,1)
     p.inputs['Metallic'].default_value=metal;p.inputs['Roughness'].default_value=.55
+    if name=='Paint_HullLower':
+        p.inputs['Metallic'].default_value=0.0;p.inputs['Roughness'].default_value=.72
     return m
 def mesh(name,vs,fs,mat):
     d=bpy.data.meshes.new(name);d.from_pydata(vs,[],fs);d.update()
