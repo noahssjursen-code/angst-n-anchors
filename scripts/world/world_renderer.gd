@@ -396,7 +396,7 @@ func _build_sky() -> void:
 	_environment = environ
 	environ.sky                  = sky
 	environ.background_mode      = Environment.BG_SKY
-	environ.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	environ.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environ.ambient_light_energy = 0.24
 
 	environ.tonemap_mode     = Environment.TONE_MAPPER_ACES
@@ -693,8 +693,10 @@ func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: 
 			0.16 * float(solar["moonlight"]) * lerpf(1.0, 0.38, cloud)
 		)
 	if _environment != null:
+		# A dark sky cubemap must not multiply night fill almost to zero.
+		_environment.ambient_light_sky_contribution = daylight
 		_environment.ambient_light_energy = (
-			lerpf(0.115, 0.36, daylight * daylight)
+			lerpf(0.055, 0.36, daylight * daylight)
 			* lerpf(1.0, 0.94, cloud)
 			* lerpf(1.0, 0.92, storm)
 		)

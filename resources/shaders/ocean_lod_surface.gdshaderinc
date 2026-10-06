@@ -204,7 +204,7 @@ void fragment() {
 void light() {
 	if (!LIGHT_IS_DIRECTIONAL) {
 		float ndl = max(dot(NORMAL, LIGHT), 0.0);
-		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndl * 0.08;
+		DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * ndl * 0.08;
 		vec3 half_vector = normalize(VIEW + LIGHT);
 		float ndh = max(dot(NORMAL, half_vector), 0.0);
 		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * pow(ndh, 72.0) * v_fresnel * 0.25;

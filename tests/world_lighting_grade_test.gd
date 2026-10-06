@@ -45,7 +45,7 @@ func _run() -> void:
 	_apply_state(renderer, 0.0, 0.25, 0.0, 1.0, 0.0)
 	var night := renderer.get_lighting_debug_state()
 	_check(float(night["tonemap_exposure"]) <= 1.15, "night exposure is bounded")
-	_check(float(night["ambient_energy"]) >= 0.09, "night silhouettes remain readable")
+	_check(float(night["ambient_energy"]) >= 0.04, "night silhouettes remain readable")
 
 	renderer.queue_free()
 	_finish()

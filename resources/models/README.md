@@ -1162,3 +1162,36 @@ Tank collision must follow the cylindrical shell. Pallet/rack props are cosmetic
 and must never create freight lots or imply owned inventory. Noah withdrew the
 large decorative container-yard request; do not reintroduce ambient container
 stock from this work. Keep cargo containers in their existing freight system.
+
+## Artificial lighting acceptance (6 October 2026)
+
+Imported deck floodlights use 24m range / energy 18, rather than the former 18m /
+3.5 override. Their authored LightAim still owns orientation. Surface lighting,
+lens emission and volumetric scattering are separate controls: work-light fog
+energy is 0.18 and must not be used to compensate for an unlit deck. Shadow normal
+bias is 0.25m; large biases can detach shadows from walls and fittings. Navigation
+lights retain their localized wash and their independently visible lenses.
+
+Quay poles use energy 28 / 28m range, downward aim below the lens, local shadows
+fading after 65m, and light fading from 160m. The imported Light diffuser surface
+gets a per-instance emissive override; never edit the shared material. Automatic
+switching follows SolarCycle daylight, not fixed clock thresholds. Existing
+ShipLighting OFF/NAV/WORK/ALL and player L input remain authoritative.
+
+WorldRenderer blends from a small color ambient floor at night to sky contribution
+by day. This avoids multiplying night fill by the nearly black sky cubemap while
+preserving daytime sky shading and bounded exposure. Ocean near/mid/far/horizon
+shaders retain their custom lighting, but must allow local specular response and
+must not multiply ALBEDO into DIFFUSE_LIGHT a second time. Reference:
+https://docs.godotengine.org/en/4.4/tutorials/shaders/shader_reference/spatial_shader.html
+
+Acceptance uses tests/night_lighting_review.tscn with --shipyard-playtest, optionally
+--vessel=coastal_coaster. It uses the actual WorldRenderer, ocean, port and starter
+layout at its draft height. Clear/fog nights are captured lights on/off beside the
+quay and 600m offshore, plus daylight. Deck-region pixel differences must exceed
+0.008; trawler measured 0.093-0.117 and coaster 0.038-0.061 after correction.
+Screenshots live in C:/Users/noahs/Pictures/machinescreenshots/night-lighting-*
+(trawler 1791319397-085; coaster 1791319433-09). These are static lighting reviews,
+not a claim of sea-trial physics validation or completed cabin lighting design.
+WorldLightingGrade, ArtificialLightDayScale and the real L-switch marine showcase
+also pass, including independent vessels and disabled emission in OFF mode.

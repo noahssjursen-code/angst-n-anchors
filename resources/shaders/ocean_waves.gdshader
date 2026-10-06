@@ -1,6 +1,6 @@
 shader_type spatial;
 // Water owns its specular — Godot GGX on a flat ocean reads as plastic wrap.
-render_mode diffuse_burley, specular_disabled, cull_disabled;
+render_mode diffuse_burley, cull_disabled;
 
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
@@ -293,7 +293,7 @@ void fragment() {
 void light() {
 	if (!LIGHT_IS_DIRECTIONAL) {
 		float ndl = max(dot(NORMAL, LIGHT), 0.0);
-		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndl * 0.10;
+		DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * ndl * 0.10;
 		vec3 h = normalize(VIEW + LIGHT);
 		float ndh = max(dot(NORMAL, h), 0.0);
 		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * pow(ndh, 80.0) * v_fresnel * 0.35;

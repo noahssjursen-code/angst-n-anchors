@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode diffuse_burley, specular_disabled, cull_disabled;
+render_mode diffuse_burley, cull_disabled;
 
 
 // Horizon ring — cascade 0 only. Same water shading language as the inner mesh
@@ -124,7 +124,7 @@ void fragment() {
 void light() {
 	if (!LIGHT_IS_DIRECTIONAL) {
 		float ndl = max(dot(NORMAL, LIGHT), 0.0);
-		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndl * 0.06;
+		DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * ndl * 0.06;
 		vec3 h = normalize(VIEW + LIGHT);
 		float ndh = max(dot(NORMAL, h), 0.0);
 		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * pow(ndh, 64.0) * v_fresnel * 0.2;
