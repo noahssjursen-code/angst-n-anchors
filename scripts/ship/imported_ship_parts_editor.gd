@@ -51,6 +51,12 @@ var door_open: CheckButton
 var placement_hint: Label
 var end_run_button: Button
 var draft_path := ""
+var draft_name := "Untitled ship"
+var show_all_floors := false
+var full_ship_toggle: CheckButton
+var engine_preset := ""
+var engine_choice: OptionButton
+var engine_info: Label
 var saved_state := ""
 var save_dialog: FileDialog
 var load_dialog: FileDialog
@@ -136,6 +142,34 @@ func setup(owner_editor: ShipyardBrickEditor) -> void:
 	info = Label.new()
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	panel.add_child(info)
+	full_ship_toggle = CheckButton.new()
+	full_ship_toggle.text = "Show entire ship"
+	full_ship_toggle.tooltip_text = "Show upper floors and roofs. Selection still follows the active floor; switch off for a cutaway."
+	full_ship_toggle.toggled.connect(func(enabled: bool) -> void:
+		show_all_floors = enabled
+		_apply_floor_view()
+	)
+	panel.add_child(full_ship_toggle)
+	engine_choice = OptionButton.new()
+	engine_choice.tooltip_text = "Installed engine package; saved with this ship"
+	panel.add_child(engine_choice)
+	engine_info = Label.new()
+	engine_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(engine_info)
+	engine_choice.item_selected.connect(func(index: int) -> void:
+		engine_preset = str(engine_choice.get_item_metadata(index))
+		_refresh_engine_choice()
+		_update_draft_title()
+	)
+	var inspect_engine := Button.new()
+	inspect_engine.text = "Inspect engine"
+	inspect_engine.pressed.connect(func() -> void:
+		var dialog := MarineEngineInspector.new()
+		editor.add_child(dialog)
+		dialog.inspect(hull_id,engine_preset)
+	)
+	panel.add_child(inspect_engine)
+	_refresh_engine_choice()
 	rising_bow = CheckButton.new()
 	rising_bow.text = "Rising bow"
 	rising_bow.tooltip_text = "Set the profile of selected bow pieces, or the profile for new pieces in Place mode."
@@ -363,12 +397,12 @@ func _point(screen: Vector2) -> Variant:
 	return origin + ray * t if t > 0 else null
 
 
-func _position(record: Dictionary) -> Vector3:
+static func _position(record: Dictionary) -> Vector3:
 	var p: Array = record["position"]
 	return Vector3(p[0], p[1], p[2])
 
 
-func _end(record: Dictionary) -> Vector3:
+static func _end(record: Dictionary) -> Vector3:
 	var entry := BrickCatalog.get_entry(record["asset_id"])
 	var p: Array = entry["end_xz"]
 	return _position(record) + Basis(Vector3.UP, deg_to_rad(float(record["yaw_degrees"]))) * Vector3(p[0], 0, p[1])
@@ -382,7 +416,7 @@ func _distance(point: Vector3, record: Dictionary) -> float:
 	return point.distance_to(Geometry3D.get_closest_point_to_segment(point, start, end))
 
 
-func slot_key(record: Dictionary) -> String:
+static func slot_key(record: Dictionary) -> String:
 	var a := _position(record)
 	if record["asset_id"] == "bulk_divider_5m": return "%.4f|bulk_divider|%.3f,%.3f" % [a.y,a.x,a.z]
 	if ShipSurfaceKit.is_surface(record["asset_id"]):
@@ -633,7 +667,20 @@ func reset_colors() -> void:
 
 
 func _draft_data() -> Dictionary:
-	return {"version":1,"hull":hull_id,"hull_colors":hull_colors,"parts":records.values(),"rising_bow":placement_rising,"active_floor":active_floor,"cell_offset":cell_offset}
+	return {"version":1,"hull":hull_id,"hull_colors":hull_colors,"parts":records.values(),"rising_bow":placement_rising,"active_floor":active_floor,"cell_offset":cell_offset,"show_all_floors":show_all_floors,"engine_preset":engine_preset}
+
+func _refresh_engine_choice() -> void:
+	if not is_instance_valid(engine_choice): return
+	var chosen := MarineEngineCatalog.resolve(hull_id,engine_preset)
+	if chosen.is_empty(): chosen = MarineEngineCatalog.resolve(hull_id)
+	engine_preset = str(chosen.id)
+	engine_choice.clear()
+	for spec in MarineEngineCatalog.options(hull_id):
+		var index := engine_choice.item_count
+		engine_choice.add_item(str(spec.name))
+		engine_choice.set_item_metadata(index,spec.id)
+		if spec.id == engine_preset: engine_choice.select(index)
+	engine_info.text = "%.0f kg · %.0f L/h at full power" % [chosen.mass_kg,chosen.fuel_lph]
 
 
 func _draft_state() -> String:
@@ -678,7 +725,7 @@ func save_draft(path: String = "") -> void:
 	_continue_pending()
 
 
-func _valid_colors(value: Variant) -> bool:
+static func _valid_colors(value: Variant) -> bool:
 	if not value is Dictionary:
 		return false
 	for key in value:
@@ -692,9 +739,15 @@ func _valid_colors(value: Variant) -> bool:
 
 func load_draft(path: String = SAVE_PATH) -> void:
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path)) if FileAccess.file_exists(path) else null
+	_load_draft_data(data, path)
+
+
+static func valid_draft(data: Variant) -> bool:
 	var valid: bool = data is Dictionary
 	if valid:
-		valid = data.get("version",0) == 1 and ImportedHullCatalog.has(str(data.get("hull",""))) and data.get("parts") is Array and _valid_colors(data.get("hull_colors",{}))
+		valid = data.get("version",0) == 1 and ImportedHullCatalog.has(str(data.get("hull",""))) and data.get("parts") is Array and data["parts"].size() <= 4096 and _valid_colors(data.get("hull_colors",{}))
+	if valid:
+		valid = data.get("engine_preset", "") is String and not MarineEngineCatalog.resolve(str(data.hull),str(data.get("engine_preset",""))).is_empty()
 	if valid:
 		var stored_floor: Variant = data.get("active_floor", 0)
 		valid = (stored_floor is int or stored_floor is float) and is_finite(float(stored_floor)) and float(stored_floor) == floor(float(stored_floor)) and stored_floor >= 0 and stored_floor <= MAX_FLOOR
@@ -702,6 +755,7 @@ func load_draft(path: String = SAVE_PATH) -> void:
 		var stored_cell: Variant = data.get("cell_offset", 0)
 		valid = (stored_cell is int or stored_cell is float) and is_finite(float(stored_cell)) and float(stored_cell) == floor(float(stored_cell)) and stored_cell >= 0 and stored_cell < CELLS_PER_FLOOR
 		valid = valid and (data.get("active_floor", 0) < MAX_FLOOR or stored_cell == 0)
+	valid = valid and (not data is Dictionary or not data.has("show_all_floors") or data.show_all_floors is bool)
 	var loaded := {}
 	if valid:
 		for record in data["parts"]:
@@ -727,6 +781,11 @@ func load_draft(path: String = SAVE_PATH) -> void:
 				valid = false
 				break
 			loaded[key] = record
+	return valid
+
+
+func _load_draft_data(data: Variant, path: String = "") -> void:
+	var valid := valid_draft(data)
 	if not valid:
 		editor.call("_show_toast", "Cannot open draft: missing, damaged or unsupported. Current work kept.", true)
 		return
@@ -734,6 +793,8 @@ func load_draft(path: String = SAVE_PATH) -> void:
 	undo_stack.clear()
 	redo_stack.clear()
 	hull_id = data.hull
+	engine_preset = str(data.get("engine_preset",""))
+	_refresh_engine_choice()
 	deck_height = float(ImportedHullCatalog.ENTRIES[hull_id].depth_m)
 	active_floor = 0
 	cell_offset = 0
@@ -741,7 +802,9 @@ func load_draft(path: String = SAVE_PATH) -> void:
 	recipes = ImportedHullCatalog.rail_recipes(hull_id)
 	rising_bow.visible = ImportedHullCatalog.ENTRIES[hull_id].rising
 	if is_instance_valid(reference_root): reference_root.position = Vector3(0,deck_height,float(ImportedHullCatalog.ENTRIES[hull_id].reference_z))
-	records = loaded
+	records.clear()
+	for record: Dictionary in data.parts:
+		records[slot_key(record)] = record
 	placement_rising = bool(data.get("rising_bow", false)) and ImportedHullCatalog.ENTRIES[hull_id].rising
 	rising_bow.set_pressed_no_signal(placement_rising)
 	selected = ""
@@ -755,6 +818,8 @@ func load_draft(path: String = SAVE_PATH) -> void:
 	ModelPaint.apply(editor.get("_imported_hull_preview"), hull_colors)
 	rebuild()
 	refresh_ui()
+	show_all_floors = bool(data.get("show_all_floors", false))
+	full_ship_toggle.set_pressed_no_signal(show_all_floors)
 	set_floor(int(data.get("active_floor", 0)), int(data.get("cell_offset", 0)))
 	draft_path = path
 	saved_state = _draft_state()
@@ -965,9 +1030,8 @@ func key_input(event: InputEvent) -> bool:
 			if not event.ctrl_pressed:
 				return false
 			editor.call("_set_tool", ShipyardBrickEditor.Tool.MARK)
-			for key in records:
-				if absf(_position(records[key]).y - (.85 if records[key]["asset_id"] in ["helm_wheel","helm_throttle","helm_display"] else 0.0) - floor_y()) < 0.01:
-					selection[key] = true
+			for model in parts_root.get_children():
+				if _on_active_floor(model): selection[str(model.get_meta("record_key"))] = true
 			refresh_ui()
 		KEY_Z:
 			if not event.ctrl_pressed:
@@ -1333,7 +1397,14 @@ func _setup_drafts() -> void:
 	if FileAccess.file_exists(SAVE_PATH):
 		draft_menu.add_separator()
 		draft_menu.add_item("Open previous single-file draft",4)
+	draft_menu.add_separator("Starter vessels — editable copies")
+	for index in CompanyContracts.starter_options().size():
+		draft_menu.add_item(CompanyContracts.starter_options()[index].label, 100 + index)
 	draft_menu.id_pressed.connect(func(id: int) -> void:
+		if id >= 100:
+			var option: Dictionary = CompanyContracts.starter_options()[id - 100]
+			_guard(func() -> void: load_starter(str(option.id)))
+			return
 		match id:
 			0: _guard(new_draft)
 			1: request_open()
@@ -1355,7 +1426,7 @@ func show_drafts() -> void:
 
 func show_save_as() -> void:
 	cancel_placement()
-	save_dialog.current_file = draft_path.get_file() if not draft_path.is_empty() else "Untitled ship.json"
+	save_dialog.current_file = draft_path.get_file() if not draft_path.is_empty() else draft_name + ".json"
 	if not draft_path.is_empty():
 		save_dialog.current_dir = ProjectSettings.globalize_path(draft_path).get_base_dir()
 	save_dialog.popup_centered_ratio(0.65)
@@ -1392,6 +1463,11 @@ func new_draft() -> void:
 	undo_stack.clear()
 	redo_stack.clear()
 	draft_path = ""
+	draft_name = "Untitled ship"
+	engine_preset = ""
+	_refresh_engine_choice()
+	show_all_floors = false
+	full_ship_toggle.set_pressed_no_signal(false)
 	placement_rising = false
 	set_floor(0)
 	reset_colors()
@@ -1405,7 +1481,7 @@ func _update_draft_title() -> void:
 	if not is_instance_valid(editor):
 		return
 	var dirty := _draft_state() != saved_state
-	var title := "Untitled ship" if draft_path.is_empty() else draft_path.get_file().get_basename()
+	var title := draft_name if draft_path.is_empty() else draft_path.get_file().get_basename()
 	editor.get("_hull_lbl").text = title + (" · Unsaved changes" if dirty else (" · New draft" if draft_path.is_empty() else " · Saved")) + " · " + str(ImportedHullCatalog.ENTRIES[hull_id].label)
 	editor.get("_confirm_btn").text = "Save *" if dirty else "Save"
 
@@ -1435,6 +1511,8 @@ func _horizontal_key(record: Dictionary) -> String:
 func _on_active_floor(model: Node3D) -> bool:
 	if not model.visible or not model.has_meta("record_key"): return false
 	var style := str(BrickCatalog.get_entry(records.get(str(model.get_meta("record_key")),{}).get("asset_id","")).get("style",""))
+	if records.get(str(model.get_meta("record_key")),{}).get("asset_id","") == "cargo_securing_bed_4m" and hull_id == "hull_24x8":
+		return active_floor == 0 and cell_offset == 0 and absf(model.position.y - 1.6) < .01
 	var offset := .85 if style in ["wheel","throttle","display"] else (.74 if style == "cargo_hatch" else 0.0)
 	return absf(model.position.y - offset - floor_y()) < 0.01
 
@@ -1479,7 +1557,7 @@ func _apply_floor_view() -> void:
 		var id := str(records.get(str(model.get_meta("record_key")),{}).get("asset_id",""))
 		var offset := .86 if id in ["helm_wheel","helm_throttle","helm_display"] else (.75 if BrickCatalog.get_entry(id).get("style","") == "cargo_hatch" else .01)
 		# Match selection tolerance, including a few millimetres of floor finish.
-		model.visible = model.position.y <= floor_y() + offset + .01
+		model.visible = show_all_floors or model.position.y <= floor_y() + offset + .01
 
 
 func _surface_family() -> bool:
@@ -1490,7 +1568,7 @@ func _surface_record(poly: PackedVector2Array) -> Dictionary:
 	for p in poly: points.append([p.x,p.y])
 	return {"asset_id":str(editor.get("_brick_id")),"position":[0.0,floor_y(),0.0],"yaw_degrees":0.0,"outline":points,"colors":surface_colors.duplicate(true),"crown":placement_crown,"visor_direction":float(placement_visor)}
 
-func _valid_surface_record(record: Dictionary) -> bool:
+static func _valid_surface_record(record: Dictionary) -> bool:
 	if not record.get("outline") is Array or record["outline"].size()>64:
 		return false
 	for p in record["outline"]:
@@ -1580,6 +1658,15 @@ func _furniture_family() -> bool:
 func _furniture_candidate(point: Vector3) -> Dictionary:
 	var p:=Vector3(snappedf(point.x,.1),floor_y(),snappedf(point.z,.1))
 	var id: String=editor.get("_brick_id")
+	if id == "container_bed_20ft":
+		if hull_id != "hull_24x8" or active_floor != 0: return {}
+		return {"asset_id":id,"position":[-1.25 if point.x<0 else 1.25,deck_height,0],"yaw_degrees":0.0}
+	if id == "cargo_deck_5x8":
+		if hull_id != "hull_24x8" or active_floor != 0: return {}
+		return {"asset_id":id,"position":[0,deck_height,0],"yaw_degrees":0.0}
+	if id == "cargo_securing_bed_4m":
+		if hull_id != "hull_24x8" or active_floor != 0: return {}
+		return {"asset_id":id,"position":[0,1.6,-2 if point.z<0 else 2],"yaw_degrees":0.0}
 	if id == "bulk_divider_5m":
 		if hull_id != "hull_24x8" or active_floor != 0: return {}
 		# Separate slot from the coaming, sharing its authored centre datum.
@@ -1640,3 +1727,12 @@ func _request_part_state(field: String,value: Variant) -> void:
 		records[key]["part_state"]=driver.state.duplicate()
 		if field=="door_open": records[key]["door_open"]=bool(value)
 	refresh_ui()
+
+
+func load_starter(starter_id: String) -> void:
+	var record := CompanyService.build_starter_vessel_record(starter_id)
+	if record.is_empty(): return
+	draft_name = str(record.name)
+	_load_draft_data(VesselSpawn.brick_layout_of(record))
+	# The stock blueprint is never the save destination. Save prompts for a copy.
+	editor.call("_show_toast", "Opened starter copy: " + str(record.name) + ". Save as your own draft.")

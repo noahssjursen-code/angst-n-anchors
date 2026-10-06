@@ -1,0 +1,61 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "cargo_securing_bed_4m",
+      "kind": "furniture",
+      "style": "cargo_pad",
+      "model": "res://resources/models/parts/starter_outfit/cargo_securing_bed_4m.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        4,
+        4
+      ],
+      "height_start_m": 0.18,
+      "height_end_m": 0.18,
+      "paintable": true
+    },
+    {
+      "id": "marine_exhaust_stack",
+      "kind": "furniture",
+      "style": "vent",
+      "model": "res://resources/models/parts/starter_outfit/marine_exhaust_stack.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.52,
+        0.52
+      ],
+      "height_start_m": 1.55,
+      "height_end_m": 1.55,
+      "paintable": true
+    },
+    {
+      "id": "deck_stair_wide_220cm",
+      "kind": "furniture",
+      "style": "stair",
+      "model": "res://resources/models/parts/starter_outfit/deck_stair_wide_220cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -3
+      ],
+      "height_start_m": 3.23,
+      "height_end_m": 3.23,
+      "paintable": true,
+      "walk_exclude_materials": [
+        "Fixed_Nonslip",
+        "Fixed_TreadGrip",
+        "Fixed_StepEdge"
+      ]
+    }
+  ]
+}

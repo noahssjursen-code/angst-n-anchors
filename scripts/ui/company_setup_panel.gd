@@ -121,14 +121,16 @@ func _build() -> void:
 	vessel_label.text = "CHOOSE YOUR FIRST VESSEL"
 	HudStyle.apply_body_font(vessel_label, 11, HudStyle.C_COPPER, true)
 	root.add_child(vessel_label)
-	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", 12)
+	var cards := GridContainer.new()
+	cards.columns = 2
+	cards.add_theme_constant_override("h_separation", 12)
+	cards.add_theme_constant_override("v_separation", 12)
 	cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(cards)
 	for option in CompanyContracts.starter_options():
 		var starter_id := str(option.get("id", ""))
 		var card := Button.new()
-		card.custom_minimum_size = Vector2(270, 210)
+		card.custom_minimum_size = Vector2(420, 158)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		card.toggle_mode = true

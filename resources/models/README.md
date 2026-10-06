@@ -946,6 +946,89 @@ fabrication; it is not a scaled copy or rated version of that small-vessel produ
 https://www.sealuxmarine.com/wp-content/uploads/2022-METS-CATALOUE-07-High.pdf
 # Continuation: 32 m cargo hold (6 October 2026)
 
+## Starter fleet, engines and containers (6 October evening)
+
+The four official starter ships now live in resources/data/vessels/prebuilt as
+format_version 3. Their brick_layout is the versioned imported_models envelope,
+including hull, individual parts, paint, floor visibility and engine_preset.
+ImportedVesselLayout and ImportedShipPartsEditor share validation. Owned saves,
+company grants, shipwright previews, VesselSpawn and replica hydration use this
+same assembly; do not flatten it into a legacy cells dictionary. Imported ships
+do not require the removed legal registration. Existing custom owned records
+must not be replaced by new stock. Drafts > Starter vessels opens a copy; Save As
+must never modify the canonical prebuilt. Show entire ship is a visibility option,
+while selection still follows the active floor.
+
+Canonical stock: Coastal Trawler 14 x 5 m (71 placements, two 600 kg catch tanks),
+Harbour Cargo 24 x 8 m (128, raised bridge and two 20-foot deck containers), Coastal
+Bulk 24 x 8 m (96, two open 40 t holds), Coastal Freighter 32 x 10 m (165, one open
+120 t hold). Load limits remain game tuning. The wider 1.5 m stair has the existing
+2.2 m floor rise and 11 real treads. _source/starter_fleet/assemble_starters.py
+reproduces the arrangements without modifying the old example fixtures.
+
+Container assets in models/cargo have exact 20/40-foot external dimensions:
+2.438 m width, 2.591 m height, 6.058 / 12.192 m length. Metres, bottom-centre origin,
+doors at Godot +Z. Continuous corrugated sheets, actual apertures in corner castings,
+separate DoorPortPivot / DoorStarboardPivot, rod/keeper/handle hardware and floor.
+Container_Paint is the only repaintable surface; fixed zinc, seals and plywood
+retain their material. Doors can be inspected separately in the showcase; gameplay
+cargo remains closed, with a full-box collision. Do not imply door interaction,
+reefer functionality, stacking simulation or certified lifting equipment.
+
+Each size has a separate lifting spreader. Hook is at container height +0.5 m;
+ContainerNode shows it only while held. The crane uses actual unit height and
+matching target footprints. ContainerUnit stores container_type independently
+of freight ID, consignment, commodity, mass and value. Missing type means legacy
+4 m break-bulk; the replacement legacy model retains its former 3.8 m visual size.
+Do not silently reinterpret old freight or resize ISO geometry to fit a pad.
+footprint_cells(cell_size) converts physical clearance (2.5 x 6.5 / 12.5 m) to
+each pad lattice. A 40-foot box must be rejected by a shorter bed. The current
+starter fleet has two 20-foot beds; there is no 40-foot ship berth yet.
+
+Harbour Cargo carries boxes ON DECK, per Noah's correction, not down in the hold.
+The separate cargo_deck_5x8 closes the opening at y=3.6 with underside girders.
+Two container_bed_20ft assets sit at x=+/-1.25, y=3.6, z=0. Their CargoDatum socket
+supports inherited CargoSlotPadComponent inventory, crane transfer and mass.
+Runtime capacity requires the exact supported arrangement. Legacy 4 m beds remain
+loadable for existing drafts; mixing bed families disables overlapping capacity.
+Mass-entry prefixes must be unique per pad, even when their node names match.
+
+MarineEngineCatalog reads six data presets from engine_presets.json: compact
+300/450 kW, coastal 700/950 kW and freighter 1100/1600 kW. Three individual Blender
+engines in models/machinery have foundations, isolators, sump, head covers, service
+panels, fuel pipes, cooling circuit, turbo/intake, guarded belt and marine gearbox.
+OutputCoupling receives the separate coupling model. Models are installed below
+deck at catalog mounts; the builder's Inspect engine dialog exposes their actual
+geometry without opening a hole in the deck. They are original generic machinery.
+
+The selected preset controls shaft power, bollard pull, fuel use, package mass and
+shaft presentation. Imported records cannot override power with a stale numeric
+shaft_power_kw field. Old drafts default to the hull's standard preset; invalid or
+incompatible IDs fail validation. Upgrades add their mass difference to the base
+displacement. Coupling and propeller read the existing powered/throttle state;
+no extra input, fuel, authority or engine singleton. There is no maintenance or
+start/stop interaction system in this pass.
+
+Generic RigidBody linear damping is replaced with zero for imported boats because
+HydrodynamicsComponent owns resistance. Wave-drag coefficients .011/.007/.0065
+are soft game tuning, not speed caps. Measured standard calm-water speeds after
+120 seconds full ahead: 12.90, 14.50, 14.50 and 14.57 kn. Upgrade checks: 14.22,
+15.67 (cargo carrying 48 t), 15.80 and 16.36 kn. Fuel-empty and reverse checks pass.
+These are controlled test results, not a prediction for every sea/cargo state.
+
+Review scenes: starter_fleet_showcase, container_showcase, marine_engine_showcase.
+The latter two are automatically isolated just like shipyard playtest. Core checks:
+imported_starter_fleet_test, starter_drafts_test, starter_access_test,
+vessel_performance_test, company_service_test, vessel_persistence_test and the
+ordinary shipyard ocean verification. Remote payload round trips are checked;
+external multiplayer service acceptance is not verified by those local tests.
+
+Visual references: Hapag-Lloyd Container Specification p5/p8/p10 (dimensions,
+corrugations, doors, corner fittings) and Cummins QSK19 marine sheet (machinery
+arrangement). Original game assets, no manufacturer marks or certification.
+https://static-cf.hapag-lloyd.com/content/dam/website/downloads/press_and_media/publications/15211_Container_Specification_engl_Gesamt_web.pdf
+https://mart.cummins.com/imagelibrary/data/assetfiles/0032290.pdf
+
 ## Trawl deployment and recovery
 
 `ImportedTrawlRig` now approaches the existing FishingSystem desired state over

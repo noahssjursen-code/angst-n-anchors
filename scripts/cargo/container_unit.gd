@@ -1,12 +1,13 @@
 class_name ContainerUnit
 extends Resource
 
-## One cubed general-cargo unit (break-bulk). Same footprint grid as shipping boxes.
-## Commodity id is usually provisions — not ISO shipping containers.
+## Freight identity and contents are independent of its physical container type.
+## Old records without container_type retain their original break-bulk footprint.
 
-const DEFAULT_FOOTPRINT := Vector2i(4, 4)
-const DEFAULT_SIZE_M := 4.0
-const DEFAULT_HEIGHT_M := 4.0
+const DEFAULT_FOOTPRINT := Vector2i(3, 7) # 20 ft on the legacy 1 m pad lattice.
+const DEFAULT_SIZE_M := 2.438
+const DEFAULT_HEIGHT_M := 2.591
+const TYPES := {"20ft": Vector3(2.438,2.591,6.058), "40ft": Vector3(2.438,2.591,12.192), "legacy_4m": Vector3(3.8,3.8,3.8)}
 const DEFAULT_COMMODITY := "provisions"
 
 @export var id: String = ""
@@ -20,17 +21,29 @@ const DEFAULT_COMMODITY := "provisions"
 @export var consignment_id: String = ""
 @export var delivery_value_marks: int = 0
 @export var paint_variant: int = 0
+@export var container_type: String = "20ft"
+
+func dimensions_m() -> Vector3:
+	return TYPES.get(container_type, TYPES["legacy_4m"])
+
+func footprint_cells(cell_m: float) -> Vector2i:
+	var metres := Vector2(footprint) if container_type == "legacy_4m" else Vector2(2.5, 12.5 if container_type == "40ft" else 6.5)
+	return Vector2i(ceili(metres.x / cell_m), ceili(metres.y / cell_m))
 
 
 static func create(
 	unit_id: String = "",
 	commodity: String = DEFAULT_COMMODITY,
 	mass: float = -1.0,
+	type: String = "20ft",
 ) -> ContainerUnit:
 	var u := ContainerUnit.new()
 	u.id = unit_id if not unit_id.is_empty() else "ctr_%s" % UuidUtil.generate()
 	u.commodity_id = commodity if not commodity.is_empty() else DEFAULT_COMMODITY
 	u.footprint = DEFAULT_FOOTPRINT
+	u.container_type = type if TYPES.has(type) else "20ft"
+	if u.container_type == "40ft": u.footprint = Vector2i(3,13)
+	if u.container_type == "legacy_4m": u.footprint = Vector2i(4,4)
 	if mass >= 0.0:
 		u.mass_kg = mass
 	else:
@@ -56,11 +69,14 @@ func to_dict() -> Dictionary:
 		"consignment_id": consignment_id,
 		"delivery_value_marks": delivery_value_marks,
 		"paint_variant": paint_variant,
+		"container_type": container_type,
 	}
 
 
 static func from_dict(data: Dictionary) -> ContainerUnit:
 	var u := ContainerUnit.new()
+	u.container_type = str(data.get("container_type", "legacy_4m"))
+	if not TYPES.has(u.container_type): u.container_type = "legacy_4m"
 	u.id = str(data.get("id", ""))
 	u.commodity_id = str(data.get("commodity_id", DEFAULT_COMMODITY))
 	u.mass_kg = float(data.get("mass_kg", CommodityCatalog.general_cargo_mass_kg()))

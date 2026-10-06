@@ -1,0 +1,53 @@
+6 October 2026 — completed starter / engine / container session
+
+Pushed first: 7921fef third-person camera Y; 89e4b0c original Blender marine
+engine and real-proportion container assets. Integration commit follows this log.
+
+Four canonical format-v3 starter blueprints are installed in prebuilt/ and their
+editable named copies are saved in the user's shipyard_drafts folder. The earlier
+16 generated test files/backups were archived with a hash manifest under the task's
+work/draft-archive-2026-10-06. Untitled ship and the previous single-file custom
+draft were preserved. Onboarding, shipwright previews, saves, normal deployment
+and local replica hydration consume the imported model layout.
+
+Coastal Trawler: 14 x 5 m, 71 placements, 300/450 kW, 1200 kg catch capacity.
+Harbour Cargo: 24 x 8 m, 128 placements, 700/950 kW, raised bridge, wide stairs,
+two 20-foot container beds on a girder-supported main deck. Noah corrected the
+initial hold-floor placement; the final design carries its containers ON DECK.
+Coastal Bulk: 24 x 8 m, 96 placements, 700/950 kW, two open 40 t compartments.
+Coastal Freighter: 32 x 10 m, 165 placements, 1100/1600 kW, one open 120 t hold.
+
+Three separate engine models, separate rotating coupling, six hull-compatible
+presets, editor chooser and inspect dialog. Chosen power, fuel burn, mass and
+shaft speed persist in the existing layout. Default body/world linear damping
+had duplicated water resistance; imported vessels now use explicit hull drag.
+Calm 120-second results in knots, standard/upgraded: trawler 12.90/14.22,
+cargo 14.50/15.67 (upgraded carries 48 t), bulk 14.50/15.80, freighter 14.57/16.36.
+Fuel-empty and reverse checks passed. These are game tuning results.
+
+20/40-foot Blender containers, fixed hardware versus body paint, independent door
+pivots, separate spreaders and supported securing beds. Old cargo records retain
+identity, contents and footprint through a new legacy-sized Blender model.
+Packing converts physical clearance to each pad's lattice. Actual crane grab,
+hook/spreader alignment and release passed. The 24 m starter correctly rejects
+40-foot units; no 40-foot ship bed is provided in this batch. Gameplay container
+doors stay closed; articulation is available for future interaction work.
+
+Checks passed: imported_starter_fleet_test, starter_drafts_test, starter_access_test
+(actual walking at flat and +/- roll/pitch), company_service_test,
+vessel_persistence_test, captain_onboarding_test, engine showcase tests, container
+showcase tests, deterministic propulsion tests, all FOUR real ocean playtests.
+Ocean checks cover F-to-helm/seats, HUD, doors, walking, pause, drive/rudder/reset;
+trawler also verifies G deployment/reversal/full recovery. Fresh Godot renders
+inspected for whole fleet, bridges, cargo deck, container details, machinery and
+onboarding. Crane verification exposed a temporary off-tree mesh-instance leak;
+freeing the temporary node fixed the repeated renderer leak and final checks are
+clean. Live external multiplayer service acceptance remains unverified.
+
+Screenshots: C:/Users/noahs/Pictures/machinescreenshots/2026-10-06_201344_marine-final
+Earlier draft/engine/ocean captures: sibling 2026-10-06_200709_marine-review.
+Review copies: task outputs/marine/final-20261006-*.png. The screenshot archive
+rule is also persisted in C:/Users/noahs/.codex/AGENTS.md.
+
+Source/geometry contracts and visual references are recorded in the model README.
+No schedules restarted, no main merge/reset/force push, no captain save replacement.

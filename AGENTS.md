@@ -152,71 +152,39 @@ issue/revise consignments and validate delivered cargo.
 
 ---
 
-## Vessel System — Deck-grid bricks + outfit budget
+## Vessel System — Imported models and owned vessels
 
-Hulls are reusable geometry components, not ships. A finished store ship (prebuilt)
-combines one `hull_id` with a name, price, `shaft_power_kw`, and **1×1×1 m brick
-grid**. Many differently powered and outfitted ships may share the same hull.
+Current starter stock is four reusable Blender-model arrangements in
+`resources/data/vessels/prebuilt/` (format_version 3). The existing owned-record
+`brick_layout` field carries the `imported_models` envelope: hull, individual
+placements, paints, floor view and `engine_preset`. `ImportedVesselLayout` validates
+it; `ImportedDraftVessel` assembles editor playtests, owned vessels and replicas.
+Do not strip it to legacy cells, flatten into one boat mesh, or overwrite custom
+captain saves when updating stock. `VesselSpawn.instantiate_from_record` is the
+shared deployment entry point. Legal ship registration was removed for imported
+ships at Noah's request; do not restore it. Legacy v2 records retain their existing
+compatibility path through DeckFitout / VesselCompliance.
 
-A vessel is a **fair, registered data model** (same hard rules for official store ships and UGC):
+The Drafts menu opens editable starter copies, never writable stock blueprints.
+New captain grants and shipwright previews consume that same canonical stock.
+ImportedHullCatalog owns metre geometry; ShipClass remains a physical category.
+Gameplay discovers installed equipment through BoatBody APIs (`get_cargo_pads`,
+`get_bulk_holds`, `get_fishing_systems`, `get_bridge_stations`). It must not infer
+real capacity merely from a model name. Runtime mounting validation remains in
+ImportedDraftVessel; cargo and fishing inventory stay in existing components.
 
-1. **Hull** — geometry platform (L×B), physical `ShipClass`, and outfit ceiling
-2. **Registration** — declared before building; legal requirements and stricter limits
-3. **Brick layout** — visuals + which slots are filled (surplus functional gear fails validate)
-4. **Live components** — `DeckFitout` mounts only compliance-accepted slots
-5. **Discovery** — gameplay asks `BoatBody` (`get_fishing_systems()`, `get_cargo_pads()`,
- `get_bridge_stations()`), never hunts brick names
+MarineEngineCatalog is the single power source for imported vessels. Choose a
+compatible preset in the builder; arbitrary record shaft_power_kw must not override
+it. Propulsion, fuel, mass and propeller presentation consume that package and
+the existing controller state. Generic linear damping must not double the explicit
+water resistance. Model/packing/preset details and acceptance results are in
+`resources/models/README.md` under Starter fleet, engines and containers.
 
-| Slot (v1) | Budget rule |
-|---|---|
-| `fishing` | max 1 |
-| `helm` | max 1 |
-| `cargo_cells` | container pads + bulk holds (deck metres; y = 0 pads only) |
-| `crane` / `tow` | 0 until those systems exist |
-
-`VesselCompliance.validate` is the final authority. It intersects the hull budget from
-`VesselOutfit` with the declared rules in
-`resources/data/vessels/registrations/catalog.json`. `BrickRules` is its editor wrapper.
-Illegal or unregistered ships hard-fail save, commission, and deployment; spawn still
-mounts only accepted slots so network/save cheats cannot activate surplus gear.
-
-`ShipClass` means physical berth/length category. `registration_id` means legal
-operating type (`general_vessel`, `fishing_vessel`, `cargo_vessel`,
-`passenger_vessel`). Never infer registration from installed bricks.
-
-Run `scenes/apps/vessel_registration_audit.tscn` to edit the source-controlled legal
-code and batch-audit every official prebuilt. Registration reports are derived, never
-stored as a stale “passed” flag.
-
-Official prebuilts are authored in `ShipyardBrickEditor` and sold from
-`resources/data/vessels/prebuilt/`. The owned-vessel ledger persists the hull,
-power, and `brick_layout`; spawn rebuilds via `VesselSpawn` + `DeckFitout`.
-
-```gdscript
-var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)
-get_tree().current_scene.add_child(boat)
-boat.place_at_waterline(water_y)
-```
-
-| Always on BoatBody (core) | Brick fit-out (player) |
-|---|---|
-| Hull visual + collision | Wall / window / door / ledge / railing bricks |
-| Strip buoyancy + hydro | Container pads + bulk holds (within cargo_cells) |
-| Propulsion, rudder, thruster | Fishing trommel → one FishingSystem when accepted |
-| BoatController / Camera / Audio | Enclosed cabin + door → helm boarding |
-| MooringComponent + auto cleats/lights | |
-| WalkDeck | |
-
-Operating role comes from declared registration plus a passing checklist, not kit ids. Do **not**
-revive `WheelhouseVisual`, hull JSON `bridge` slots, `ShipBuilder`, `VesselKits`,
-`VesselLoadout`, or the attachment socket stack.
-
-New hull platforms belong in `resources/data/vessels/hulls/catalog.json` and use
-dimension-based ids such as `hull_90x24`. Do not name hulls after cargo, tanker,
-fishing, passenger, or other ship roles. Do not add new hand-authored vessel
-scenes for store stock; the trawler and catamaran scenes are frozen exceptions.
-
-`BrickCatalog` is the shared construction kit for vessel decks and land buildings. Marine-only pieces carry the `ship_only` tag and are filtered out of the building editor palette.
+20/40-foot cargo uses real dimensions. ContainerUnit owns type/identity/contents;
+CargoSlotPadComponent converts physical clearance to its own cell resolution.
+Preserve legacy cargo records and reject containers that do not fit. Harbour Cargo
+carries two 20-foot containers on its supported MAIN DECK, not down in the hold.
+The separate cargo deck and securing beds remain editable Blender parts.
 
 ### Vessel orientation
 

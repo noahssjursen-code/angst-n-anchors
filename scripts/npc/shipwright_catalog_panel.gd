@@ -317,6 +317,9 @@ func _refresh_entry() -> void:
 
 	var len_m := ShipClass.display_metres(_stations.length_m if _stations != null else 28.0)
 	var beam_m := ShipClass.display_metres(_stations.beam_m if _stations != null else 10.0)
+	if ImportedHullCatalog.has(str(entry.get("hull_id", ""))):
+		len_m = float(entry.loa_m)
+		beam_m = float(entry.beam_m)
 	var disp_t := float(entry.get("displacement_t", 256.0))
 	var shaft_kw := float(entry.get("shaft_power_kw", 0.0))
 	_specs_lbl.text = (

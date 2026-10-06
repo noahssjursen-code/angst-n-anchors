@@ -6,12 +6,13 @@ static var _imported: Dictionary = {}
 
 static func imported_entries() -> Dictionary:
 	if _imported.is_empty():
-		for path in ["res://resources/models/parts/ventilation_kit/manifest.json","res://resources/models/parts/access_kit/manifest.json","res://resources/models/parts/trawl_rig/manifest.json","res://resources/models/parts/lighting_kit/manifest.json","res://resources/models/parts/coaster_kit/manifest.json", "res://resources/models/parts/coaster_perimeter/manifest.json","res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
+		for path in ["res://resources/models/cargo/manifest.json","res://resources/models/parts/starter_outfit/manifest.json","res://resources/models/parts/ventilation_kit/manifest.json","res://resources/models/parts/access_kit/manifest.json","res://resources/models/parts/trawl_rig/manifest.json","res://resources/models/parts/lighting_kit/manifest.json","res://resources/models/parts/coaster_kit/manifest.json", "res://resources/models/parts/coaster_perimeter/manifest.json","res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
 			var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 			for raw in data["assets"]:
 				var entry: Dictionary = raw.duplicate(true)
 				var id := str(entry["id"])
 				entry["display"] = id.replace("_", " ").capitalize()
+				entry["display"] = {"cargo_deck_5x8":"Cargo deck", "container_bed_20ft":"20-foot container bed", "marine_exhaust_stack":"Exhaust stack", "deck_stair_wide_220cm":"Wide stairs"}.get(id,entry.display)
 				entry["tags"] = ["structure" if id.begins_with("cabin_") or entry["style"] in ["floor", "roof", "stair", "support", "vent"] else "railing", "ship_only", "imported"]
 				if entry["style"]=="light":entry["tags"]=["light","ship_only","imported"]
 				entry["color"] = ModelPaint.DEFAULTS["wall"] if entry["style"] != "rail" else Color(0.58, 0.64, 0.65)
@@ -19,7 +20,7 @@ static func imported_entries() -> Dictionary:
 	return _imported
 static func ids() -> Array[String]:
 	# Palette families; exact asset variants remain addressable for placement and saves.
-	return ["rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "deck_stair_220cm", "deck_bracket_2m", "deck_mushroom_vent", "wall_vent_louvre", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight", "trawl_winch", "trawl_gantry_4m", "insulated_catch_tank", "hold_coaming_5x8", "hatch_cover_5x4", "bulk_divider_5m", "deck_floodlight", "nav_port", "nav_starboard", "nav_stern", "mast_lantern"]
+	return ["cargo_deck_5x8", "container_bed_20ft", "marine_exhaust_stack", "deck_stair_wide_220cm", "rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "deck_stair_220cm", "deck_bracket_2m", "deck_mushroom_vent", "wall_vent_louvre", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight", "trawl_winch", "trawl_gantry_4m", "insulated_catch_tank", "hold_coaming_5x8", "hatch_cover_5x4", "bulk_divider_5m", "deck_floodlight", "nav_port", "nav_starboard", "nav_stern", "mast_lantern"]
 
 static func ids_for_buildings() -> Array[String]:
 	## Land building editor palette — shared kit minus marine-only systems.

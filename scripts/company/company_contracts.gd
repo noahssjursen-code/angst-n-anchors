@@ -12,27 +12,33 @@ const STARTER_VESSELS := {
 	"fishing": {
 		"prebuilt_id": "fishing_trawler",
 		"label": "Coastal trawler",
-		"role": "Harvest fish and land your own catch.",
+		"role": "14 × 5 m · Stern trawl gear\nTwo 600 kg catch tanks",
 		"career": "Fishing",
 	},
 	"general_cargo": {
 		"prebuilt_id": "28_10_m",
 		"label": "Coastal cargo vessel",
-		"role": "Carry provisions and manufactured goods between ports.",
+		"role": "24 × 8 m · Raised bridge\nTwo 20-foot containers on deck",
 		"career": "General cargo",
 	},
 	"bulk": {
 		"prebuilt_id": "bulk_small",
 		"label": "Coastal bulk vessel",
-		"role": "Move grain, ore and raw industrial inputs.",
+		"role": "24 × 8 m · Open divided hold\nTwo 40 t bulk compartments",
 		"career": "Bulk freight",
+	},
+	"coaster": {
+		"prebuilt_id": "coastal_coaster",
+		"label": "Coastal freighter",
+		"role": "32 × 10 m · Two-deck bridge\nOne 120 t bulk hold",
+		"career": "Coastal freight",
 	},
 }
 
 
 static func starter_options() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	for id in ["fishing", "general_cargo", "bulk"]:
+	for id in ["fishing", "general_cargo", "bulk", "coaster"]:
 		var option := (STARTER_VESSELS[id] as Dictionary).duplicate(true)
 		option["id"] = id
 		out.append(option)

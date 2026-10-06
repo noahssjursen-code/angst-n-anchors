@@ -1,11 +1,13 @@
 class_name ImportedDraftVessel
 extends CatalogHullVessel
 
-## Draft-only assembly. Reuses the normal vessel physics/components; never commissions it.
+## Shared imported-model assembly for editor playtests, owned ships and replicas.
 var draft: Dictionary
 var part_roots: Array[Node3D] = []
 var moving_colliders: Array[Dictionary] = []
 var assembler := ImportedShipPartsEditor.new()
+var engine_visual: Node3D
+var engine_coupling: Node3D
 
 func configure(snapshot: Dictionary) -> void:
 	draft = snapshot.duplicate(true)
@@ -15,11 +17,20 @@ func configure(snapshot: Dictionary) -> void:
 	automatic_physics_lod = false
 	var hull_id := str(snapshot.get("hull", "trawler_hull_14m"))
 	assert(ImportedHullCatalog.has(hull_id))
+	_hull_id = hull_id
 	var platform: Dictionary = ImportedHullCatalog.ENTRIES[hull_id]
 	physics_profile = CatalogHullVessel.make_physics_profile(platform)
+	MarineEngineCatalog.apply(physics_profile,hull_id,str(snapshot.get("engine_preset","")))
 	physics_profile.roll_gyradius_fraction = .40
 	physics_profile.pitch_gyradius_fraction = .32
 	physics_profile.heave_damping_ratio = 1.0
+	# Explicit hydrodynamics owns resistance. Godot's default 0.1/s plus the
+	# inherited 0.05/s damping otherwise consumes ~134 kN on the 420 t coaster
+	# at only 4.1 knots, despite its measured water drag being merely ~2.3 kN.
+	linear_damp_coeff = 0.0
+	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	# Game hull-form tuning: soft displacement-speed knees, never speed caps.
+	physics_profile.wave_making_peak_coeff = {"trawler_hull_14m":.011,"hull_24x8":.007,"hull_32x10":.0065}[hull_id]
 	angular_damp_coeff = .9
 	process_physics_priority = -10
 	length_m = platform.loa_m
@@ -36,32 +47,16 @@ func configure(snapshot: Dictionary) -> void:
 	hull.name = "HullVisual"
 	ModelPaint.apply(hull, snapshot.get("hull_colors", {}))
 	add_child(hull)
-	for record: Dictionary in snapshot.get("parts", []):
-		assembler.records[assembler.slot_key(record)] = record
-	for record: Dictionary in assembler.records.values():
-		var part := assembler.create_part(record)
-		part.set_meta("asset_id", record["asset_id"])
-		add_child(part)
-		part_roots.append(part)
-	var posts := Node3D.new()
-	posts.name = "RailPosts"
-	add_child(posts)
-	for record in assembler.rail_joints():
-		posts.add_child(assembler.create_part(record))
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
 	_add_mooring_fittings(hull_id, float(ImportedHullCatalog.outline(hull_id).deck_y))
-	_configure_bulk_holds()
+	_assemble_parts()
 	(hull.get_node("DriveGear") as ShipDriveVisual).bind_local(self)
+	_install_engine()
 	var camera := get_node("BoatCamera") as BoatCamera
 	camera.follow_distance = length_m * 1.36
 	camera.follow_height = length_m * .64
 	camera.min_distance = 4.0
 	camera.look_height_offset = 3.5
-	for part in part_roots:
-		var state := part.get_node_or_null("PartState") as ShipPartState
-		if state != null and (not part.find_children("WheelPivot*", "Node3D", true, false).is_empty() or not part.find_children("ThrottlePivot*", "Node3D", true, false).is_empty()):
-			state.bind_local_helm(get_node("BoatController"))
-		_add_interactions(part, state)
 	# Dynamic hull uses a convex shape; walking uses the actual imported triangles below.
 	var hull_points := PackedVector3Array()
 	for mesh: MeshInstance3D in hull.find_children("*", "MeshInstance3D", true, false):
@@ -74,6 +69,115 @@ func configure(snapshot: Dictionary) -> void:
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	add_child(collision)
+
+func deck_grid() -> DeckGrid:
+	return ImportedHullCatalog.make_grid(_hull_id)
+
+func _install_engine() -> void:
+	if is_instance_valid(engine_visual):
+		remove_child(engine_visual)
+		engine_visual.queue_free()
+	var spec := MarineEngineCatalog.resolve(_hull_id,str(draft.get("engine_preset","")))
+	engine_visual = MarineEngineCatalog.visual(_hull_id,str(spec.id))
+	engine_visual.name = "InstalledEngine"
+	for mesh in engine_visual.find_children("*","MeshInstance3D",true,false): mesh.set_meta("walk_detail_visual",true)
+	engine_visual.position = MarineEngineCatalog.MOUNTS[_hull_id]
+	add_child(engine_visual)
+	engine_coupling = engine_visual.find_child("CouplingRotor",true,false)
+	(get_node("HullVisual/DriveGear") as ShipDriveVisual).max_rpm = float(spec.shaft_rpm)
+
+func _process(delta: float) -> void:
+	if not is_instance_valid(engine_coupling): return
+	var gear := get_node("HullVisual/DriveGear") as ShipDriveVisual
+	engine_coupling.rotation.z = wrapf(engine_coupling.rotation.z+gear.signed_rpm*TAU/60.0*delta,-PI,PI)
+
+func apply_brick_layout(layout: Dictionary) -> void:
+	if not ImportedVesselLayout.valid(layout, _hull_id): return
+	if draft == layout: return
+	# Replica hydration replaces fit-out only; hull, physics and identity survive.
+	if layout.get("engine_preset","") != draft.get("engine_preset",""):
+		var base := CatalogHullVessel.make_physics_profile(ImportedHullCatalog.ENTRIES[_hull_id])
+		MarineEngineCatalog.apply(base,_hull_id,str(layout.get("engine_preset","")))
+		for field in ["design_displacement_t","engine_mass_kg","engine_position","shaft_power_kw","bollard_thrust_n","fuel_burn_l_per_sec_full","hull_center_of_mass"]:
+			physics_profile.set(field,base.get(field))
+		var prop := get_node("PropulsionComponent") as PropulsionComponent
+		prop.shaft_power_kw = base.shaft_power_kw
+		prop.max_thrust = base.bollard_thrust_n
+		prop.fuel_burn_l_per_sec_full = base.fuel_burn_l_per_sec_full
+		_refresh_mass()
+	if is_instance_valid(_walk_deck):
+		_walk_deck.collision_layer = 0
+		_walk_deck.queue_free()
+		_walk_deck = null
+	for part in part_roots: part.free()
+	part_roots.clear()
+	moving_colliders.clear()
+	assembler.records.clear()
+	var posts := get_node_or_null("RailPosts")
+	if posts != null: posts.free()
+	draft = layout.duplicate(true)
+	_install_engine()
+	ModelPaint.apply(get_node("HullVisual"), draft.get("hull_colors", {}))
+	_assemble_parts()
+	if is_inside_tree(): call_deferred("_ensure_walk_deck")
+
+func _assemble_parts() -> void:
+	for record: Dictionary in draft.get("parts", []):
+		assembler.records[ImportedShipPartsEditor.slot_key(record)] = record
+	for record: Dictionary in assembler.records.values():
+		var part := assembler.create_part(record)
+		part.set_meta("asset_id", record["asset_id"])
+		add_child(part)
+		part_roots.append(part)
+	var posts := Node3D.new()
+	posts.name = "RailPosts"
+	add_child(posts)
+	for record in assembler.rail_joints(): posts.add_child(assembler.create_part(record))
+	_configure_bulk_holds()
+	_configure_cargo_pads()
+	for part in part_roots:
+		var state := part.get_node_or_null("PartState") as ShipPartState
+		var controller := get_node_or_null("BoatController")
+		if state != null and controller != null and (not part.find_children("WheelPivot*", "Node3D", true, false).is_empty() or not part.find_children("ThrottlePivot*", "Node3D", true, false).is_empty()):
+			state.bind_local_helm(controller)
+		_add_interactions(part, state)
+
+func _configure_cargo_pads() -> void:
+	if draft.get("hull") != "hull_24x8": return
+	for part in part_roots:
+		if part.get_meta("asset_id") in ["bulk_divider_5m", "hatch_cover_5x4"]: return
+	for part in part_roots:
+		var iso: bool = part.get_meta("asset_id") == "container_bed_20ft"
+		if not iso and part.get_meta("asset_id") != "cargo_securing_bed_4m": continue
+		if not part.basis.is_equal_approx(Basis.IDENTITY): continue
+		if iso:
+			if not (part.position.is_equal_approx(Vector3(-1.25,3.6,0)) or part.position.is_equal_approx(Vector3(1.25,3.6,0))): continue
+			var supported := false
+			for deck in part_roots:
+				if deck.get_meta("asset_id") == "cargo_deck_5x8" and deck.position.is_equal_approx(Vector3(0,3.6,0)) and deck.basis.is_equal_approx(Basis.IDENTITY): supported = true
+			if not supported: continue
+		else:
+			if not (part.position.is_equal_approx(Vector3(0,1.6,-2)) or part.position.is_equal_approx(Vector3(0,1.6,2))): continue
+			var sealed := false
+			for deck in part_roots:
+				if deck.get_meta("asset_id") == "cargo_deck_5x8": sealed = true
+			if sealed: continue
+		# Mixing old and ISO beds would overlap inventory in the same hold.
+		var mixed := false
+		for other in part_roots:
+			if other.get_meta("asset_id") == ("cargo_securing_bed_4m" if iso else "container_bed_20ft"): mixed = true
+		if mixed: continue
+		var socket := part.find_child("CargoDatum", true, false) as Node3D
+		assert(socket != null)
+		var pad := ImportedCargoPad.new()
+		pad.name = "CargoPad"
+		pad.deck_width_m = 2.5 if iso else 4.0
+		pad.deck_length_m = 6.5 if iso else 4.0
+		pad.cell_size_m = .5 if iso else 1.0
+		pad.container_footprint = Vector2i(5,13) if iso else Vector2i(4,4)
+		pad.transform = part.transform.affine_inverse() * _relative_transform(socket)
+		part.add_child(pad)
+
 
 func _add_mooring_fittings(hull_id: String, deck_y: float) -> void:
 	# Explicit inboard positions: the former length/beam fractions put bow cleats
@@ -103,6 +207,10 @@ func _configure_bulk_holds() -> void:
 		_configure_coaster_hold()
 		return
 	if draft.get("hull") != "hull_24x8": return
+	# The load deck closes the former hold opening; it cannot also expose
+	# accessible bulk storage underneath its solid structural plate.
+	for cover in part_roots:
+		if cover.get_meta("asset_id") == "cargo_deck_5x8": return
 	for part in part_roots:
 		if part.get_meta("asset_id") != "bulk_divider_5m": continue
 		# The divider must be at its authored seat; arbitrary imported records cannot

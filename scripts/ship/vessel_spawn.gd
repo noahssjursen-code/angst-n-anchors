@@ -21,6 +21,12 @@ static func instantiate(
 	registration_id: String = "",
 ) -> BoatBody:
 	var id := HullRegistry.resolve_network_hull_id(vessel_id)
+	if ImportedHullCatalog.has(id):
+		var snapshot := brick_layout if not brick_layout.is_empty() else ImportedVesselLayout.empty(id)
+		if not ImportedVesselLayout.valid(snapshot, id): return null
+		var imported := ImportedDraftVessel.new()
+		imported.configure(snapshot)
+		return imported
 	var boat := _instantiate_hull(id)
 	if boat != null:
 		_apply_fitout(
@@ -68,7 +74,7 @@ static func instantiate_from_path(
 static func instantiate_from_record(record: Dictionary) -> BoatBody:
 	var normalized := resolve_deployable_record(record)
 	if normalized.is_empty():
-		push_error("VesselSpawn: refused unregistered or noncompliant vessel record")
+		push_error("VesselSpawn: refused invalid or incomplete vessel record")
 		return null
 	var path := resolve_template_path(normalized)
 	var layout: Dictionary = brick_layout_of(normalized)
@@ -90,27 +96,13 @@ static func scene_path_for(vessel_id: String) -> String:
 
 
 static func default_brick_layout(vessel_id: String = TRAWLER_SMALL_ID) -> Dictionary:
+	if ImportedHullCatalog.has(vessel_id): return ImportedVesselLayout.empty(vessel_id)
 	## Bare deck — humans place every brick.
 	return {"hull_id": HullRegistry.resolve_network_hull_id(vessel_id), "cells": {}}
 
 
 static func default_owned_record() -> Dictionary:
-	## Free starter — small coastal trawler.
-	var uid := new_vessel_uid(TRAWLER_SMALL_ID)
-	var layout := default_brick_layout(TRAWLER_SMALL_ID)
-	for entry in PrebuiltVesselCatalog.catalog_entries():
-		if str(entry.get("prebuilt_id", "")) == "fishing_trawler":
-			layout = (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)
-			break
-	return normalize_record({
-		"uid": uid,
-		"hull_id": TRAWLER_SMALL_ID,
-		"name": "Day Trawler",
-		"display": "Day Trawler",
-		"shaft_power_kw": 1871.0,
-		"registration_id": "fishing_vessel",
-		"brick_layout": layout,
-	})
+	return CompanyService.build_starter_vessel_record("fishing")
 
 
 ## Persistent identity is random, not second-resolution time. Two commissions
@@ -171,6 +163,7 @@ static func apply_identity(boat: BoatBody, record: Dictionary) -> void:
 ## Power belongs to the finished store ship, not the reusable hull component.
 ## Scale bollard thrust with power so each hull keeps its authored cruise/thrust ratio.
 static func apply_propulsion_override(boat: BoatBody, record: Dictionary) -> void:
+	if boat is ImportedDraftVessel: return # Installed preset is the single power source.
 	if boat == null or not record.has("shaft_power_kw"):
 		return
 	var requested_kw := maxf(float(record.get("shaft_power_kw", 0.0)), 1.0)
@@ -207,11 +200,15 @@ static func normalize_record(record: Dictionary) -> Dictionary:
 		var hull := HullRegistry.get_by_id(hull_id)
 		out["shaft_power_kw"] = maxf(float(hull.get("default_shaft_power_kw", 1.0)), 1.0)
 	var registration_id := str(out.get("registration_id", "")).strip_edges()
-	out["registration_id"] = registration_id if not registration_id.is_empty() else "review_required"
+	if ImportedHullCatalog.has(hull_id):
+		var engine := MarineEngineCatalog.resolve(hull_id,str(out.brick_layout.get("engine_preset","")))
+		if not engine.is_empty(): out["shaft_power_kw"] = float(engine.power_kw)
+	out["registration_id"] = "" if ImportedHullCatalog.has(hull_id) else (registration_id if not registration_id.is_empty() else "review_required")
 	return out
 
 
 static func resolve_template_path(record: Dictionary) -> String:
+	if ImportedHullCatalog.has(str(record.get("hull_id", ""))): return ""
 	var path := str(record.get("scene_path", record.get("template_path", "")))
 	if path.ends_with(".tscn") or path.ends_with(".scn"):
 		if ResourceLoader.exists(path):
@@ -227,6 +224,11 @@ static func resolve_deployable_record(record: Dictionary) -> Dictionary:
 		return {}
 	var out := normalize_record(record)
 	var hull_id := str(out.get("hull_id", "")).strip_edges()
+	if ImportedVesselLayout.is_imported(brick_layout_of(out)) or ImportedHullCatalog.has(hull_id):
+		if not ImportedVesselLayout.valid(brick_layout_of(out), hull_id, true): return {}
+		out["scene_path"] = ""
+		out["registration_id"] = ""
+		return out
 	var path := resolve_template_path(out)
 	## Catalog hulls have no .tscn — still deployable via hull_id.
 	if path.is_empty() and not HullRegistry.is_known_hull(hull_id):

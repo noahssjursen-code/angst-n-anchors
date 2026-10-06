@@ -664,6 +664,7 @@ func _on_remote_authentication_required() -> void:
 
 
 static func _layout_has_configuration(layout: Dictionary) -> bool:
+	if ImportedVesselLayout.is_imported(layout) and layout.get("parts") is Array and not layout.parts.is_empty(): return true
 	var cells_raw: Variant = layout.get("cells", {})
 	if typeof(cells_raw) == TYPE_DICTIONARY and not (cells_raw as Dictionary).is_empty():
 		return true

@@ -52,6 +52,12 @@ func _validate_company_page() -> void:
 	var name_field := panel.get("_name_field") as LineEdit
 	_check(name_field.text == "Maren Vik Maritime", "company name is seeded from the captain")
 	_check(not (panel.get("_confirm") as Button).disabled, "company page can continue with valid defaults")
+	var args := OS.get_cmdline_user_args()
+	var capture := args.find("--capture")
+	if capture >= 0:
+		for i in 8: await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(args[capture+1])
 	panel.queue_free()
 	await get_tree().process_frame
 

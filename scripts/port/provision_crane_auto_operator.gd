@@ -204,7 +204,7 @@ func _prepare_cycle() -> void:
 		if _pickup == null or _yard_pad == null or _yard_pad.find_free_slot() < 0:
 			stop()
 			return
-		_drop_world = _yard_pad.slot_drop_world_for_free()
+		_drop_world = _yard_pad.slot_drop_world_for_free(_pickup.unit.footprint_cells(_yard_pad.cell_size_m))
 		if _drop_world == Vector3.INF:
 			stop()
 			return
@@ -245,7 +245,7 @@ func _aim_point(node: ContainerNode, raised: bool) -> Vector3:
 	if node == null or not is_instance_valid(node):
 		return _crane.get_hook_global()
 	var p := node.global_position
-	p.y += ContainerUnit.DEFAULT_HEIGHT_M * 0.5
+	p.y += node.lift_height_m()
 	if raised:
 		p.y += TRAVEL_LIFT_M
 	return p
@@ -262,6 +262,7 @@ func _hook_over(target: Vector3, radius_m: float) -> bool:
 
 func _drop_aim(raised: bool) -> Vector3:
 	var p := _drop_world
+	if is_instance_valid(_pickup): p.y += _pickup.lift_height_m() + ContainerNode.floor_offset_y()
 	if raised:
 		p.y += TRAVEL_LIFT_M
 	return p
@@ -279,11 +280,15 @@ func _find_yard_pickup(ship: BoatBody) -> ContainerNode:
 		if node is not ContainerNode:
 			continue
 		var cn := node as ContainerNode
+		if cn.unit == null: continue
 		if CargoSlotPadComponent.is_on_ship_pad(cn):
 			continue
 		if _crane.get_attached_container() == cn:
 			continue
-		if not _is_loadable_here(cn, ship):
+		var fits := false
+		for pad in ship.get_cargo_pads():
+			if pad.find_free_slot(cn.unit.footprint_cells(pad.cell_size_m)) >= 0: fits = true
+		if not fits or not _is_loadable_here(cn, ship):
 			continue
 		## Prefer cargo on this crane's yard when several berths share the scene.
 		if not yard.contains_node(cn):
@@ -358,7 +363,7 @@ func _find_ship_drop(ship: BoatBody) -> Dictionary:
 	if ship == null:
 		return {}
 	for pad in ship.get_cargo_pads():
-		var world := pad.slot_drop_world_for_free()
+		var world := pad.slot_drop_world_for_free(_pickup.unit.footprint_cells(pad.cell_size_m) if is_instance_valid(_pickup) else Vector2i.ZERO)
 		if world != Vector3.INF:
 			return {"pad": pad, "world": world}
 	return {}

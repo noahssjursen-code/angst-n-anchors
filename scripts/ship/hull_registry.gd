@@ -76,6 +76,8 @@ static func catalog() -> Array[Dictionary]:
 		FISHING_TRAWLER_SMALL.duplicate(true),
 		PASSENGER_CATAMARAN.duplicate(true),
 	]
+	for hull_id in ImportedHullCatalog.ENTRIES:
+		entries.append(get_by_id(hull_id))
 	for entry in HullCatalog.catalog_entries():
 		entries.append(entry)
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -90,6 +92,10 @@ static func catalog() -> Array[Dictionary]:
 
 static func get_by_id(hull_id: String) -> Dictionary:
 	var id := resolve_network_hull_id(hull_id)
+	if ImportedHullCatalog.has(id):
+		var entry: Dictionary = ImportedHullCatalog.ENTRIES[id].duplicate(true)
+		entry.merge({"id": id, "display": entry.label, "scene_path": "", "ship_class": ShipClass.Type.SHORT_SEA_COASTER if id == "hull_32x10" else ShipClass.Type.COASTAL_TRADER})
+		return entry
 	if HullCatalog.has_id(id):
 		return HullCatalog.get_by_id(id)
 	match id:
@@ -120,7 +126,7 @@ static func resolve_network_hull_id(hull_id: String) -> String:
 	var id := hull_id.strip_edges()
 	if id.is_empty():
 		return "hull_28x10"
-	if HullCatalog.has_id(id):
+	if ImportedHullCatalog.has(id) or HullCatalog.has_id(id):
 		return id
 	if id == "hull_28x10" or id == "hull_45x16_cat":
 		return id
@@ -142,13 +148,15 @@ static func scene_path_for(hull_id: String) -> String:
 
 static func is_known_hull(hull_id: String) -> bool:
 	var id := resolve_network_hull_id(hull_id)
-	if HullCatalog.has_id(id):
+	if ImportedHullCatalog.has(id) or HullCatalog.has_id(id):
 		return true
 	return id == "hull_28x10" or id == "hull_45x16_cat"
 
 
 static func make_grid(hull_id: String) -> DeckGrid:
 	var id := resolve_network_hull_id(hull_id)
+	if ImportedHullCatalog.has(id):
+		return ImportedHullCatalog.make_grid(id)
 	if HullCatalog.has_id(id):
 		return _CATALOG_HULL_SCRIPT.make_grid(id)
 	match id:
@@ -162,6 +170,10 @@ static func make_grid(hull_id: String) -> DeckGrid:
 
 static func build_hull(hull_id: String) -> BoatBody:
 	var id := resolve_network_hull_id(hull_id)
+	if ImportedHullCatalog.has(id):
+		var boat := ImportedDraftVessel.new()
+		boat.configure(ImportedVesselLayout.empty(id))
+		return boat
 	if HullCatalog.has_id(id):
 		return _CATALOG_HULL_SCRIPT.build(id) as BoatBody
 	match id:
@@ -182,7 +194,10 @@ static func has_capability(_hull_id: String, _capability: String) -> bool:
 static func record_has_capability(record: Dictionary, capability: String) -> bool:
 	var cap := capability.strip_edges()
 	var hull_id := str(record.get("hull_id", "fishing_trawler_small"))
-	var layout := BrickLayout.from_dict(VesselSpawn.brick_layout_of(record))
+	var raw := VesselSpawn.brick_layout_of(record)
+	if ImportedVesselLayout.is_imported(raw):
+		return ImportedVesselLayout.has_capability(raw, cap)
+	var layout := BrickLayout.from_dict(raw)
 	var report := BrickRules.validate(layout, make_grid(hull_id))
 	var caps: Dictionary = report.get("capabilities", {})
 	match cap:

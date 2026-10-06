@@ -454,7 +454,10 @@ func _complete_one_haul_crate() -> bool:
 		"vessel_id": vessel_id,
 		"owner_id": str(_body.get_meta("owner_player_id", "")),
 	})
-	var overflow := hold.accept_lot(lot)
+	var overflow := lot
+	for tank in CatchHoldComponent.get_all_for_ship(_body):
+		overflow = tank.accept_lot(overflow)
+		if overflow.is_empty(): break
 	if not overflow.is_empty():
 		_notify_trawl("Catch hold full - return to a fish landing")
 		return false
@@ -463,8 +466,8 @@ func _complete_one_haul_crate() -> bool:
 		var tier_label := str(zone.get("tier_label", "")) if not zone.is_empty() else ""
 		if tier_label.is_empty() or tier_label == "Normal":
 			_notify_trawl("Catch aboard - %.1f / %.1f t" % [
-				hold.state.total_mass_kg() / 1000.0,
-				hold.state.capacity_kg / 1000.0,
+				catch_totals().mass_kg / 1000.0,
+				catch_totals().capacity_kg / 1000.0,
 			])
 		else:
 			_notify_trawl("%s grounds - catch aboard" % tier_label)
@@ -485,7 +488,10 @@ func get_activity_status() -> String:
 
 
 func _catch_hold() -> CatchHoldComponent:
-	return CatchHoldComponent.first_for_ship(_body)
+	var holds := CatchHoldComponent.get_all_for_ship(_body)
+	for hold in holds:
+		if hold.state.available_kg() > CatchLot.MASS_EPS_KG: return hold
+	return holds[0] if not holds.is_empty() else null
 
 
 ## External trawl control (e.g. autonomous NPC sim).
@@ -618,3 +624,11 @@ func _update_rope_mesh_between(start_global: Vector3, end_global: Vector3) -> vo
 	_rope_mesh.basis = Basis(x_axis, dir, z_axis)
 	_rope_mesh.scale = Vector3(1.0, length, 1.0)
 	_rope_mesh.position = start + span * 0.5
+
+
+func catch_totals() -> Dictionary:
+	var result := {"mass_kg":0.0, "capacity_kg":0.0}
+	for hold in CatchHoldComponent.get_all_for_ship(_body):
+		result.mass_kg += hold.state.total_mass_kg()
+		result.capacity_kg += hold.state.capacity_kg
+	return result

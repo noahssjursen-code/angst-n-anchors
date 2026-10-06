@@ -69,7 +69,6 @@ var _talje_rail_y := -0.78
 var _attached_container: ContainerNode = null
 var _space_held := false
 const GRAB_RADIUS_M := 5.0
-const HOOK_ATTACH_Y_M := -ContainerNode.HEIGHT_M * 0.55
 
 
 func _ready() -> void:
@@ -326,7 +325,7 @@ func try_attach_nearest_container() -> bool:
 		var cn := node as ContainerNode
 		if cn == _attached_container:
 			continue
-		var d := hook_pos.distance_to(cn.global_position)
+		var d := hook_pos.distance_to(cn.to_global(Vector3(0,cn.lift_height_m(),0)))
 		if d < best_d:
 			best_d = d
 			best = cn
@@ -345,7 +344,7 @@ func attach_container(node: ContainerNode) -> bool:
 		pad.take_container_node(node)
 	var parent := _hook if _hook != null else self
 	node.reparent(parent, true)
-	node.position = Vector3(0.0, HOOK_ATTACH_Y_M, 0.0)
+	node.position = Vector3(0.0, -node.lift_height_m(), 0.0)
 	node.rotation = Vector3.ZERO
 	_attached_container = node
 	node.notify_grabbed()
@@ -543,7 +542,7 @@ func _tick_attached_container() -> void:
 		_attached_container = null
 		return
 	## Keep snug under hook while slewing / trolleying / hoisting.
-	_attached_container.position = Vector3(0.0, HOOK_ATTACH_Y_M, 0.0)
+	_attached_container.position = Vector3(0.0, -_attached_container.lift_height_m(), 0.0)
 	_attached_container.rotation = Vector3.ZERO
 
 

@@ -11,6 +11,10 @@ static func active() -> bool:
 	if OS.get_cmdline_user_args().has(FLAG):
 		return true
 	for arg in OS.get_cmdline_args():
+		if arg.replace("\\", "/").ends_with("scenes/showcases/container_showcase.tscn") or arg.replace("\\", "/").ends_with("scenes/showcases/marine_engine_showcase.tscn"):
+			return true
+		if arg.replace("\\", "/").ends_with("scenes/showcases/starter_fleet_showcase.tscn"):
+			return true
 		if arg.replace("\\", "/").ends_with("scenes/showcases/marine_lighting_showcase.tscn"):
 			return true
 		if arg.replace("\\", "/").ends_with("scenes/showcases/coaster_kit_showcase.tscn"):
