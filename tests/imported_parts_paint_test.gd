@@ -11,7 +11,17 @@ func _material(root: Node, prefix: String) -> StandardMaterial3D:
 
 
 func _ready() -> void:
-	assert(BrickCatalog.ids().size() == 14)
+	assert(ShipyardPlaytestMode.active(), "Run with -- --shipyard-playtest")
+	# Fail a stalled assertion run instead of leaving a live editor indefinitely.
+	get_tree().create_timer(90).timeout.connect(func(): get_tree().quit(1))
+	var palette := BrickCatalog.ids()
+	for required in ["rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight"]:
+		assert(palette.has(required), "Missing builder family: " + required)
+	var unique := {}
+	for id in palette:
+		assert(not unique.has(id), "Duplicate palette family: " + id)
+		assert(BrickCatalog.has(id), "Palette family must resolve an imported model: " + id)
+		unique[id] = true
 	assert(not BrickCatalog.has("block"))
 	var editor := ShipyardBrickEditor.new()
 	editor.standalone_tool = true
@@ -20,22 +30,9 @@ func _ready() -> void:
 		await get_tree().process_frame
 	var parts := editor.get("_imported_parts_editor") as ImportedShipPartsEditor
 	assert(parts != null)
-	assert(editor.find_child("PartsGrid", true, false).get_child_count() == 14)
+	assert(editor.find_child("PartsGrid", true, false).get_child_count() == palette.size())
 	var camera := editor.get("_camera") as Camera3D
 	var recipe: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/parts/trawler_rails/halfwall_rising_assembly.json"))
-	# Every hull segment resolves its exact asset from only two family choices.
-	for style in ["rail", "halfwall"]:
-		editor.call("_select_brick", style + "_straight_100cm")
-		for rising in [false, true]:
-			parts.rising_bow.button_pressed = rising
-			var variant: String = style + ("_rising" if rising else "_flat")
-			for expected in parts.recipes[variant]:
-				if BrickCatalog.get_entry(expected["asset_id"])["kind"] != "panel":
-					continue
-				var target: Vector3 = (parts._position(expected) + parts._end(expected)) * 0.5
-				var actual := parts.candidate_at(camera.unproject_position(target))
-				assert(actual.get("asset_id", "") == expected["asset_id"], "Automatic edge variant: " + str(expected["asset_id"]))
-				assert(parts.slot_key(actual) == parts.slot_key(expected))
 	# Every hull segment resolves its exact asset from only two family choices.
 	for style in ["rail", "halfwall"]:
 		editor.call("_select_brick", style + "_straight_100cm")
@@ -92,9 +89,7 @@ func _ready() -> void:
 	parts.save_draft("user://imported_parts_paint_test.json")
 	parts.records.clear()
 	parts.rising_bow.button_pressed = false
-	parts.rising_bow.button_pressed = false
 	parts.load_draft("user://imported_parts_paint_test.json")
-	assert(parts.placement_rising)
 	assert(parts.placement_rising)
 	assert(JSON.stringify(parts.records) == snapshot)
 	assert(JSON.stringify(parts.hull_colors) == colors)
@@ -225,7 +220,11 @@ func _ready() -> void:
 	for i in range(12):
 		await get_tree().process_frame
 	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png("C:/Users/noahs/Documents/Codex/2026-10-05/referenced-chatgpt-conversation-this-is-an/outputs/trawler-rails/parts-library-paint.png")
+	var capture_dir := "C:/Users/noahs/Pictures/machinescreenshots"
+	DirAccess.make_dir_recursive_absolute(capture_dir)
+	var capture_path := capture_dir.path_join("parts-library-paint-" + str(Time.get_unix_time_from_system()).replace(".", "-") + ".png")
+	assert(get_viewport().get_texture().get_image().save_png(capture_path) == OK)
+	print("CAPTURE ", capture_path)
 	print("PASS: two families resolve all 148 perimeter choices; library placement, independent wall/cap and hull paint, erase, and draft round-trip")
 	editor.queue_free()
 	for i in range(4):
