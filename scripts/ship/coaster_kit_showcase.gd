@@ -87,7 +87,7 @@ func _ready() -> void:
 	assert(_panel_color(covers[1]).is_equal_approx(original_tint),"Repaint must not change another cover")
 	ModelPaint.apply(covers[0],{"wall":original_tint})
 	var drive := boat.get_node("HullVisual/DriveGear") as ShipDriveVisual
-	assert(drive.propeller.position.z > 15)
+	assert(is_equal_approx(drive.propeller.position.z,14.9))
 	assert(drive.apply_snapshot({"throttle":.5,"steering":.7,"powered":true},1))
 	drive.local_boat = null
 	var angle := drive.propeller.rotation.z

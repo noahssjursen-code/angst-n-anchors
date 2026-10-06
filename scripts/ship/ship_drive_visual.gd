@@ -18,7 +18,8 @@ func _init(mount_file: String = "mounts_14m.json") -> void:
 	max_rpm = float(mounts["visual_max_rpm"])
 	max_rudder_degrees = float(mounts["max_rudder_degrees"])
 	for spec in [["support", "transom_shaft_support"], ["propeller", "propeller_1040"], ["rudder", "rudder_0950"]]:
-		var item := (load(DIRECTORY + spec[1] + ".glb") as PackedScene).instantiate() as Node3D
+		var asset: String = mounts.get("assets", {}).get(spec[0], spec[1])
+		var item := (load(DIRECTORY + asset + ".glb") as PackedScene).instantiate() as Node3D
 		item.name = spec[0]
 		var p: Array = mounts[spec[0]]
 		item.position = Vector3(p[0], p[1], p[2])

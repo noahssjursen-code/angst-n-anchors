@@ -2,22 +2,27 @@
   "version": 1,
   "hull": "hull_32x10",
   "units": "metres",
+  "assets": {
+    "support": "coaster_shaft_support",
+    "propeller": "propeller_1800",
+    "rudder": "rudder_2100"
+  },
   "support": [
     0,
-    1.2,
-    15.0
+    1.4,
+    14.15
   ],
   "propeller": [
     0,
-    1.2,
-    15.48
+    1.4,
+    14.9
   ],
   "rudder": [
     0,
-    1.85,
-    16.03
+    2.65,
+    15.85
   ],
   "max_rudder_degrees": 28,
-  "visual_max_rpm": 240,
-  "note": "32 m raked stern installation, explicit metre coordinates. Shared hardware sizing remains provisional."
+  "visual_max_rpm": 180,
+  "note": "Raised-counter shaft line, 1.8 m screw, 2.1 m spade. Original game geometry; hydrodynamic sizing provisional. Force points unchanged."
 }

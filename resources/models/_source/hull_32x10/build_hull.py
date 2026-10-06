@@ -41,7 +41,8 @@ vertices=[]
 for y in ys:
     fore=max(0,(y-6)/10)
     aft=max(0,(-y-10)/6)
-    bottom=.16+1.05*fore**2+.38*aft**2
+    # Raised counter leaves a true shaft/propeller aperture below the aft hull.
+    bottom=.16+1.05*fore**2+2.8*aft**2
     for x,h in cross:
         # Lower stern withdraws 2.4 m, making space for shaft and rudder.
         yy=y+2.4*aft**2*(1-h)**1.5
@@ -50,7 +51,11 @@ k=len(cross);faces=[]
 for i in range(len(ys)-1):
     for j in range(k-1):
         a=i*k+j;faces.append((a,a+1,a+k+1,a+k))
-faces += [tuple(range(k-1,-1,-1)),tuple((len(ys)-1)*k+j for j in range(k))]
+# Close the non-planar raised transom in horizontal strips. One large n-gon
+# triangulates diagonally across the curved counter and creates shading creases.
+for j in range(k//2):
+    face=(j,k-1-j,k-2-j,j+1)
+    faces.append(tuple(dict.fromkeys(face)))
 shell=mesh('Coastal formed shell',vertices,faces,upper)
 bm=bmesh.new();bm.from_mesh(shell.data)
 for z in [2.55,2.68]:

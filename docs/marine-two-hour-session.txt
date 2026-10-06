@@ -58,3 +58,11 @@ spill and flood energy. Actual night/close/off/coaster/day captures inspected.
 All four builder drafts save/reload; cleaning fixture shutdown before commit.
 Next refinement is the 32 m stern gear, which still uses the undersized prototype.
 Lighting validation complete: four draft checks clean. Headless thumbnail jobs now skip render waits (the source of 24 leaked environments). Night/day/close renders accepted for this pass; nav sector optics remain approximate.
+
+17:12 Dedicated 32 m stern batch: raised underwater counter; separately authored
+1.8 m screw, 2.1 m spade, shaft bearing/hanger/trunk. Fixed non-planar transom
+closure after close visual review. Local/remote state, dry fuel, reload, sampled
+hull clearance and full rotation/steering extent checks pass. Actual 32 m ocean
+playtest passes with normal HUD, helm/seats/door/walking/drive/reset. Original
+14 m stern gear regression passes. Hydrodynamic sizing remains provisional.
+Next: trawler gantry and deployed fishing gear, replacing the translucent cone.

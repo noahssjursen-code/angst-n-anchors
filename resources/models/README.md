@@ -753,8 +753,7 @@ comes from the asset manifest as well as the existing structural families.
 all covers are independently selected, erased, painted and saved. It adds no
 operational inventory or powered hatch mechanism. Provisional handling is 420 t,
 2.6 m draft, 1100 kW and 4500 l fuel using the existing physics components.
-Mooring positions now belong to each platform descriptor. Stern gear is still
-prototype shared hardware, installed at explicit positions behind the raked hull.
+Mooring positions now belong to each platform descriptor. Stern gear now uses the dedicated raised-counter installation described below.
 Owned-fleet commissioning and multiplayer transport remain separate work.
 
 `coaster_kit_showcase.tscn` checks dimensions, actual tank-top/walkway ray hits,
@@ -802,3 +801,34 @@ All four actual builder save/load fixtures verify these newly populated drafts.
 Primary visual reference: Hella Sea Hawk XLR mounting diagram, finned housing and
 U-yoke (original game geometry and stand, not manufacturer dimensions):
 https://www.hellamarine.com/wp-content/uploads/2024/01/980_740-001_980_740-011_980_740-201_980_740-211_Sea_Hawk-XLR_Diagram_Web.pdf
+
+
+### Dedicated 32 m stern installation
+
+The 32 m shell now raises its underwater counter to 2.96 m at the stern, leaving
+an aperture under the aft deck. End closure is built from horizontal strips,
+not one non-planar n-gon. The exact deck outline, hatch opening and grid are
+unchanged. Broad hydrostatic station/handling profiles remain provisional and
+are not derived from the revised mesh volume.
+
+build_coaster_gear.py produces three separate Blender/GLB assets: propeller_1800
+(four cambered/skewed bronze blades, tapered hub/cap), rudder_2100 (2.1 m tapered
+balanced foil, stock and anodes), coaster_shaft_support (stern tube, hanger,
+bearing/seal/fasteners and rudder trunk). mounts_32m.json owns optional asset IDs
+and exact metre coordinates; example-layout generators must not overwrite it.
+14/24 m mounts retain the prior assets. Shaft local Z rotates; stock local Y turns.
+Visuals only consume existing propulsion/fuel/rudder or sequenced external state.
+They never relocate or augment physics force points.
+
+stern_gear_showcase.tscn -- --coaster --capture <png> checks forward/reverse/stop,
+dry fuel, stale/invalid snapshots, reload, full propeller Z extent at 15-degree
+steps and rudder clearance at 2-degree steps. Sampled actual blade vertices are
+ray-checked beneath the real raised counter; this is sampled geometric clearance,
+not a continuous collision or hydrodynamic validation. Close/side/reverse Godot
+renders inspected. Existing 14 m gear checks and 32 m ocean drive/helm/door/reset
+checks pass. Moving gear remains excluded from walking collision.
+
+Primary visual reference inspected: Becker Rudder Systems page 2 (full spade
+placement, stock-to-hull relationship and foil proportions). Original symmetric
+game foil, not Becker's proprietary flap/twist profile:
+https://becker-marine-systems.com/fileadmin/redakteure/bilder/Company/Media/Downloads/Product_brochures/becker-rudder-systems.pdf

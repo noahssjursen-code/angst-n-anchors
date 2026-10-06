@@ -18,8 +18,5 @@ for z in [-4.5,-1.5,1.5,4.5]:
 draft.update(hull='hull_32x10',parts=parts,rising_bow=False,active_floor=0,cell_offset=0)
 draft['hull_colors']={'upper':[.085,.18,.27],'lower':[.29,.07,.045],'deck':[.32,.36,.35]}
 (ROOT/'examples/coastal_32m_draft.json').write_text(json.dumps(draft,indent=2))
-mounts=json.loads((ROOT/'parts/stern_gear/mounts_24m.json').read_text())
-mounts.update(hull='hull_32x10',support=[0,1.2,15.0],propeller=[0,1.2,15.48],rudder=[0,1.85,16.03])
-mounts['note']='32 m raked stern installation, explicit metre coordinates. Shared hardware sizing remains provisional.'
-(ROOT/'parts/stern_gear/mounts_32m.json').write_text(json.dumps(mounts,indent=2))
+# Stern kit generator owns mounts_32m.json; do not overwrite its authored sockets.
 print('COASTER_EXAMPLE',len(parts),'individual placements')
