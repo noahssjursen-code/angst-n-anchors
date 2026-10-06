@@ -200,3 +200,27 @@ inventory, cover removal only in builder, no powered hatch operation or producti
 fleet commissioning. Shared hull with distinct compartment arrangement, not a new
 larger bulk hull. NEXT: package 6 individual Blender crane/port hardware, then
 lighting, trawler shared-equipment followups and morning handoff by 08:00 Oslo.
+
+6 October, sixth scheduled batch: package 6 crane slice implemented.
+Nine separate Blender/GLB assets replace BulkCrane's default presentation:
+pedestal, cabin/machinery, lattice boom, luff barrel/rod, wire, grab head/two jaws.
+Preserved existing 30 m reach, control limits, lot transfer, auto operator and
+explicit alternate JSON model path. Layer-1 body obstacles remain; no new moving
+boom/grab physics. Corrected crane NPC's infinite deferred legacy-rig retry by
+playing the current Blender rig's seated animation; authored seat used once.
+Liebherr CBG360 primary PDF page 2 visually inspected using Poppler after the web
+screenshot did not expose pixels. Original game-scale design, not a CBG replica.
+Actual Godot renders caught reversed jaw opening and missing fixed cylinder
+support; corrected both, added welded pan end cheeks and transparent cab windows.
+Checks: jaw seam and actual pickup mouth at scales .7/1/1.5; outward opening;
+30 m outreach; slew/luff; vertical cable endpoint; cylinder endpoints at 8/32/72deg;
+seated NPC; existing bulk auto load 12 -> 21.8 t, covered aft stays empty, cargo
+mass and manual withdraw/falling-lot return conservation. Both rendered scenes
+exit cleanly without previous crane mesh/RID warnings. No complete-world test.
+Captures: outputs/marine/crane.png, crane-closed.png, crane-open.png, crane-cabin.png,
+bulk-blender-crane-loading.png; logs work/crane-*.log and bulk-blender-crane.log.
+Limits: inherited provisional grab capacity/reach, simplified cable reeving, no
+crane sway or moving-part collision, no ProvisionCrane migration. Port fittings,
+fish unloading artwork, mooring hardware, lights and trawler net/gantry remain.
+NEXT: continue package 6 fittings attached to existing rope/pump systems, then
+package 7 lighting and final handoff. Do not treat all overnight work as complete.

@@ -1,5 +1,51 @@
 # Imported 3D models
 
+## Harbour bulk crane (6 October 2026)
+
+`_source/crane_kit/build_crane.py` produces nine independent editable Blender/GLB
+pairs in `parts/crane_kit`: pedestal, slewing cabin/machinery, 30 m lattice boom,
+luff-cylinder barrel and rod, paired 10 m rest hoist ropes, grab head and two jaws.
+Paint and fixed glass, steel, rope and piston materials remain distinct. These
+are internal equipment components, not nine new shipyard palette choices.
+
+BulkCrane's existing default model identifier now selects BlenderBulkCraneRig.
+Explicit alternate JSON model paths retain the existing ModelAssembler route;
+ProvisionCrane and other unmigrated cranes are unchanged. No model identifier,
+save schema, authority, slew/hoist control, cargo job or mass logic is replaced.
+The current game pivots remain: slew Y at 2.29 m, boom hinge (-1.75,3.7,-.25)
+relative to cabin, 30 m local -Z outreach, cable vertically below the tip.
+The luff piston follows the actual boom attachment across its 8–72 degree range.
+This is a game presentation with inherited reach/capacity, not a manufacturer
+replica or validated engineering/reeving design. Detailed winch routing, sway,
+collision/damage on moving boom/grab and full service access remain unfinished.
+
+Only the single origin-centred cable mesh stretches with hoist length. The bucket
+root stays unscaled and vertical; GrabScale scales the imported head, jaw pivots
+and jaws once. Jaw pivots are 1 m below the hook; closed CuttingLip sockets meet
+1.6 m below it, matching the existing gameplay pickup point. Right jaw opens
+toward local +Z and left toward -Z. Preserve those signs and the authored inverse
+6-degree closed-pose correction. Tests check outward movement as well as distance:
+separation alone would also pass jaws incorrectly rotating through each other.
+Update Blender's dependency graph before rotating newly created socket matrices.
+
+Pedestal and slewing cabin/machinery retain solid collision proxies on layer 1.
+Do not infer a walkable crane interior from the visible cabin. The seated NPC now
+plays the shared character rig's `seated` clip; it no longer retries access to the
+deleted character ModelAssembler. The authored seat avoids a duplicate primitive.
+
+`scenes/showcases/crane_kit_showcase.tscn` isolates saves/network and checks scaled
+jaw closure/pickup location, outward opening, cable attachment, boom reach, luff
+cylinder endpoints and seated operator. Arrows slew/luff, PgUp/PgDn hoist, Space
+opens/closes. `-- --capture <absolute.png>` writes whole/closed/open/cabin views.
+The bulk kit's actual auto-load cycle also runs through this imported default rig;
+both rendered scenes now exit without the old crane mesh/RID cleanup warnings.
+
+Primary visual reference inspected: Liebherr CBG 360 general arrangement, page 2,
+https://www.liebherr.com/shared/media/maritime-cranes/downloads-and-brochures/fts/fts_downloads_brochures/liebherr-sc-fts-cbg-360-datasheet.pdf
+Its column, separate machinery enclosure, extended cab, service platform and
+grab arrangement inform component separation; its dimensions/ratings are not
+applied to the game's pre-existing lattice-boom crane.
+
 ## Fishing equipment and editable trawler example (6 October 2026)
 
 Open `resources/models/examples/coastal_trawler_draft.json` through the builder's

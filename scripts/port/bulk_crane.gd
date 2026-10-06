@@ -5,6 +5,7 @@ extends Node3D
 
 const DEFAULT_MODEL := "res://resources/data/models/dockyard/bulk_crane.json"
 const ASSEMBLER_SCRIPT := preload("res://scripts/core/model_assembler.gd")
+const IMPORTED_RIG := preload("res://scripts/port/blender_bulk_crane_rig.gd")
 
 ## Per-shell jaw angles (degrees X). Open = spread; closed = lips meet.
 const RIGHT_CLOSED_DEG := 6.0
@@ -112,6 +113,12 @@ func reload_model() -> void:
 	if _assembler != null and is_instance_valid(_assembler):
 		_assembler.queue_free()
 		_assembler = null
+	if model_path == DEFAULT_MODEL:
+		_assembler = IMPORTED_RIG.new()
+		_assembler.name = "Model"
+		add_child(_assembler)
+		call_deferred("_bind_rig")
+		return
 	if model_path.is_empty() or not ResourceLoader.exists(model_path):
 		push_warning("BulkCrane: missing model %s" % model_path)
 		return
@@ -189,7 +196,8 @@ func _rig_hoist_parts() -> void:
 		_wire_mesh_base_scale = _wire_mesh.scale
 	if _bucket != null and is_instance_valid(_bucket):
 		## Bucket must not inherit wire scale — only the cable mesh stretches.
-		_bucket.reparent(_boom, false)
+		if _bucket.get_parent() != _boom:
+			_bucket.reparent(_boom, false)
 		call_deferred("_bind_shells")
 
 
@@ -285,20 +293,8 @@ func _add_seat() -> void:
 func _pose_operator_seated() -> void:
 	if _operator == null or not is_instance_valid(_operator):
 		return
-	if _operator.assembler == null:
-		call_deferred("_pose_operator_seated")
-		return
-	_set_part_rotation(_operator, "leg_left", Vector3(78.0, 0.0, 0.0))
-	_set_part_rotation(_operator, "leg_right", Vector3(78.0, 0.0, 0.0))
-	_set_part_rotation(_operator, "arm_left", Vector3(40.0, 0.0, 12.0))
-	_set_part_rotation(_operator, "arm_right", Vector3(40.0, 0.0, -12.0))
-
-
-func _set_part_rotation(npc: NpcBase, part_name: String, degrees: Vector3) -> void:
-	var part := npc.assembler.get_part(part_name) as Node3D
-	if part == null:
-		return
-	part.rotation_degrees = degrees
+	if _operator.animator != null:
+		_operator.animator.set_preview_motion(&"seated")
 
 
 func _part(name_or_role: String) -> Node3D:
@@ -328,6 +324,8 @@ func _apply_boom() -> void:
 	var r := _boom.rotation_degrees
 	r.x = boom_angle_deg
 	_boom.rotation_degrees = r
+	if _assembler is BlenderBulkCraneRig:
+		(_assembler as BlenderBulkCraneRig).update_luff_cylinder()
 	if _wire != null and is_instance_valid(_wire):
 		var wr := _wire.rotation_degrees
 		wr.x = -boom_angle_deg
@@ -388,6 +386,8 @@ func _apply_bucket_scale() -> void:
 	_bucket.scale = Vector3.ONE
 	if _bucket is ModelAssembler:
 		(_bucket as ModelAssembler).absolute_scale = bucket_scale
+	elif _assembler is BlenderBulkCraneRig:
+		(_assembler as BlenderBulkCraneRig).set_grab_scale(bucket_scale)
 	call_deferred("_bind_shells")
 
 
