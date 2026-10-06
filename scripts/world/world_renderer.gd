@@ -770,18 +770,18 @@ func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: 
 	var top_col := (
 		Color(0.006, 0.009, 0.028)
 		.lerp(Color(0.055, 0.20, 0.48), daylight)
-		.lerp(Color(0.075, 0.095, 0.13), cloud)
+		.lerp(Color(0.010, 0.014, 0.024).lerp(Color(0.075, 0.095, 0.13), daylight), cloud)
 	)
 	var horiz := (
 		Color(0.018, 0.016, 0.028)
 		.lerp(Color(0.28, 0.43, 0.62), daylight)
-		.lerp(Color(0.20, 0.24, 0.29), cloud)
+		.lerp(Color(0.025, 0.030, 0.045).lerp(Color(0.20, 0.24, 0.29), daylight), cloud)
 		.lerp(Color(0.72, 0.31, 0.16), low_sun * lerpf(0.90, 0.28, cloud))
 	)
 	var zenith_deep := (
 		Color(0.001, 0.004, 0.022)
 		.lerp(Color(0.015, 0.08, 0.38), daylight)
-		.lerp(Color(0.05, 0.065, 0.09), storm)
+		.lerp(Color(0.004, 0.008, 0.016).lerp(Color(0.05, 0.065, 0.09), daylight), storm)
 	)
 	var ground_c := (
 		Color(0.025, 0.028, 0.04)

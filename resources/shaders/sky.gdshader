@@ -13,13 +13,14 @@ uniform float sky_zenith_mix   : hint_range(0.0, 1.0) = 0.38;
 
 // --- Sun disk (world-space direction TO the sun, passed from GDScript each frame) ---
 uniform vec3  sun_direction = vec3(0.0, 1.0, 0.0);
-uniform float sun_size      : hint_range(0.0, 0.02) = 0.0008;
+// Angular radius in radians (about half a degree across).
+uniform float sun_size      : hint_range(0.001, 0.02) = 0.00465;
 uniform float sun_bloom     : hint_range(0.0, 5.0) = 1.8;
 uniform vec3  sun_color     : source_color          = vec3(1.0, 0.94, 0.82);
 
 // --- Moon disk (world-space direction TO the moon, passed from GDScript each frame) ---
 uniform vec3  moon_direction = vec3(0.0, -1.0, 0.0);
-uniform float moon_size      : hint_range(0.0, 0.1) = 0.004;
+uniform float moon_size      : hint_range(0.001, 0.02) = 0.0045;
 uniform vec3  moon_color     : source_color          = vec3(0.82, 0.86, 0.96);
 
 // --- Cloud layer ---
@@ -171,8 +172,10 @@ vec3 sun_contribution(vec3 dir) {
 	float cos_angle = dot(dir, sun_direction);
 	// Antialiased HDR core. Environment glow now owns bloom; the sky shader
 	// provides a controlled source instead of a clipped white step.
-	float disk_edge = max(sun_size * 0.18, 0.00008);
-	float disk   = smoothstep(1.0 - sun_size - disk_edge, 1.0 - sun_size + disk_edge, cos_angle) * 8.0;
+	float disk_edge = 0.0003;
+	float separation = length(dir - sun_direction);
+	float radius = 2.0 * sin(sun_size * 0.5);
+	float disk = (1.0 - smoothstep(radius - disk_edge, radius + disk_edge, separation)) * 8.0;
 	float corona = pow(max(cos_angle, 0.0), 512.0) * sun_bloom * 1.8;
 	// Wide atmospheric glow keeps the sun findable without whitening the dome.
 	float glow   = pow(max(cos_angle, 0.0), 8.0) * sun_bloom * 0.15;
@@ -185,15 +188,17 @@ vec3 sun_contribution(vec3 dir) {
 
 
 // ---------------------------------------------------------------------------
-// Moon — cool silver disk, no wide haze (moon doesn't scatter atmosphere)
+// Moon — finite angular disk with restrained atmospheric corona.
 // ---------------------------------------------------------------------------
 
 vec3 moon_contribution(vec3 dir) {
 	float cos_angle = dot(dir, moon_direction);
 	// Disk — visually present but not bright enough to bathe the scene in light.
-	float disk   = step(1.0 - moon_size, cos_angle) * 0.65;
+	float separation = length(dir - moon_direction);
+	float radius = 2.0 * sin(moon_size * 0.5);
+	float disk = (1.0 - smoothstep(radius - 0.0003, radius + 0.0003, separation)) * 0.65;
 	// Very faint soft corona
-	float corona = pow(max(cos_angle, 0.0), 256.0) * 0.18;
+	float corona = pow(max(cos_angle, 0.0), 4096.0) * 0.025;
 	// Fade out when moon is below the horizon
 	float elev_fade = smoothstep(-0.08, 0.04, moon_direction.y);
 	return moon_color * (disk + corona) * elev_fade;

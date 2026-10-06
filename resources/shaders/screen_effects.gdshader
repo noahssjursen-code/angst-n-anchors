@@ -91,7 +91,9 @@ void fragment() {
 	// Animated film grain (24fps discrete steps so it doesn't shimmer)
 	vec2 grain_uv = floor(uv / (px * grain_size)) * (px * grain_size);
 	float grain   = rand(grain_uv + vec2(floor(TIME * 24.0) * 0.01, 0.0));
-	color.rgb    += (grain - 0.5) * grain_strength * (1.0 - underwater_mask);
+	// Grain must not overwhelm the faint light on asphalt and dark paint.
+	float grain_visibility = clamp(luma(color.rgb) * 12.0, 0.0, 1.0);
+	color.rgb += (grain - 0.5) * grain_strength * grain_visibility * (1.0 - underwater_mask);
 
 	// Weather grade is intentionally restrained: preserve paint identity while
 	// making storms cooler and less saturated.
@@ -106,7 +108,9 @@ void fragment() {
 	float highlight_weight = smoothstep(0.42, 0.92, grey);
 	color.rgb *= mix(vec3(1.0), vec3(0.92, 0.98, 1.08), shadow_weight * shadow_coolness);
 	color.rgb *= mix(vec3(1.0), vec3(1.06, 1.015, 0.94), highlight_weight * highlight_warmth);
-	color.rgb = (color.rgb - vec3(0.5)) * (1.0 + weather_contrast) + vec3(0.5);
+	// Bounded S-curve preserves black and faint nonzero illumination. The old
+	// midpoint contrast subtracted a fixed black offset, crushing night detail.
+	color.rgb = mix(color.rgb, smoothstep(vec3(0.0), vec3(1.0), color.rgb), weather_contrast * 2.0);
 	color.rgb = max(color.rgb, vec3(0.0));
 
 	// Underwater grade: dark green absorption. Real low-range visibility is

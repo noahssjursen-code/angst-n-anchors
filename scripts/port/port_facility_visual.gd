@@ -160,6 +160,13 @@ static func office(root: Node3D,size: Vector2) -> void:
 	for side in [-1,1]:
 		var light := KIT.model(root,"quay_light",Vector3(side*(size.x*.5-2),0,-size.y*.5+2),PI)
 		KIT.solid(light,Vector3(0,3.75,0),Vector3(.24,7.5,.24))
+	if large:
+		# The enlarged office forecourt is outside the entrance-corner lamps'
+		# reach. Give its pedestrian approach its own paired fixtures, keeping
+		# the central entrance and vehicle lanes clear.
+		for side in [-1,1]:
+			var light := KIT.model(root,"quay_light",Vector3(side*8,0,back-12),PI)
+			KIT.solid(light,Vector3(0,3.75,0),Vector3(.24,7.5,.24))
 	for side in [-1,1]:
 		for i in 2:
 			var kerb := part(root,"kerb_2m",Vector3(side*(2.6+i*2),0,back-6.0))

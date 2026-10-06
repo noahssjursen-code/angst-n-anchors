@@ -20,15 +20,17 @@ func weather(fog: bool) -> void:
 	WorldWeather.set_blend_to_lighting_paused(true)
 	WorldClock.snap_time_of_day(0.0)
 	WeatherLighting.time_of_day=0.0
-	WeatherLighting.cloud_coverage=.2
-	WeatherLighting.rain_amount=0
-	WeatherLighting.storm_intensity=0
+	WeatherLighting.cloud_cover=.2
+	WeatherLighting.precipitation=0
+	WeatherLighting.convection_index=0
 	WeatherLighting.visibility=.3 if fog else 1.0
+	WeatherLighting.wind_force=.15
 	WeatherLighting.sea_state=.15
 	var renderer := get_node("ShowcaseWorldRenderer")
 	renderer.enable_volumetric_fog=true
 	renderer.enable_weather_post_fx=true
 	renderer._environment.ssao_enabled=true
+	assert(is_zero_approx(WeatherLighting.rain_amount))
 	renderer._apply_weather_lighting()
 	for node in find_children("*","SpotLight3D",true,false):
 		if node.get_script()==preload("res://scripts/port/harbour_area_light.gd"): node._update()

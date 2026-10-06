@@ -1223,3 +1223,16 @@ registered authority is unavailable. Unregistered isolated previews remain local
 Runtime regression: tests/imported_door_runtime_test.tscn -- --shipyard-playtest
 [--capture-doors]. Covers both sides, occlusion, F input, open/close, late identity,
 authority replay and stale rejection; captures are archived in machinescreenshots.
+
+### Sky and post-grade review
+
+Sun and moon size uniforms are angular radii in radians, not offsets from a
+cosine. Compare ray chord distance to 2*sin(radius/2). The old convention made
+the moon roughly ten degrees wide. Keep the clear/cloud day/night palette
+separate: overcast must not blend toward a daytime grey at midnight.
+Screen contrast uses a bounded curve retaining faint nonzero light, and grain
+scales down in dark pixels. Validate with tests/screen_grade_shadow_test.tscn.
+Use tests/live_lighting_review.tscn for normal-world spawn and owned-vessel deck
+views. Weather fixtures must write cloud_cover, precipitation, convection_index;
+cloud_coverage/rain_amount/storm_intensity are DERIVED GETTERS. Do not assign them.
+Both review scenes require --shipyard-playtest and archive machine captures.
