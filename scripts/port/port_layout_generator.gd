@@ -78,6 +78,7 @@ static func generate(
 	var center := coast_path[int(float(coast_path.size()) * 0.5)] if not coast_path.is_empty() else Vector2.ZERO
 	graph.add_root("coast_vertex", "root", Vector3(center.x, 0.0, center.y), 0.0, {"role": "foundation_anchor"})
 	var foundation: Dictionary = fit.get("foundation", {}) as Dictionary
+	# Retain room for working yards and substantial terminal buildings.
 	foundation["dock_reach_m"] = fit.get("dock_reach_m", foundation.get("dock_reach_m", 0.0))
 	foundation["shore_length_m"] = fit.get("shore_length_m", 0.0)
 	foundation["length_profile"] = fit.get("length_profile", foundation.get("length_profile", ""))

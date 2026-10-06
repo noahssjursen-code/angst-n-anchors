@@ -24,7 +24,7 @@ func _ready() -> void:
 	sun.shadow_enabled = true
 	var floor_mesh := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(70,65)
+	plane.size = Vector2(135,110)
 	floor_mesh.mesh = plane
 	floor_mesh.material_override = HarbourEnvironmentKit.paving()
 	add_child(floor_mesh)
@@ -45,7 +45,13 @@ func _ready() -> void:
 func show_facility() -> void:
 	if is_instance_valid(facility): facility.free()
 	var kind: String = KINDS[index]
-	facility = PortFacilityVisual.build(self,{"id":"review_"+kind,"kind":kind,"origin":[0,0],"size_m":[40,32],"commodity_ids":[]},.025)
+	var extent := [64,56]
+	if kind=="office": extent=[48,48]
+	if kind=="container": extent=[64,56]
+	if kind in ["lng","diesel","crude_oil"]: extent=[88,64]
+	facility = PortFacilityVisual.build(self,{"id":"review_"+kind,"kind":kind,"origin":[0,0],"size_m":extent,"commodity_ids":[]},.025)
+	camera.position=Vector3(extent[0]*.7,extent[0]*.48,-extent[0]*.85)
+	camera.look_at(Vector3(0,6,0))
 	caption.text = "PORT FACILITIES — "+kind.replace("_"," ").to_upper()+"\nLeft / Right: cycle · Space: close view"
 
 func _unhandled_key_input(event: InputEvent) -> void:

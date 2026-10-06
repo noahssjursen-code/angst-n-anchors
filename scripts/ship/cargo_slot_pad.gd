@@ -35,6 +35,11 @@ signal container_landed(component: CargoSlotPadComponent, unit: ContainerUnit)
 @export var affects_boat_cargo_mass: bool = true
 ## Quay stack yard — same slot tiling as ship pads; joins container_yard_pad.
 @export var is_quay_yard_pad: bool = false
+## Invisible yard bounds keep slot/authority logic on the existing asphalt.
+@export var show_pad_visual: bool = true:
+	set(v):
+		show_pad_visual = v
+		_rebuild_visual()
 @export var pad_color: Color = Color(0.16, 0.18, 0.22, 0.92):
 	set(v):
 		pad_color = v
@@ -205,7 +210,7 @@ func place_container_node(node: ContainerNode, world_hint: Vector3 = Vector3.INF
 	if node.get_parent() != _container_root:
 		node.reparent(_container_root, true)
 	node.position = _cell_center_local(origin, fp)
-	node.position.y = ContainerNode.floor_offset_y()
+	node.position.y = ContainerNode.floor_offset_y() if show_pad_visual else 0.0
 	node.rotation = Vector3.ZERO
 	_nodes[origin] = node
 	_refresh_mass()
@@ -440,7 +445,7 @@ func _spawn_node(origin: int, unit: ContainerUnit) -> void:
 		add_child(_container_root)
 	_container_root.add_child(node)
 	node.position = _cell_center_local(origin, unit.footprint_cells(cell_size_m))
-	node.position.y = ContainerNode.floor_offset_y()
+	node.position.y = ContainerNode.floor_offset_y() if show_pad_visual else 0.0
 	## Quay yards still skip boat mass, but containers must block walking.
 	node.setup(unit, false)
 	_nodes[origin] = node
@@ -456,6 +461,8 @@ func _origin_for_node(node: ContainerNode) -> int:
 func _rebuild_visual() -> void:
 	if _visual_root != null and is_instance_valid(_visual_root):
 		_visual_root.queue_free()
+	_visual_root = null
+	if not show_pad_visual: return
 	_visual_root = Node3D.new()
 	_visual_root.name = "PadVisual"
 	add_child(_visual_root)

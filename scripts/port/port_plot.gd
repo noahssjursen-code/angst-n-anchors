@@ -121,6 +121,7 @@ func _rebuild() -> void:
 	if not port_label.is_empty():
 		var label := Label3D.new()
 		label.name = "PortName"
+		label.visible = show_site_gizmos
 		label.text = port_label.to_upper()
 		label.pixel_size = 0.04
 		label.modulate = Color(0.98, 0.94, 0.78)
@@ -193,7 +194,8 @@ func _staff_apron_local() -> Vector3:
 	var facility_plan: Dictionary = _layout_graph.initial_attributes.get("land_plan",{}).get("facility_plan",{})
 	for facility in facility_plan.get("facilities",[]):
 		if facility.kind=="office":
-			return Vector3(facility.origin[0],deck_y,facility.origin[1]+float(facility.size_m[1])*.5-13.0)
+			var offset := 19.0 if float(facility.size_m[0])>=38 else 13.0
+			return Vector3(facility.origin[0],deck_y,facility.origin[1])+Vector3(0,0,float(facility.size_m[1])*.5-offset).rotated(Vector3.UP,float(facility.get("rotation_y",0.0)))
 	var spawn := _layout_graph.spawn_local_position()
 	## Keep XZ from spawn anchor; replace the player-body Y lift with deck height.
 	return Vector3(spawn.x, deck_y, spawn.z)

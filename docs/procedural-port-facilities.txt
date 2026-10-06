@@ -1,11 +1,11 @@
 Procedural port facilities — 6 October 2026
 ==========================================
 
-Implemented in port generation 47. PortLandPlan embeds a version-1 facility_plan
+Implemented in port generation 48. PortLandPlan embeds a version-2 facility_plan
 in the initial graph. PortFacilityPlan groups active import/export commodities
 into shared functional precincts, links each to realized compatible berth IDs,
 then packs metre-sized parcels inside the traced paved foundation. A waterfront
-collector and inland route are reserved before packing; facilities receive clear
+collector, rear collector and inland route are reserved before packing; facilities receive clear
 access connections. Unplaceable facilities are explicitly recorded in unmet.
 The planner does not silently enlarge terrain or overlap another facility.
 
@@ -16,9 +16,10 @@ imports and exports share a yard. Existing berth cranes, unloading equipment,
 trade identities, NPC commands and cargo authority remain in the existing systems.
 Player/staff spawn positions use the public office forecourt when one fits.
 
-Ten individual Blender assets accompany their source .blend files and generator:
+Fourteen individual Blender assets accompany their source .blend files and generators:
 harbour_office, cargo_shelter_8m, kerb_2m, wheel_stop, bulk_divider_4m,
-yard_fence_4m, empty_pallet, grain_silo, liquid_tank, insulated_gas_vessel.
+yard_fence_4m, empty_pallet, grain_silo, liquid_tank, insulated_gas_vessel,
+harbour_authority_20m, lng_terminal_tank_24m, yard_pallet, loaded_storage_rack.
 PortFacilityVisual composes these; it does not bake an entire port into one mesh.
 Fences use MultiMesh. Simple deliberate walking collision covers structures,
 fences, parking stops and dividers. Quay lamps switch on during the night through
@@ -45,7 +46,7 @@ Verified: deterministic plan; all nine precinct types fit the broad fixture;
 no parcel overlap/road obstruction; constrained sites report unmet needs; missing
 berths cannot invent facilities; liquid product-to-berth matching; graph JSON
 round trip. Actual rendered harbour: 6.79m real-player quay/apron crossing remains
-supported and office wall stops player at local Z=4.35m. Foundation regression:
+supported and office wall stops player at local Z=7.35m. Foundation regression:
 2,568 samples, zero missing support and zero outside ghost floor. Cache test passes.
 All nine precincts rendered in Godot Forward+ and reviewed; day/night lamp check
 passes. Screenshots are archived in Pictures/machinescreenshots/
@@ -74,3 +75,70 @@ restart. Road paint uses screen-filtered width and a small depth-tested view bia
 to prevent coplanar flicker and subpixel dotted edges. This applies to parking and
 yard marking strips too. The new real-harbour daylight captures 1791315810–14 show
 both the wide view and office junction. Walking and collision checks still pass.
+
+Scale and access revision (6 October)
+------------------------------------
+Noah withdrew the decorative container-yard request. No automatic container depot,
+ambient containers, order records or additional container inventory are generated.
+Existing freight-container facilities retain their empty real-size storage slots.
+
+The new harbour authority is a 20 x 14m four-storey exterior with glazed control
+floor, hipped roof, canopy, escape stairs and mast. Its office/parking plot is
+48 x 48m (40 x 44m fallback), with a separate 2.4m footway and 4cm raised paving.
+NPCs and player spawn outside its public entrance; the closed shell blocks entry.
+LNG plots are 88 x 64m (64 x 56m fallback), with two 24m-diameter terminal tanks,
+22m shells, roof rails, access ladder and transfer pipework. Tank collision follows
+the round shell rather than an invisible square. Oil tanks and grain banks also
+use industrial scale. General/fishing yards include instanced open pallet stacks
+and loaded shelving; these props confer no freight inventory or capacity.
+Bulk bays use 12m walls on larger plots, with access from the centre aisle.
+
+Planning rotates into the coastline chord frame and stores each parcel's yaw.
+Front or rear entrances connect to the nearest unobstructed collector. A second
+packing attempt uses smaller supported auxiliary-yard footprints only when that
+fits more facilities. Foundation area is retained; oversized facilities report
+unmet instead of shrinking their models. Persisted/evolved graphs are untouched.
+
+Road boundaries have 3m turning fillets, overlapping buffered centrelines and
+continuous dash phase through gentle bends. Narrow offset return spikes are
+removed before triangulation. Yard parcels no longer have white outline boxes.
+Four-sample geometry antialiasing reduces fence and kerb shimmer. Road surface
+shading uses world-metre coordinates, and flat overlays do not cast shadows.
+
+Review captures: Pictures/machinescreenshots/2026-10-06_harbour-rebuild,
+1791318177-797-office-parking.png and 1791318199-017-precinct-lng.png.
+The main site fits office/general/fish/bulk with no unmet needs. Small-site walking
+and all nine rendered facility families pass; foundation test still has 2,568
+samples with zero missing support/outside ghost floor. Worn PBR textures and
+enterable office interiors remain unfinished; scale/layout work is not a claim
+that those are complete.
+
+Final scale/access checks: size 0 / region 1 and size 5 / region 2 rendered
+without engine errors and passed walking/office collision. Larger-site daylight
+review: 1791318340-162-daylight-overview.png. Polygon return-spike regression and
+planner fixtures pass. No decorative container assets are included in this batch.
+
+Asphalt cargo staging and startup regression
+-------------------------------------------
+Quay CargoSlotPadComponent bounds remain registered with the harbour/crane but
+show_pad_visual is false: no slab, grid or orange fill. The yard origin is the
+asphalt crown and container placement has zero extra visual-pad offset. Existing
+ship pads retain their visual/clearance behavior. The isolated harbour test stages
+a real ContainerUnit, checks its floor height and captures container-on-asphalt.
+
+World generation expands records for all 35 ports (needed by terrain and shipping
+lanes), but models are proximity-loaded. Facility packing was scanning every
+lattice position with expensive polygon tests. Sorting by a cheap score lower
+bound and stopping when no remaining candidate can win reduced the same planner
+fixtures from 6.9-7.5 seconds to 0.68 seconds. Overlap/support and deterministic
+round-trip checks still pass. No models are built by the planner.
+
+ProximityLoader is paused until the real player camera is ready, avoiding builds
+around the temporary zero-position observer. The rendered world boot test at
+seed 424242 / 40km reached boot_finished in 14.317 seconds, with one home-port
+model and 34 unloaded registrations (previous optimized run instantiated six
+ports during boot and took 15.531 seconds). This is a cold test on this machine,
+not a claim of the user's previous seven-second join time. World-layout generation
+alone measured 5.83 seconds. Full-world test teardown still reports renderer RID
+leaks; no runtime script errors occurred before the boot checks passed.
+Runnable regression: tests/port_world_boot_test.tscn -- --shipyard-playtest.

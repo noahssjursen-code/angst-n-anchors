@@ -1,6 +1,7 @@
 shader_type spatial;
 render_mode diffuse_burley;
 varying vec3 world_position;
+uniform vec3 pavement_color = vec3(.031,.035,.038);
 float hash(vec2 p) {
     vec3 q=fract(vec3(p.xyx)*.1031);
     q+=dot(q,q.yzx+33.33);
@@ -16,7 +17,7 @@ void fragment() {
     float grain=noise2(p*20.0);
     float patches=noise2(p*.18);
     float detail=1.0-smoothstep(.01,.08,length(fwidth(p)));
-    ALBEDO=vec3(.031,.035,.038)*(0.96+patches*.08)+(grain-.5)*.004*detail;
+	ALBEDO=pavement_color*(0.96+patches*.08)+(grain-.5)*.004*detail;
     ROUGHNESS=.94;
     SPECULAR=.18;
 }

@@ -208,7 +208,8 @@ func spawn_local_position() -> Vector3:
 	var facility_plan: Dictionary = initial_attributes.get("land_plan",{}).get("facility_plan",{})
 	for facility in facility_plan.get("facilities",[]):
 		if facility.kind=="office":
-			return Vector3(facility.origin[0],top_y+1.0,facility.origin[1]+float(facility.size_m[1])*.5-18.0)
+			var offset := 24.0 if float(facility.size_m[0])>=38 else 18.0
+			return Vector3(facility.origin[0],top_y+1.0,facility.origin[1])+Vector3(0,0,float(facility.size_m[1])*.5-offset).rotated(Vector3.UP,float(facility.get("rotation_y",0.0)))
 	var spine := foundation.get("spine", []) as Array
 	if spine.size() >= 2:
 		var mid_i := int(spine.size() / 2)

@@ -1127,10 +1127,10 @@ inventory JSON restoration and the actual existing crane operator. Add
 `--capture <absolute.png>` for whole-vessel, hold and loading captures. The 24 m
 two-compartment bulk example retains its two separate 40 t holds.
 
-## Procedural port facilities (generation 47)
+## Procedural port facilities (generation 48)
 
-Sources: `_source/port_facilities/build_facilities.py` and ten individual .blend
-files. Exports: `parts/port_facilities/*.glb`. These are metric individual assets,
+Sources: `_source/port_facilities/build_facilities.py` and
+`build_industrial_facilities.py`, with fourteen individual .blend files. Exports: `parts/port_facilities/*.glb`. These are metric individual assets,
 not baked precincts. Blender Z is up, +Y exports to Godot -Z; origin is pavement
 level. Office entrance is Blender -Y / Godot +Z and the port places it at yaw PI.
 Its PublicEntrance socket is cosmetic until an interior/door system is added.
@@ -1148,9 +1148,17 @@ inventory. General cargo import/export share a precinct; incompatible liquids
 remain separate. Bulk dividers mate in four-metre runs; fence runs may adjust
 length but equipment/office dimensions are fixed. Facilities that cannot fit are
 reported in unmet, not shrunk to toy scales. New asset placement needs checks at
-both 24m fallback and full-size footprints.
+both persisted small footprints and new full-size/fallback footprints.
 
 Use port_showcase for the real coastline and port_facility_showcase for all nine
 precinct types (Left/Right and Space). Details, tests and remaining limits are in
 `docs/procedural-port-facilities.txt`. All machine captures must also be archived
 under C:/Users/noahs/Pictures/machinescreenshots.
+
+The industrial expansion adds harbour_authority_20m (20 x 14m, four floors),
+lng_terminal_tank_24m (24m diameter), open yard_pallet and loaded_storage_rack.
+The office and LNG models have fixed metre dimensions; reserve adequate plots.
+Tank collision must follow the cylindrical shell. Pallet/rack props are cosmetic
+and must never create freight lots or imply owned inventory. Noah withdrew the
+large decorative container-yard request; do not reintroduce ambient container
+stock from this work. Keep cargo containers in their existing freight system.

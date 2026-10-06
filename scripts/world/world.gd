@@ -336,6 +336,9 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 	var loader  := ProximityLoader.new()
 	loader.name = "ProximityLoader"
 	add_child(loader)
+	# Until the player camera exists, the streaming reference falls back to (0,0,0).
+	# Do not instantiate unrelated ports around that temporary position during boot.
+	loader.set_process(false)
 
 	var port_proximity := preload("res://scripts/world/port_proximity.gd").new()
 	port_proximity.name = "PortProximity"
@@ -442,6 +445,8 @@ func _spawn_player() -> void:
 	# Bake far-LOD impostors while the gate is still up (buildings + village houses).
 	await _warm_impostors()
 
+	var port_loader := get_node_or_null("ProximityLoader")
+	if port_loader != null: port_loader.set_process(true)
 	boot_finished.emit()
 	var gate := get_node_or_null("/root/LoadingGate")
 	if gate != null and gate.has_method("notify_world_ready"):

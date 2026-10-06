@@ -1107,6 +1107,7 @@ func _stamp_apron_pads() -> void:
 		add_child(root)
 		for record in land_plan.facility_plan.get("facilities",[]):
 			PortFacilityVisual.build(root,record,_foundation_surface_y())
+		PortFacilityVisual.site_boundary(root,land_plan.facility_plan,_foundation_surface_y())
 		return
 	var apron_pads: Dictionary = land_plan.get("apron_pads", {}) as Dictionary
 	var pads: Array = apron_pads.get("pads", []) as Array
@@ -1850,15 +1851,14 @@ func _stamp_general_cargo_quay_yard(
 	var yard_pad := CargoSlotPadComponent.new()
 	yard_pad.name = "GeneralCargoYard_%d" % zone_index
 	yard_pad.is_quay_yard_pad = true
+	yard_pad.show_pad_visual = false
 	yard_pad.affects_boat_cargo_mass = false
 	yard_pad.deck_width_m = yard_w
 	yard_pad.deck_length_m = yard_len
 	yard_pad.cell_size_m = cell
 	yard_pad.container_footprint = fp
-	yard_pad.pad_color = Color(0.28, 0.22, 0.18, 0.92)
-	yard_pad.slot_line_color = Color(0.82, 0.55, 0.32, 0.55)
 	## Sit on the pier crown — same reference as bulk mounds / quay decks.
-	yard_pad.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y + 0.06, zone_mid_z)
+	yard_pad.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, zone_mid_z)
 	lane.add_child(yard_pad)
 
 	var drop := Node3D.new()
