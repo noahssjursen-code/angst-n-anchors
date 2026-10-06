@@ -91,9 +91,9 @@ func toggle_trawling() -> void:
 			var hud = controller.get("_ship_hud")
 			if hud != null and hud.has_method("show_toast"):
 				if trawling:
-					hud.show_toast("Net Cast - Trawling Active")
+					hud.show_toast("Setting trawl gear" if is_instance_valid(imported_rig) else "Net Cast - Trawling Active")
 				else:
-					hud.show_toast("Net Retracted - Trawling Stopped")
+					hud.show_toast("Recovering trawl gear" if is_instance_valid(imported_rig) else "Net Retracted - Trawling Stopped")
 
 
 func _setup_visuals() -> void:
@@ -286,11 +286,13 @@ func _add_child_with_owner(parent_node: Node, child_node: Node) -> void:
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
-	if trawling and _drum_rotation_node != null:
-		_drum_rotation_node.rotate_z(delta * trommel_rotation_speed)
 	if is_instance_valid(imported_rig):
 		imported_rig.update_rig(trawling,delta)
+		if _drum_rotation_node != null:
+			_drum_rotation_node.rotate_z(-imported_rig.warp_travel_delta/.315)
 		return
+	if trawling and _drum_rotation_node != null:
+		_drum_rotation_node.rotate_z(delta * trommel_rotation_speed)
 	_update_trawl_rig()
 
 
@@ -474,6 +476,8 @@ func get_catch_hold() -> CatchHoldComponent:
 
 
 func get_activity_status() -> String:
+	if is_instance_valid(imported_rig) and imported_rig.is_transitioning():
+		return imported_rig.activity_label()
 	var hold := _catch_hold()
 	if hold != null and hold.state.available_kg() <= CatchLot.MASS_EPS_KG:
 		return "HOLD FULL"

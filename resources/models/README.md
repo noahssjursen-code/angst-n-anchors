@@ -946,6 +946,42 @@ fabrication; it is not a scaled copy or rated version of that small-vessel produ
 https://www.sealuxmarine.com/wp-content/uploads/2022-METS-CATALOUE-07-High.pdf
 # Continuation: 32 m cargo hold (6 October 2026)
 
+## Trawl deployment and recovery
+
+`ImportedTrawlRig` now approaches the existing FishingSystem desired state over
+12 seconds out / 16 seconds back. The first segment lifts gear above the stern,
+the second moves it clear, and the last lowers/spreads it. Reversing the desired
+state traverses the same path without resetting the pose. This is presentation;
+FishingSystem still owns catch, drag and authority. Its existing catch/drag timing
+is unchanged. No seabed, cable physics or door hydrodynamics are implied.
+
+The four meshes in `trawl_net_open.glb` carry a Blender-authored `Stowed` morph.
+Floats and footrope weights keep their shape and remain attached to matching net
+points throughout the blend. `trawl_net_bundle.glb` is baked from that exact final
+shape, so the editor's static/collidable bundle matches the animation endpoint.
+The `*Wing*Stowed` sockets describe folded bridle endpoints. Regenerate just these
+assets with `build_trawl_rig.py -- --net-only`; preserve both Blender sources.
+
+Drum and sheave rotation comes from actual change in routed warp length. They
+reverse while recovering and hold still while towing. Stowed warps stay visibly
+attached. Moving gear disables its stowed walking collision until it reaches the
+cradle again; the deployed net remains presentation geometry. G uses the normal
+helm control and the HUD reports SETTING GEAR / RECOVERING GEAR during transitions.
+
+`fishing_kit_showcase.tscn` supports G to deploy/recover. Its checks cover full
+travel, mid-haul reversal, stopping drums while towing, endpoint transforms,
+sampled stern clearance and restored stowed collision. The ordinary ocean
+playtest also tests G reversal and full recovery on the moving vessel in waves.
+Capture mode adds intermediate 22/36/48/72 percent images for visual review.
+The current launch path is verified on the supplied 14 m trawler; arbitrary
+custom gantry placement/superstructures still require clearance review.
+
+Reference: FAO's [bottom otter trawl gear description](https://www.fao.org/fishery/docs/CDrom/ARTFIMED/ArtFiWeb/descript/Gear/geartype/gt306.htm)
+describes the two-bobbin warp winch. This game animation is a compact illustrative
+handling sequence, not a simulation of crew work or a certified fishing rig.
+
+## Continuous cargo space
+
 The 32 m draft now exposes one `ImportedBulkHold` through `BoatBody.get_bulk_holds()`
 when `hold_coaming_6x12` is seated at (0, 4.5, 0) with its authored orientation.
 The hull's `HoldCentre` socket supplies tank-top height (1.4 m); the four coaming

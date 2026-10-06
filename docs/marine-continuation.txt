@@ -4,9 +4,9 @@ Branch: feature/3d-model-migration. Preserve user saves and main.
 
 WORK LIST
 [x] Connect the 32 m continuous cargo hold to inventory, weight and existing crane.
-[ ] Animate trawl launch/recovery, winch/sheave direction and collision handoff.
-[ ] Inspect Godot transition captures and normal ocean input; document limitations.
-[ ] Commit/push verified batches and verify remote SHA.
+[x] Animate trawl launch/recovery, winch/sheave direction and collision handoff.
+[x] Inspect Godot transition captures and normal ocean input; document limitations.
+[x] Commit/push verified batches and verify remote SHA (completion recorded in chat).
 
 CARGO BATCH
 One 6 x 12 m hold, socket-derived floor/lip and provisional 120 t cap.
@@ -18,3 +18,26 @@ Capacity overflow, commodity rejection, state restoration and mass checks pass.
 Godot images inspected: coaster-cargo.png, coaster-cargo-hold.png,
 coaster-cargo-loading.png in the workspace outputs/marine folder.
 Final logs: coaster-cargo-render.log and bulk-regression-continue.log; no errors.
+
+TRAWL BATCH
+Authored Stowed morph on the open net; baked matching stationary bundle.
+Initial intermediate renders exposed floating weights/floats; fixed their folded
+attachment coordinates and rebuilt/reviewed the net. No screenshot was retouched.
+12-second lift/clear/deploy and 16-second reverse recovery with mid-haul reversal.
+Actual warp travel drives winch and pulley direction; no continuous idle spinning.
+Moving gear disables stowed collision; fully recovered gear restores it.
+Godot checks cover sampled stern clearance, pose continuity, transformed anchors,
+real catch/shore transfer, normal G control, doors, seats, HUD, drive and reset.
+Whole/close/intermediate captures: trawl-motion*.png. Ocean: trawl-recovery-ocean*.
+Review logs: trawl-motion-render.log, trawl-recovery-ocean.log, trawl-morph-blender.log.
+Final ocean run passed full recovery while moving in waves, including restored
+stowed collision. Fresh recovery-trawler-playtest.json.verified marker: passed.
+Cargo commit pushed and remote verified: 2e7af1e9a37c6458cb45480e60e2e14c3402b482.
+
+REMAINING
+Gear motion is presentation, not cable/cloth/seabed simulation; existing catch and
+drag timing is unchanged. Custom gantry positions still need clearance review.
+32 m capacity/handling remain provisional. Hatch removal is done in the builder;
+there is no powered hatch or commissioning/owned-fleet migration in this batch.
+Other prior handoff gaps (crane umbilical, broad fleet migration, final art polish)
+remain. This log supersedes the old instant-trawl/no-32m-hold limitations only.

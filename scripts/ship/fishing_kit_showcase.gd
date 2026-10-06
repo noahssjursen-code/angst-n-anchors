@@ -3,6 +3,7 @@ const DRAFT := "res://resources/models/examples/coastal_trawler_draft.json"
 var boat: ImportedDraftVessel
 var camera: Camera3D
 var fishing: FishingSystem
+var animate:=false
 
 func _ready() -> void:
 	assert(ShipyardPlaytestMode.active())
@@ -53,7 +54,7 @@ func _ready() -> void:
 	var canvas := CanvasLayer.new()
 	add_child(canvas)
 	var label := Label.new()
-	label.text = "COASTAL TRAWLER / editable kit assembly\nBlender winch + separate rotating drum / insulated deck catch tanks\n1: whole boat   2: working deck   Esc: close"
+	label.text = "COASTAL TRAWLER / editable kit assembly\nBlender winch + separate rotating drum / insulated deck catch tanks\nG: deploy / recover   1: whole boat   2: working deck   Esc: close"
 	label.position = Vector2(24,70)
 	label.add_theme_font_size_override("font_size",20)
 	canvas.add_child(label)
@@ -68,6 +69,7 @@ func _ready() -> void:
 	fishing.apply_trawl_desired(true)
 	fishing._process(.5)
 	assert(not is_equal_approx(before,drum.rotation.z))
+	_advance(12)
 	_verify_rig()
 	fishing.apply_trawl_desired(false)
 	before = drum.rotation.z
@@ -102,6 +104,12 @@ func _ready() -> void:
 		await RenderingServer.frame_post_draw
 		assert(get_viewport().get_texture().get_image().save_png(args[index+1].get_basename()+"-deck.png") == OK)
 		fishing.apply_trawl_desired(true)
+		for stage in [.22,.36,.48,.72]:
+			_advance((stage-fishing.imported_rig.deployment_fraction)*fishing.imported_rig.deploy_seconds)
+			camera.size=17;camera.position=Vector3(15,12,21);camera.look_at(Vector3(0,3,7))
+			label.text="TRAWL DEPLOYMENT / %d%%\nContinuous door travel / folded net / winch-driven warp" % roundi(stage*100)
+			await _capture(args[index+1].get_basename()+"-stage-%d.png" % roundi(stage*100))
+		_advance(12)
 		camera.size=33;camera.position=Vector3(26,22,38);camera.look_at(Vector3(0,1,10))
 		label.text="DEPLOYED TRAWL / existing fishing state\nTwo warps over actual blocks / separate doors / open diamond mesh"
 		await _capture(args[index+1].get_basename()+"-deployed.png")
@@ -112,6 +120,7 @@ func _ready() -> void:
 		boat.queue_free()
 		for i in 4:await get_tree().process_frame
 		get_tree().quit()
+	else:animate=true
 
 func _capture(path:String) -> void:
 	for i in 12:await get_tree().process_frame
@@ -123,6 +132,10 @@ func _verify_rig() -> void:
 	assert(rig!=null and rig.gantry!=null and fishing._net_mesh==null,"Imported vessel must use actual net assets")
 	assert(rig.net.visible and not rig.bundle.visible and rig.routes.size()==2)
 	assert(rig.ropes.size()==24)
+	assert(is_equal_approx(rig.deployment_fraction,1.0) and not rig.is_transitioning())
+	var drum_before:=fishing._drum_rotation_node.rotation.z
+	_advance(.5)
+	assert(is_equal_approx(drum_before,fishing._drum_rotation_node.rotation.z),"Winch must hold the warp while towing")
 	boat._sync_moving_part_colliders()
 	var stow_colliders:=0
 	for item in boat.moving_colliders:
@@ -143,15 +156,47 @@ func _verify_rig() -> void:
 		assert(rig.routes[i][0].is_equal_approx((fishing.authored_winch.find_child(name_,true,false) as Node3D).global_position))
 	for line_ in rig.ropes:
 		assert(line_.global_position.is_finite() and line_.global_basis.determinant()>0)
+	boat.transform=original
 	fishing.apply_trawl_desired(false)
+	_advance(4.8)
+	assert(rig.net.visible and not rig.bundle.visible,"Recovery cannot instantly hide deployed gear")
+	assert(rig.warp_travel_delta<0,"Recovering warp must reverse drum/sheave travel")
+	var mid_pose:=rig.net.global_transform
+	fishing.apply_trawl_desired(true)
+	assert(rig.net.global_transform.is_equal_approx(mid_pose),"Reversing mid-haul must preserve the pose")
+	_advance(.1)
+	assert(rig.warp_travel_delta>0)
+	fishing.apply_trawl_desired(false)
+	_advance(17)
 	boat._sync_moving_part_colliders()
 	for item in boat.moving_colliders:
 		if item.get("fishing_stow",false):assert(not item.collision.disabled)
 	assert(not rig.net.visible and rig.bundle.visible)
 	for door in rig.doors:assert(door.transform.is_equal_approx(Transform3D.IDENTITY))
-	for line_ in rig.ropes:assert(not line_.visible)
-	boat.transform=original
-	print("TRAWL RIG PASS: imported assets, authored routes, bulwark clearance, transformed anchors and stow reset")
+	# Stowed warps remain attached; deployment/recovery must clear the real stern.
+	fishing.apply_trawl_desired(true)
+	for i in 60:
+		_advance(.2)
+		for door in rig.doors:
+			var box:=boat.global_transform.affine_inverse()*door.global_transform*BrickCatalog.visual_bounds(door)
+			if box.position.z<7.1 and box.end.z>6.9:assert(box.position.y>3.92,"Door swept through stern bulwark")
+		if i in [10,17,23,35,59]:
+			for mesh:MeshInstance3D in rig.net.find_children("*","MeshInstance3D",true,false):
+				for surface in mesh.mesh.get_surface_count():
+					var vertices:=boat.assembler.deformed_vertices(mesh,surface)
+					for j in range(0,vertices.size(),24):
+						var p:=boat.to_local(mesh.to_global(vertices[j]))
+						if absf(p.z-7)<.15:assert(p.y>3.92,"Folded net swept through stern bulwark")
+	fishing.apply_trawl_desired(false)
+	_advance(17)
+	print("TRAWL RIG PASS: 12s deployment/16s recovery, reverse mid-haul, winch hold/reverse, clearance, authored anchors and stow collision")
+
+func _advance(seconds:float) -> void:
+	var remaining:=seconds
+	while remaining>.00001:
+		var dt:=minf(remaining,.05)
+		fishing._process(dt)
+		remaining-=dt
 
 func _deck_view() -> void:
 	camera.size=9
@@ -159,12 +204,13 @@ func _deck_view() -> void:
 	camera.look_at(Vector3(0,3.5,3.5))
 
 func _process(delta: float) -> void:
-	if is_instance_valid(fishing):
+	if animate and is_instance_valid(fishing):
 		fishing._process(delta)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):get_tree().quit()
 	if event is InputEventKey and event.pressed:
+		if event.keycode==KEY_G and is_instance_valid(fishing):fishing.apply_trawl_desired(not fishing.trawling)
 		if event.keycode==KEY_2:_deck_view()
 		if event.keycode==KEY_1:
 			camera.size=17

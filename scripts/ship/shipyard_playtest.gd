@@ -243,9 +243,16 @@ func _verify() -> void:
 	if not fishing_systems.is_empty():
 		await _tap_g()
 		assert(fishing_systems[0].trawling and fishing_systems[0].imported_rig.net.visible,"Normal G input must deploy the imported net")
+		for i in 90:await get_tree().physics_frame
+		var progress:float=fishing_systems[0].imported_rig.deployment_fraction
+		assert(progress>0 and progress<1,"Deployment must take time")
 		await _tap_g()
-		assert(not fishing_systems[0].trawling and not fishing_systems[0].imported_rig.net.visible,"G again must retract the deployed gear")
-		print("TRAWL INPUT PASS: real G deployment/retraction from occupied helm")
+		assert(not fishing_systems[0].trawling and fishing_systems[0].imported_rig.net.visible,"G again must begin continuous recovery")
+		for i in 240:
+			await get_tree().physics_frame
+			if not fishing_systems[0].imported_rig.is_transitioning():break
+		assert(not fishing_systems[0].imported_rig.net.visible,"Recovery must finish in the deck cradle")
+		print("TRAWL INPUT PASS: real G continuous deployment/reversal/recovery from occupied helm")
 	controller.set_throttle_stage_idx(4)
 	for i in range(360):
 		await get_tree().physics_frame
@@ -275,10 +282,21 @@ func _verify() -> void:
 		if not fishing_systems.is_empty():
 			await _tap_g()
 			camera._zoom_target=42;camera._pitch=.65;camera._yaw=boat.rotation.y+.55
-			for i in 120:await get_tree().process_frame
+			for i in 960:
+				await get_tree().physics_frame
+				if not fishing_systems[0].imported_rig.is_transitioning():break
+			assert(is_equal_approx(fishing_systems[0].imported_rig.deployment_fraction,1.0))
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(args[output+1].get_basename()+"-trawling.png")
 			await _tap_g()
+			for i in 1200:
+				await get_tree().physics_frame
+				if not fishing_systems[0].imported_rig.is_transitioning():break
+			assert(not fishing_systems[0].imported_rig.net.visible and fishing_systems[0].imported_rig.bundle.visible)
+			boat._sync_moving_part_colliders()
+			for item in boat.moving_colliders:
+				if item.get("fishing_stow",false):assert(not item.collision.disabled)
+			print("TRAWL RECOVERY PASS: full recovery on moving wave-driven vessel restores stowed gear and collision")
 	_press_f()
 	assert(not helm.is_occupied() and not player.is_vehicle_occupied())
 	assert(not controller._active, "Leaving the helm chair must release vessel controls")

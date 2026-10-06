@@ -1,7 +1,7 @@
 """Reusable trawl deck/deployed components. Original game geometry, metres.
 Blender +Y bow/+Z up. Net mouth at origin, codend along -Y. No baked illumination.
 """
-import bmesh
+import bmesh, sys
 from pathlib import Path
 exec((Path(__file__).resolve().parent/'build_fishing_kit.py').read_text(encoding='utf-8').split('\nclear()\npaint=')[0])
 OUT=SRC.parents[1]/'parts'/'trawl_rig';OUT.mkdir(parents=True,exist_ok=True)
@@ -27,6 +27,7 @@ def ball(n,p,s,m):
     for f in o.data.polygons:f.use_smooth=True
     return o
 def finish(n):
+    if '--net-only' in sys.argv and not n.startswith('trawl_net_'):return
     for ob in bpy.context.scene.objects:
         if ob.type=='MESH':
             for f in ob.data.polygons:
@@ -43,7 +44,8 @@ def finish(n):
         bpy.ops.object.select_all(action='DESELECT')
         for ob in objects:ob.select_set(True)
         bpy.context.view_layer.objects.active=objects[0]
-        bpy.ops.object.join();bpy.context.object.name=n+' '+key
+        if len(objects)>1:bpy.ops.object.join()
+        bpy.context.object.name=n+' '+key
     save(n)
 clear()
 paint=mat('Warm white painted steel',(.23,.37,.39))
@@ -145,18 +147,42 @@ for side,name in [(-1,'Port'),(1,'Starboard')]:
     socket(name+'WingUpper',(side*2.54*math.cos(.55),0,.88*math.sin(.55)))
     socket(name+'WingLower',(side*2.54*math.cos(.55),0,-.88*math.sin(.55)))
 line('Codend binding',[netpoint(.99,i*math.tau/48) for i in range(49)],.026,rope)
+
+def packed(co):
+    # A compact coiled bag for presentation, not a cloth/seabed simulation.
+    t=max(0,min(1,-co.y/6))
+    w=2.40*(1-t)**.8+.14;h=.78*(1-t)**.85+.10
+    a=math.atan2((co.z+.28*t)/h,co.x/w)
+    rho=math.hypot(co.x/w,(co.z+.28*t)/h)
+    r=.29+(rho-1)*min(w,h)
+    x=(1.25-.12*t)*(1-2*math.acos(math.cos(a))/math.pi)
+    return Vector((x,r*math.sin(a)*math.cos(3*math.tau*t),r*math.sin(a)*math.sin(3*math.tau*t)))
+
+for ob in list(bpy.context.scene.objects):
+    if ob.type!='MESH':continue
+    bpy.ops.object.select_all(action='DESELECT');ob.select_set(True);bpy.context.view_layer.objects.active=ob
+    for mod in list(ob.modifiers):bpy.ops.object.modifier_apply(modifier=mod.name)
+    centre=ob.location.copy()
+    bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
+    ob.shape_key_add(name='Basis');key=ob.shape_key_add(name='Stowed')
+    target=None
+    # Floats and weights remain rigid while the flexible strands gather.
+    if ob.name.startswith(('Headline float','Footrope weight')):
+        target=packed(centre)
+    for vertex in key.data:vertex.co=vertex.co+target-centre if target is not None else packed(vertex.co)
+for ob in list(bpy.context.scene.objects):
+    if ob.type=='EMPTY' and 'Wing' in ob.name:
+        socket(ob.name+'Stowed',packed(ob.location))
 finish('trawl_net_open')
 
-clear()
-for direction in [-1,1]:
-    for j in range(18):
-        pts=[]
-        for i in range(81):
-            t=i/80;a=j*math.tau/18+direction*t*math.tau*3;r=.27+.035*math.sin(t*math.pi)
-            pts.append((-1.25+2.5*t,r*math.cos(a),r*math.sin(a)))
-        line('Stowed net strand',pts,.011,net)
-for x in [-.78,.78]:line('Bundle lashing',[(x,.315*math.cos(i*math.tau/48),.315*math.sin(i*math.tau/48)) for i in range(49)],.027,rope)
-for x in [-.9,-.3,.3,.9]:ball('Stowed float',(x,-.28,.13),(.11,.08,.08),orange)
+# Bake the identical closed shape for the editor's stationary/collidable bundle.
+# This makes the visible swap at the cradle exact, with no second unrelated mesh.
+for ob in list(bpy.context.scene.objects):
+    if ob.type=='EMPTY':bpy.data.objects.remove(ob,do_unlink=True);continue
+    if ob.type!='MESH':continue
+    positions=[p.co.copy() for p in ob.data.shape_keys.key_blocks['Stowed'].data]
+    ob.shape_key_clear()
+    for vertex,co in zip(ob.data.vertices,positions):vertex.co=co
 finish('trawl_net_bundle')
 
 assets=[]
@@ -168,5 +194,5 @@ for name,style,size,components in [
  ('trawl_door_starboard','trawl_door',[.5,1.45,1.15],[]),
  ('trawl_net_bundle','trawl_bundle',[2.5,.66,.66],[])]:
     assets.append({'id':name,'kind':'furniture','style':style,'model':'res://resources/models/parts/trawl_rig/'+name+'.glb','start_xz':[0,0],'end_xz':size[:2],'height_start_m':size[2],'height_end_m':size[2],'paintable':True,'components':components})
-(OUT/'manifest.json').write_text(json.dumps({'units':'metres','assets':assets},indent=2),encoding='utf-8')
+if '--net-only' not in sys.argv:(OUT/'manifest.json').write_text(json.dumps({'units':'metres','assets':assets},indent=2),encoding='utf-8')
 print('TRAWL_RIG_EXPORTED: gantry, block, sheave, mirrored doors, open net, stowed net')
