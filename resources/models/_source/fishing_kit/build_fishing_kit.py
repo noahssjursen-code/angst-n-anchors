@@ -19,7 +19,7 @@ def box(name,p,s,m):
 def cyl(name,a,b,r,m):
     a,b=Vector(a),Vector(b);bpy.ops.mesh.primitive_cylinder_add(vertices=48,radius=r,depth=(b-a).length,location=(a+b)/2)
     o=bpy.context.object;o.name=name;o.rotation_euler=(b-a).to_track_quat('Z','Y').to_euler();o.data.materials.append(m)
-    for p in o.data.polygons:p.use_smooth=True
+    for p in o.data.polygons:p.use_smooth=len(p.vertices)==4
     return o
 def socket(name,p):
     o=bpy.data.objects.new(name,None);bpy.context.collection.objects.link(o);o.location=p
@@ -44,20 +44,31 @@ box('Base tie',(0,0,.17),(.22,1.75,.17),paint)
 cyl('Hydraulic motor',(0,-1.16,.95),(0,-.97,.95),.24,paint)
 for z in [.85,1.06]:
     cyl('Hydraulic feed',(.18,-1.08,z),(.42,-1.08,z),.025,dark)
+box('Hydraulic manifold',(.32,-1.08,.28),(.52,.34,.32),paint)
+for index,z in enumerate([.85,1.06]):
+    curve=bpy.data.curves.new('Hydraulic hose','CURVE');curve.dimensions='3D';curve.bevel_depth=.022;curve.bevel_resolution=2
+    spline=curve.splines.new('BEZIER');spline.bezier_points.add(3)
+    for p,co in zip(spline.bezier_points,[(.42,-1.08,z),(.57+index*.09,-1.08,z-.07),(.57+index*.09,-1.08,.48),(.34+index*.12,-1.08,.45)]):
+        p.co=co;p.handle_left_type='AUTO';p.handle_right_type='AUTO'
+    o=bpy.data.objects.new('Flexible hydraulic hose',curve);bpy.context.collection.objects.link(o);o.data.materials.append(dark)
+    bpy.ops.object.select_all(action='DESELECT');o.select_set(True);bpy.context.view_layer.objects.active=o;bpy.ops.object.convert(target='MESH')
 socket('DrumPivot',(0,0,.95));socket('PayoutSocket',(.40,0,.95))
+socket('PayoutPort',(.32,-.43,.95));socket('PayoutStarboard',(.32,.43,.95))
 save('trawl_winch')
 clear()
 cyl('Drum barrel',(0,-.72,0),(0,.72,0),.29,dark)
 for y in [-.74,.74]:
     cyl('Drum flange',(0,y-.035,0),(0,y+.035,0),.48,paint)
     cyl('Axle',(0,y-.18,0),(0,y+.18,0),.08,steel)
-# Continuous helical warp winding, intentionally separate from the static frame.
-curve=bpy.data.curves.new('Wound warp','CURVE');curve.dimensions='3D';curve.bevel_depth=.013;curve.bevel_resolution=2
-s=curve.splines.new('POLY');n=1600;s.points.add(n)
-for i,p in enumerate(s.points):
-    t=i/n;a=t*2*math.pi*36;p.co=(.315*math.cos(a),-.69+1.38*t,.315*math.sin(a),1)
-o=bpy.data.objects.new('Wound warp',curve);bpy.context.collection.objects.link(o);o.data.materials.append(rope)
-bpy.context.view_layer.objects.active=o;o.select_set(True);bpy.ops.object.convert(target='MESH')
+# Two coupled warp bays retain one shaft/pivot; not independently powered drums.
+cyl('Central drum divider',(0,-.028,0),(0,.028,0),.44,paint)
+for side in [-1,1]:
+    curve=bpy.data.curves.new('Wound warp','CURVE');curve.dimensions='3D';curve.bevel_depth=.013;curve.bevel_resolution=2
+    s=curve.splines.new('POLY');n=840;s.points.add(n)
+    for i,p in enumerate(s.points):
+        t=i/n;a=t*2*math.pi*17;p.co=(.315*math.cos(a),side*.385-.31+.62*t,.315*math.sin(a),1)
+    o=bpy.data.objects.new('Wound warp',curve);bpy.context.collection.objects.link(o);o.data.materials.append(rope)
+    bpy.ops.object.select_all(action='DESELECT');bpy.context.view_layer.objects.active=o;o.select_set(True);bpy.ops.object.convert(target='MESH')
 socket('DrumAxis',(0,0,0));save('trawl_drum')
 clear()
 # Compact above-deck insulated catch tank; closed lid avoids implying a hole in

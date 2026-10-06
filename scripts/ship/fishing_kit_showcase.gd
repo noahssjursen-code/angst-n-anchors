@@ -15,13 +15,13 @@ func _ready() -> void:
 		var parts := editor.get("_imported_parts_editor") as ImportedShipPartsEditor
 		parts.load_draft(DRAFT)
 		assert(parts.draft_path == DRAFT, "Example must pass builder validation")
-		assert(parts.records.size() == 66)
+		assert(parts.records.size() == 67)
 		var temporary := OS.get_cache_dir().path_join("trawler-kit-%d.json" % OS.get_process_id())
 		parts.save_draft(temporary)
 		parts.load_draft(temporary)
-		assert(parts.records.size() == 66)
+		assert(parts.records.size() == 67)
 		DirAccess.remove_absolute(temporary)
-		print("TRAWLER DRAFT PASS: real builder validation and save/load, 66 placements")
+		print("TRAWLER DRAFT PASS: real builder validation and save/load, 67 placements")
 		editor.queue_free()
 		for i in 4: await get_tree().process_frame
 		get_tree().quit()
@@ -57,6 +57,7 @@ func _ready() -> void:
 	label.position = Vector2(24,70)
 	label.add_theme_font_size_override("font_size",20)
 	canvas.add_child(label)
+	for i in 3:await get_tree().physics_frame
 	fishing = boat.get_fishing_systems()[0]
 	assert(fishing.authored_winch != null)
 	var holds := boat.get_catch_holds()
@@ -67,6 +68,7 @@ func _ready() -> void:
 	fishing.apply_trawl_desired(true)
 	fishing._process(.5)
 	assert(not is_equal_approx(before,drum.rotation.z))
+	_verify_rig()
 	fishing.apply_trawl_desired(false)
 	before = drum.rotation.z
 	fishing._process(.5)
@@ -99,7 +101,57 @@ func _ready() -> void:
 		for i in 12: await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		assert(get_viewport().get_texture().get_image().save_png(args[index+1].get_basename()+"-deck.png") == OK)
+		fishing.apply_trawl_desired(true)
+		camera.size=33;camera.position=Vector3(26,22,38);camera.look_at(Vector3(0,1,10))
+		label.text="DEPLOYED TRAWL / existing fishing state\nTwo warps over actual blocks / separate doors / open diamond mesh"
+		await _capture(args[index+1].get_basename()+"-deployed.png")
+		label.hide();camera.size=12;camera.position=Vector3(10,5,13);camera.look_at(Vector3(0,-.6,20))
+		await _capture(args[index+1].get_basename()+"-net.png")
+		camera.size=3.2;camera.position=Vector3(1.8,6.8,7.6);camera.look_at(Vector3(.95,5.2,5))
+		await _capture(args[index+1].get_basename()+"-block.png")
+		boat.queue_free()
+		for i in 4:await get_tree().process_frame
 		get_tree().quit()
+
+func _capture(path:String) -> void:
+	for i in 12:await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png(path)
+
+func _verify_rig() -> void:
+	var rig:=fishing.imported_rig
+	assert(rig!=null and rig.gantry!=null and fishing._net_mesh==null,"Imported vessel must use actual net assets")
+	assert(rig.net.visible and not rig.bundle.visible and rig.routes.size()==2)
+	assert(rig.ropes.size()==24)
+	boat._sync_moving_part_colliders()
+	var stow_colliders:=0
+	for item in boat.moving_colliders:
+		if item.get("fishing_stow",false):
+			stow_colliders+=1;assert(item.collision.disabled)
+	assert(stow_colliders>0,"Stowed equipment must have walking collision")
+	for route in rig.routes:
+		assert(route.size()==11)
+		var start:=boat.to_local(route[9]);var end:=boat.to_local(route[10])
+		var crossing:=start.lerp(end,(7-start.z)/(end.z-start.z))
+		assert(crossing.y>3.80,"Tow warp must clear the stern bulwark")
+	# Roll/yaw/translation must preserve ship-side authored endpoints and finite spans.
+	var original:=boat.transform
+	boat.position=Vector3(31,3,-22);boat.rotation=Vector3(.08,.75,-.15)
+	fishing._process(.1)
+	for i in 2:
+		var name_:String="PayoutPort" if i==0 else "PayoutStarboard"
+		assert(rig.routes[i][0].is_equal_approx((fishing.authored_winch.find_child(name_,true,false) as Node3D).global_position))
+	for line_ in rig.ropes:
+		assert(line_.global_position.is_finite() and line_.global_basis.determinant()>0)
+	fishing.apply_trawl_desired(false)
+	boat._sync_moving_part_colliders()
+	for item in boat.moving_colliders:
+		if item.get("fishing_stow",false):assert(not item.collision.disabled)
+	assert(not rig.net.visible and rig.bundle.visible)
+	for door in rig.doors:assert(door.transform.is_equal_approx(Transform3D.IDENTITY))
+	for line_ in rig.ropes:assert(not line_.visible)
+	boat.transform=original
+	print("TRAWL RIG PASS: imported assets, authored routes, bulwark clearance, transformed anchors and stow reset")
 
 func _deck_view() -> void:
 	camera.size=9
@@ -108,7 +160,7 @@ func _deck_view() -> void:
 
 func _process(delta: float) -> void:
 	if is_instance_valid(fishing):
-		fishing._drum_rotation_node.rotate_z(delta)
+		fishing._process(delta)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):get_tree().quit()

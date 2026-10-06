@@ -104,7 +104,7 @@ applied to the game's pre-existing lattice-boom crane.
 ## Fishing equipment and editable trawler example (6 October 2026)
 
 Open `resources/models/examples/coastal_trawler_draft.json` through the builder's
-Drafts > Open. It is a normal version-1 draft containing 66 reusable placements:
+Drafts > Open. It is a normal version-1 draft containing 67 reusable placements:
 angled wheelhouse, crowned roof, consoles/helm, rising half-walls, stern working
 opening, winch and two compact insulated deck tanks. It is not a merged boat
 mesh or a commissioned fleet record. Tank spacing leaves a 0.9 m central route
@@ -791,7 +791,7 @@ Mast lantern is all-round white, not a regulated masthead-sector arrangement.
 
 Run _source/lighting_kit/fit_examples.py after regenerating the four example drafts.
 It adds six independent/removable placements to each and touches no user saves.
-Current totals: trawler 66, cargo 93, bulk 93, 32 m coaster 113. Palette uses the
+Current totals: trawler 67, cargo 93, bulk 93, 32 m coaster 113. Palette uses the
 existing Lights category; source layouts and collision handling stay separate.
 marine_lighting_showcase.tscn dispatches real L key events through BoatController,
 checks OFF/NAV/WORK/ALL, lens off state, per-boat isolation, authored downward aim,
@@ -832,3 +832,48 @@ Primary visual reference inspected: Becker Rudder Systems page 2 (full spade
 placement, stock-to-hull relationship and foil proportions). Original symmetric
 game foil, not Becker's proprietary flap/twist profile:
 https://becker-marine-systems.com/fileadmin/redakteure/bilder/Company/Media/Downloads/Product_brochures/becker-rudder-systems.pdf
+
+
+### Imported trawl rig and working deck (6 October afternoon)
+
+build_trawl_rig.py authors seven individual Blender/GLB assets: 4 m gantry,
+hanging block, grooved sheave, mirrored cambered doors, open diamond-mesh net and
+stowed net bundle. The gantry is one palette choice with removable assembly
+components and named sockets. Internal static geometry is merged by material;
+it is not a monolithic boat. Gantry/doors expose the wall paint channel. Floats,
+net twine, hardware and rope retain fixed materials. The supplied 14 m example
+now has 67 records: winch moved to z=3.4, gantry at z=5, both deck-mounted at 2.92.
+Door shoes rest on authored cradles. Net bundle and doors are solid when stowed.
+The NPC sizing reference moves to z=2.4, clear of the relocated winch.
+
+The winch has two coupled winding bays, manifold/connected flexible hoses and
+PayoutPort/PayoutStarboard sockets. One existing drum pivot drives both bays;
+this is not two independently powered winches. Gantry block sockets route warps
+over the sheave crowns. Nearest unclaimed gantry within 8 m binds to each winch.
+A winch without a gantry still deploys the new net/doors, with direct lines;
+arbitrary custom placements are not guaranteed to clear structures.
+
+ImportedTrawlRig is read-only presentation beneath FishingSystem. It replaces the
+old cylinder/cone net only for imported winches; it does not alter drag, catches,
+requests, inventory, saves or authority. G at the actual helm still toggles the
+existing fishing state. Two doors, two warps, four bridles and the net follow the
+vessel heading and WaveSurface height. Reusable line spans are flexible runtime
+geometry. Stow colliders disable while deployed and restore with the authored
+stow transforms; underwater rig meshes never become walking surfaces.
+
+Deployment currently switches between stored and towed poses. There is no
+animated recovery/crew handling, seabed-contact solver, true cable catenary or
+hydrodynamic door spreading. The game rig is shallow towed presentation, not a
+simulation of a specified real fishing method. Do not describe this as complete
+trawl physics or multiply catches based on these visuals.
+
+fishing_kit_showcase checks transformed anchors, finite line pool, supplied stern
+bulwark clearance, stow reset/colliders, drum motion, catch inventory and real
+shore transfer. Captures include deck, deployed assembly, net and pulley closeup.
+The real ocean playtest verifies G deployment/retraction while seated at the helm,
+plus normal HUD, walking, doors, drive and reset. Draft load/save is verified.
+Primary visual sources inspected: Thyboron Type 2 sheet page 1 (cambered/V plate,
+ribs, shoe and towing chain) and Morgere 2025 catalogue PDF page 4 (fabrication and
+tow-test arrangement). Original small game models, not copies of proprietary foil.
+https://thyboron-trawldoor.dk/wp-content/uploads/2020/10/Produktblad-TTD-Type-2-Standard.pdf
+https://www.morgere.com/wp-content/uploads/2025/06/catalogue-morgere-2025-filiere-peche-en-1.pdf

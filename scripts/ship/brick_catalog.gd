@@ -6,7 +6,7 @@ static var _imported: Dictionary = {}
 
 static func imported_entries() -> Dictionary:
 	if _imported.is_empty():
-		for path in ["res://resources/models/parts/lighting_kit/manifest.json","res://resources/models/parts/coaster_kit/manifest.json", "res://resources/models/parts/coaster_perimeter/manifest.json","res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
+		for path in ["res://resources/models/parts/trawl_rig/manifest.json","res://resources/models/parts/lighting_kit/manifest.json","res://resources/models/parts/coaster_kit/manifest.json", "res://resources/models/parts/coaster_perimeter/manifest.json","res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
 			var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 			for raw in data["assets"]:
 				var entry: Dictionary = raw.duplicate(true)
@@ -19,7 +19,7 @@ static func imported_entries() -> Dictionary:
 	return _imported
 static func ids() -> Array[String]:
 	# Palette families; exact asset variants remain addressable for placement and saves.
-	return ["rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight", "trawl_winch", "insulated_catch_tank", "hold_coaming_5x8", "hatch_cover_5x4", "bulk_divider_5m", "deck_floodlight", "nav_port", "nav_starboard", "nav_stern", "mast_lantern"]
+	return ["rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight", "trawl_winch", "trawl_gantry_4m", "insulated_catch_tank", "hold_coaming_5x8", "hatch_cover_5x4", "bulk_divider_5m", "deck_floodlight", "nav_port", "nav_starboard", "nav_stern", "mast_lantern"]
 
 static func ids_for_buildings() -> Array[String]:
 	## Land building editor palette — shared kit minus marine-only systems.
@@ -64,7 +64,7 @@ static func yaw_step_of(brick_id: String) -> int:
 	return maxi(int(get_entry(brick_id).get("yaw_step", 90)), 1)
 
 static func display_name(brick_id: String) -> String:
-	var names := {"deck_floodlight":"Deck floodlight", "nav_port":"Port light", "nav_starboard":"Starboard light", "nav_stern":"Stern light", "mast_lantern":"White mast light","hold_coaming_5x8":"Hold coaming", "hatch_cover_5x4":"Hatch cover","helm_chair":"Helm chair", "passenger_seat":"Passenger seat", "helm_wheel":"Steering wheel", "helm_throttle":"Throttle", "helm_display":"Display"}
+	var names := {"trawl_gantry_4m":"Trawl gantry","deck_floodlight":"Deck floodlight", "nav_port":"Port light", "nav_starboard":"Starboard light", "nav_stern":"Stern light", "mast_lantern":"White mast light","hold_coaming_5x8":"Hold coaming", "hatch_cover_5x4":"Hatch cover","helm_chair":"Helm chair", "passenger_seat":"Passenger seat", "helm_wheel":"Steering wheel", "helm_throttle":"Throttle", "helm_display":"Display"}
 	if names.has(brick_id): return names[brick_id]
 	if brick_id in ["floor_tile", "roof_tile"]:
 		return "Floor" if brick_id == "floor_tile" else "Roof"

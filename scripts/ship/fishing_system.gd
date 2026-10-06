@@ -33,6 +33,8 @@ const NET_MESH_HEIGHT := 7.0
 const NET_MOUTH_AFT_OFFSET := 2.6
 
 var authored_winch: Node3D
+var authored_gantry: Node3D
+var imported_rig: ImportedTrawlRig
 var _body: BoatBody = null
 var _propulsion: PropulsionComponent = null
 
@@ -97,7 +99,7 @@ func toggle_trawling() -> void:
 func _setup_visuals() -> void:
 	# Clean up existing nodes to avoid duplicates when running in tool mode
 	for child in get_children():
-		if child.name in ["TrommelWinch", "TrawlNet", "TowRope"]:
+		if child.name in ["TrommelWinch", "TrawlNet", "TowRope", "ImportedTrawlRig"]:
 			if Engine.is_editor_hint():
 				child.free()
 			else:
@@ -228,6 +230,13 @@ func _setup_visuals() -> void:
 				leg_mesh_instance.position = Vector3(0.0, -leg_length * 0.5, 0.0)
 				_add_child_with_owner(leg_pivot, leg_mesh_instance)
  
+	if authored_winch != null:
+		imported_rig=ImportedTrawlRig.new()
+		imported_rig.winch=authored_winch;imported_rig.gantry=authored_gantry
+		imported_rig.boat=_body;imported_rig.rope_length=net_rope_length
+		add_child(imported_rig)
+		return
+	# Legacy vessels retain their previous presentation until separately migrated.
 	# 6. Tow rope + trawl net trailing far astern on the pay-out line.
 	_rope_mesh = MeshInstance3D.new()
 	_rope_mesh.name = "TowRope"
@@ -279,6 +288,9 @@ func _process(delta: float) -> void:
 		return
 	if trawling and _drum_rotation_node != null:
 		_drum_rotation_node.rotate_z(delta * trommel_rotation_speed)
+	if is_instance_valid(imported_rig):
+		imported_rig.update_rig(trawling,delta)
+		return
 	_update_trawl_rig()
 
 
@@ -501,6 +513,7 @@ func _notify_trawl(message: String) -> void:
 
 
 func _update_trawl_visuals() -> void:
+	if is_instance_valid(imported_rig):imported_rig.update_rig(trawling,0)
 	if _net_mesh != null:
 		_net_mesh.visible = trawling
 		if not trawling:

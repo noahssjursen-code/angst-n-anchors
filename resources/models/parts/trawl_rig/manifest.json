@@ -1,0 +1,139 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "trawl_gantry_4m",
+      "kind": "furniture",
+      "style": "trawl_gantry",
+      "model": "res://resources/models/parts/trawl_rig/trawl_gantry_4m.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        4.16,
+        1.28
+      ],
+      "height_start_m": 2.98,
+      "height_end_m": 2.98,
+      "paintable": true,
+      "components": [
+        {
+          "id": "trawl_block",
+          "pivot": "PortBlockMount"
+        },
+        {
+          "id": "trawl_block",
+          "pivot": "StarboardBlockMount"
+        },
+        {
+          "id": "trawl_door_port",
+          "pivot": "PortDoorStow"
+        },
+        {
+          "id": "trawl_door_starboard",
+          "pivot": "StarboardDoorStow"
+        },
+        {
+          "id": "trawl_net_bundle",
+          "pivot": "NetStow"
+        }
+      ]
+    },
+    {
+      "id": "trawl_block",
+      "kind": "furniture",
+      "style": "trawl_block",
+      "model": "res://resources/models/parts/trawl_rig/trawl_block.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.26,
+        0.42
+      ],
+      "height_start_m": 0.55,
+      "height_end_m": 0.55,
+      "paintable": true,
+      "components": [
+        {
+          "id": "trawl_sheave",
+          "pivot": "SheavePivot"
+        }
+      ]
+    },
+    {
+      "id": "trawl_sheave",
+      "kind": "furniture",
+      "style": "trawl_sheave",
+      "model": "res://resources/models/parts/trawl_rig/trawl_sheave.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.15,
+        0.4
+      ],
+      "height_start_m": 0.4,
+      "height_end_m": 0.4,
+      "paintable": true,
+      "components": []
+    },
+    {
+      "id": "trawl_door_port",
+      "kind": "furniture",
+      "style": "trawl_door",
+      "model": "res://resources/models/parts/trawl_rig/trawl_door_port.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        1.45
+      ],
+      "height_start_m": 1.15,
+      "height_end_m": 1.15,
+      "paintable": true,
+      "components": []
+    },
+    {
+      "id": "trawl_door_starboard",
+      "kind": "furniture",
+      "style": "trawl_door",
+      "model": "res://resources/models/parts/trawl_rig/trawl_door_starboard.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        1.45
+      ],
+      "height_start_m": 1.15,
+      "height_end_m": 1.15,
+      "paintable": true,
+      "components": []
+    },
+    {
+      "id": "trawl_net_bundle",
+      "kind": "furniture",
+      "style": "trawl_bundle",
+      "model": "res://resources/models/parts/trawl_rig/trawl_net_bundle.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        2.5,
+        0.66
+      ],
+      "height_start_m": 0.66,
+      "height_end_m": 0.66,
+      "paintable": true,
+      "components": []
+    }
+  ]
+}

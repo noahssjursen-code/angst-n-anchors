@@ -239,6 +239,13 @@ func _verify() -> void:
 	if helm is ImportedSeatInteractable:
 		assert(helm.state_driver.state["occupied"], "Helm chair must report seated occupancy")
 	assert(controller._ship_hud != null and controller._hud_layer.visible, "Use normal game HUD")
+	var fishing_systems:=boat.get_fishing_systems()
+	if not fishing_systems.is_empty():
+		await _tap_g()
+		assert(fishing_systems[0].trawling and fishing_systems[0].imported_rig.net.visible,"Normal G input must deploy the imported net")
+		await _tap_g()
+		assert(not fishing_systems[0].trawling and not fishing_systems[0].imported_rig.net.visible,"G again must retract the deployed gear")
+		print("TRAWL INPUT PASS: real G deployment/retraction from occupied helm")
 	controller.set_throttle_stage_idx(4)
 	for i in range(360):
 		await get_tree().physics_frame
@@ -265,6 +272,13 @@ func _verify() -> void:
 	if output >= 0 and output + 1 < args.size():
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(args[output + 1])
+		if not fishing_systems.is_empty():
+			await _tap_g()
+			camera._zoom_target=42;camera._pitch=.65;camera._yaw=boat.rotation.y+.55
+			for i in 120:await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(args[output+1].get_basename()+"-trawling.png")
+			await _tap_g()
 	_press_f()
 	assert(not helm.is_occupied() and not player.is_vehicle_occupied())
 	assert(not controller._active, "Leaving the helm chair must release vessel controls")
@@ -295,6 +309,14 @@ func _aim_at_interaction(interaction: BridgeInteractable) -> void:
 		view.look_at(target)
 		if interaction._boarding_player() == player:
 			return
+
+func _tap_g() -> void:
+	var event:=InputEventKey.new();event.keycode=KEY_G;event.physical_keycode=KEY_G;event.pressed=true
+	Input.parse_input_event(event)
+	for i in 4:await get_tree().physics_frame
+	event=InputEventKey.new();event.keycode=KEY_G;event.physical_keycode=KEY_G;event.pressed=false
+	Input.parse_input_event(event)
+	for i in 4:await get_tree().physics_frame
 
 func _press_f() -> void:
 	var event := InputEventAction.new()

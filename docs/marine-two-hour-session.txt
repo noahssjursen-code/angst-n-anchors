@@ -66,3 +66,12 @@ hull clearance and full rotation/steering extent checks pass. Actual 32 m ocean
 playtest passes with normal HUD, helm/seats/door/walking/drive/reset. Original
 14 m stern gear regression passes. Hydrodynamic sizing remains provisional.
 Next: trawler gantry and deployed fishing gear, replacing the translucent cone.
+
+17:34 Trawler refinement: seven independent assets for gantry/blocks/sheaves,
+mirrored steel doors, real open net and stowed bundle; two-bay winch with connected
+hydraulic hoses. Supplied stern routes clear bulwarks. Transformed anchor and
+stow-collider checks pass. Real ocean G input deploys/retracts through existing
+helm control, with catch/drag/authority unchanged. Shore-transfer and draft checks
+pass. Reviewed close pulley/deck/net and in-ocean captures. Deployment remains
+instant pose switching; no seabed/rope physics claim. Next: a usable standard
+stair module and a more substantial editable superstructure for the 32 m hull.

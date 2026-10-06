@@ -2,7 +2,7 @@ class_name ImportedHullCatalog
 extends RefCounted
 ## Authoring/playtest platforms only; not the owned-fleet hull registry.
 const ENTRIES := {
-	"trawler_hull_14m": {"label":"14 × 5 m", "loa_m":14.0, "beam_m":5.0, "depth_m":2.92, "draft_m":1.6, "displacement_t":58.0, "default_shaft_power_kw":300.0, "fuel_l":600.0, "mounts":"mounts_14m.json", "rising":true, "mooring_inset":1.95, "mooring_guide":2.34, "mooring_stations":[-2.8,6.0], "reference_z":3.5},
+	"trawler_hull_14m": {"label":"14 × 5 m", "loa_m":14.0, "beam_m":5.0, "depth_m":2.92, "draft_m":1.6, "displacement_t":58.0, "default_shaft_power_kw":300.0, "fuel_l":600.0, "mounts":"mounts_14m.json", "rising":true, "mooring_inset":1.95, "mooring_guide":2.34, "mooring_stations":[-2.8,6.0], "reference_z":2.4},
 	"hull_24x8": {"label":"24 × 8 m", "loa_m":24.0, "beam_m":8.0, "depth_m":3.6, "draft_m":2.0, "displacement_t":180.0, "default_shaft_power_kw":700.0, "fuel_l":1800.0, "mounts":"mounts_24m.json", "rising":false, "mooring_inset":3.45, "mooring_guide":3.84, "mooring_stations":[-5.1,10.8], "reference_z":7.0, "coaming":"hold_coaming_5x8", "hatch":"hatch_cover_5x4", "hatch_stations":[-2.0,2.0]},
 	"hull_32x10": {"label":"32 × 10 m", "loa_m":32.0, "beam_m":10.0, "depth_m":4.5, "draft_m":2.6, "displacement_t":420.0, "default_shaft_power_kw":1100.0, "fuel_l":4500.0, "mounts":"mounts_32m.json", "rising":false, "mooring_inset":4.45, "mooring_guide":4.84, "mooring_stations":[-7.0,14.0], "reference_z":10.0, "coaming":"hold_coaming_6x12", "hatch":"hatch_cover_6x3", "hatch_stations":[-4.5,-1.5,1.5,4.5]},
 }

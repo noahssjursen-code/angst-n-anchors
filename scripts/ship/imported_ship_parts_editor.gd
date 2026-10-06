@@ -1159,7 +1159,7 @@ func _build_scale_reference() -> void:
 	reference_root = Node3D.new()
 	reference_root.name = "PlayerScaleReference"
 	editor.get("_world").add_child(reference_root)
-	reference_root.position = Vector3(0, deck_height, 3.5)
+	reference_root.position = Vector3(0, deck_height, float(ImportedHullCatalog.ENTRIES[hull_id].reference_z))
 	var npc := NpcBase.new()
 	npc.name = "ReferenceCaptain"
 	reference_root.add_child(npc)

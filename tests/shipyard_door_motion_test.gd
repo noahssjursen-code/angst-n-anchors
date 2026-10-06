@@ -54,4 +54,6 @@ func _ready() -> void:
 	assert(boat.inertia.z > old_roll_inertia * 1.7)
 	assert(boat.physics_profile.heave_damping_ratio >= 1.0)
 	print("DOOR MOTION PASS: %d closed/open crossings, reversed walls, both sides, roll/pitch, deck capsule and increased hull inertia" % cases)
+	player.queue_free();boat.queue_free()
+	for i in 4:await get_tree().process_frame
 	get_tree().quit()

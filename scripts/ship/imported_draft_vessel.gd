@@ -120,6 +120,14 @@ func _add_interactions(part: Node3D, state: ShipPartState) -> void:
 		fishing.name = "FishingSystem"
 		fishing.anchored_to_brick = true
 		fishing.authored_winch = part
+		var nearest:=INF
+		for candidate in part_roots:
+			if candidate.get_meta("asset_id","")!="trawl_gantry_4m":continue
+			if candidate.has_meta("trawl_rig_owner"):continue
+			var distance:=part.position.distance_to(candidate.position)
+			if distance<nearest and distance<8:
+				nearest=distance;fishing.authored_gantry=candidate
+		if fishing.authored_gantry!=null:fishing.authored_gantry.set_meta("trawl_rig_owner",part)
 		part.add_child(fishing)
 	elif style == "catch_tank":
 		var hold := CatchHoldComponent.new()
@@ -179,6 +187,7 @@ func _ensure_walk_deck() -> void:
 		# Underwater moving hardware is presentation, not walkable deck triangles.
 		if mesh.has_meta("stern_gear_visual"): continue
 		if mesh.has_meta("bulk_fill_visual"): continue
+		if mesh.has_meta("fishing_rig_visual"): continue
 		# Small hinges/lever handles are visual hardware, not doorway obstacles.
 		# Keep the complete moving leaf, frame and header collidable.
 		if str(mesh.name).begins_with("Door hinge") or str(mesh.name).begins_with("Lever handle"):
@@ -193,6 +202,10 @@ func _ensure_walk_deck() -> void:
 		collision.shape = shape
 		collision.transform = _relative_transform(mesh)
 		_walk_deck.add_child(collision)
+		if mesh.has_meta("fishing_stow_visual"):
+			collision.disabled=not mesh.get_meta("fishing_stowed",false)
+			moving_colliders.append({"mesh":mesh,"collision":collision,"fishing_stow":true})
+			continue
 		# Door leaf transforms follow their authored hinge, including the collision.
 		var parent := mesh.get_parent()
 		while parent != self:
@@ -204,7 +217,13 @@ func _ensure_walk_deck() -> void:
 
 func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
+	_sync_moving_part_colliders()
+
+func _sync_moving_part_colliders() -> void:
 	for item in moving_colliders:
+		if item.get("fishing_stow",false):
+			item["collision"].disabled=not item["mesh"].get_meta("fishing_stowed",false)
+			if item["collision"].disabled:continue
 		item["collision"].transform = _relative_transform(item["mesh"])
 
 func _relative_transform(node: Node3D) -> Transform3D:
