@@ -82,36 +82,9 @@ vec3 ocean_body(
 	float crest,
 	float noise
 ) {
-	float facing = pow(clamp(dot(normal_world, view_dir), 0.001, 1.0), 0.7);
-	float height_rel = clamp((world_pos.y - water_level_value) * 0.55, -0.5, 1.0);
-	vec3 body = mix(deep_color, shallow_color, (1.0 - facing) * (0.25 + near_lift * 0.4));
-	body = mix(body, vec3(0.015, 0.11, 0.13), crest * 0.32);
-	float trough = clamp(-height_rel, 0.0, 0.4) * mix(0.55, 1.0, noise);
-	return body * (1.0 - trough * 0.28);
-}
-
-vec3 ocean_sky_reflection(
-	vec3 body,
-	vec3 horizon_color,
-	vec3 top_color,
-	vec3 normal_world,
-	vec3 view_dir,
-	float fresnel,
-	float sky_mix
-) {
-	float facing = pow(clamp(dot(normal_world, view_dir), 0.001, 1.0), 0.7);
-	vec3 ref_dir = reflect(-view_dir, normal_world);
-	float sky_t = pow(clamp(ref_dir.y * 0.5 + 0.5, 0.0, 1.0), 0.85);
-	vec3 sky_col = mix(horizon_color, top_color, sky_t);
-	float sky_w = fresnel * sky_mix * mix(1.15, 0.35, facing);
-	return mix(body, sky_col, clamp(sky_w, 0.0, 0.92));
-}
-
-float ocean_glint(vec3 normal_world, vec3 view_dir, vec3 sun_dir, float distance_to_camera) {
-	float ndh = clamp(dot(normal_world, normalize(view_dir + sun_dir)), 0.0, 1.0);
-	float glint = pow(ndh, 96.0) * 0.35 + pow(ndh, 420.0) * 0.55;
-	glint *= 1.0 - smoothstep(50.0, 450.0, distance_to_camera) * 0.9;
-	return min(glint, 0.85);
+	// Absorbed/scattered water colour. Angle-dependent sky colour belongs in
+	// environment reflection, not this diffuse term. Avoid height-painted bands.
+	return mix(deep_color, shallow_color, 0.08 + crest * 0.10);
 }
 
 // Independent high-precision hash: the legacy noise hash multiplies very large

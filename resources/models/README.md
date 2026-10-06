@@ -1252,3 +1252,16 @@ Run tests/ocean_transmission_review.tscn with -- --shipyard-playtest for GPU
 convergence checks and archived renders. Optional --compare-shader=<absolute path>
 compares shader GPU timing, not FFT cost. Depth convention reference:
 https://docs.godotengine.org/en/4.6/tutorials/shaders/advanced_postprocessing.html
+
+### Water reflection acceptance follow-up
+
+Ocean surfaces now use actual Environment sky radiance and standard dielectric
+lighting (SPECULAR=.25 / F0=.02), with per-pixel FFT slope sampling nearby and
+footprint filtering. This supersedes the earlier custom local-light-only ocean
+rule. Do not put a second sky reflection or sun highlight into ALBEDO. Keep
+transmitted already-lit scene colour in EMISSION. Foam/wake atlas values are
+coverage envelopes: fine foam detail is shaded separately and fades before it
+becomes subpixel. The 2m wake atlas must not saturate into a solid white ribbon.
+OceanTransmissionReview accepts --surface-review and --drive-review for actual
+rendered weather and powered-vessel checks. Sunset is around22:00 in SolarCycle,
+not18:00. Cloud layer is still procedural2D; do not describe it as volumetric.

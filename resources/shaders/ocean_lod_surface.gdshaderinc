@@ -137,14 +137,9 @@ void fragment() {
 		deep_albedo, shallow_albedo, normal_world, view_dir, v_world_pos,
 		water_level, near_color_lift, crest, crest_noise
 	);
-	vec3 color = ocean_sky_reflection(
-		body, sky_horizon_color, sky_top_color, normal_world, view_dir,
-		fresnel, fresnel_sky_mix
-	);
+	vec3 color = body;
 
-	float glint = ocean_glint(normal_world, view_dir, sun_dir, distance_to_camera);
-	color += sun_color * glint * glint_strength * clamp(sun_dir.y, 0.0, 1.0)
-			* (0.2 + fresnel * 0.5);
+
 
 #if OCEAN_FOAM
 	float jacobian = textureLod(
@@ -159,46 +154,28 @@ void fragment() {
 	).w * 0.45;
 	float foam = ocean_foam_coverage(v_world_pos.xz, wave_time, clamp(jacobian, 0.0, 1.0), v_wave_steep) * foam_strength * 0.78;
 #if OCEAN_WAKE
-	float wake_erode = ocean_fbm(
-		v_world_pos.xz * vec2(1.35, 0.78)
-		+ wave_time * vec2(0.55, -0.28)
-	);
-	float wake_lace = smoothstep(
-		0.05 + wake_erode * 0.28,
-		0.62,
-		wake_sample.x
-	);
-	float wake_foam = wake_lace * wake_visual_strength * 0.75;
+	float wake_lace = ocean_foam_coverage(v_world_pos.xz, wave_time, min(pow(max(wake_sample.x, 0.0), 0.45) * 1.15, 0.92), 0.0);
+	float wake_foam = wake_lace * wake_visual_strength * 0.61;
 	float wake_churn = smoothstep(0.03, 0.45, wake_sample.y) * wake_visual_strength;
 	foam = max(foam, wake_foam);
-	color = mix(color, color * vec3(0.72, 0.82, 0.88), wake_churn * 0.18);
+	color = mix(color, vec3(0.06, 0.14, 0.13), wake_churn * 0.22);
 #endif
 	foam = clamp(foam, 0.0, 1.0);
 	vec3 foam_color = mix(vec3(0.75, 0.84, 0.88), vec3(0.97, 0.98, 1.0), foam);
 	color = mix(color, foam_color, foam * 0.7);
 #if OCEAN_WAKE
-	ROUGHNESS = mix(mix(0.68, 0.8, wake_churn), 0.95, foam);
+	ROUGHNESS = mix(mix(0.18, 0.34, wake_churn), 0.95, foam);
 #else
-	ROUGHNESS = mix(0.68, 0.95, foam);
+	ROUGHNESS = mix(0.18, 0.85, foam);
 #endif
 #else
-	ROUGHNESS = 0.76;
+	ROUGHNESS = 0.22;
 #endif
 
 	color = mix(color, debug_tint.rgb, debug_tint.a);
 	v_fresnel = fresnel;
 	ALBEDO = color;
 	METALLIC = 0.0;
-	SPECULAR = 0.0;
+	SPECULAR = 0.25;
 	NORMAL = normalize((VIEW_MATRIX * vec4(normal_world, 0.0)).xyz);
-}
-
-void light() {
-	if (!LIGHT_IS_DIRECTIONAL) {
-		float ndl = max(dot(NORMAL, LIGHT), 0.0);
-		DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * ndl * 0.08;
-		vec3 half_vector = normalize(VIEW + LIGHT);
-		float ndh = max(dot(NORMAL, half_vector), 0.0);
-		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * pow(ndh, 72.0) * v_fresnel * 0.25;
-	}
 }

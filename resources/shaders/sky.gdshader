@@ -45,9 +45,9 @@ uniform float daylight_factor : hint_range(0.0, 1.0) = 1.0;
 // ---------------------------------------------------------------------------
 
 float hash(vec2 p) {
-	p = fract(p * vec2(127.1, 311.7));
-	p += dot(p, p + 19.19);
-	return fract(p.x * p.y);
+	vec3 q = fract(vec3(p.xyx) * 0.1031);
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.x + q.y) * q.z);
 }
 
 float noise(vec2 p) {
@@ -67,7 +67,7 @@ float fbm(vec2 p) {
 	float a = 0.5;
 	for (int i = 0; i < 4; i++) {
 		v += a * noise(p);
-		p  = p * 2.1 + vec2(1.7, 9.2);
+		p = mat2(vec2(0.8, -0.6), vec2(0.6, 0.8)) * p * 2.03 + vec2(1.7, 9.2);
 		a *= 0.5;
 	}
 	return v;
@@ -154,11 +154,11 @@ float cloud_density(vec3 dir, float shape) {
 	
 	// Storms increase overall cloud coverage and thickness
 	float coverage = clamp(cloud_coverage * 1.3 + storm_intensity * 0.2, 0.0, 1.0);
-	float threshold = 1.0 - coverage;
+	float threshold = mix(0.72, 0.20, coverage);
 	
 	// Sharpness controls how fluffy vs hard-edged the clouds are.
 	// As coverage increases, we keep a wider gradient so the contours remain visible!
-	float edge_softness = max(0.15, (1.0 - coverage) * 0.5) / cloud_sharpness;
+	float edge_softness = mix(0.16, 0.22, coverage) / max(cloud_sharpness * 0.65, 0.5);
 	float density = smoothstep(threshold, threshold + edge_softness, shape);
 	return clamp(density * horizon_fade, 0.0, 1.0);
 }

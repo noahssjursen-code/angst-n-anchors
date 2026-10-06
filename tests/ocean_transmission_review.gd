@@ -3,6 +3,7 @@ extends Node3D
 var renderer: WorldRenderer
 var camera: Camera3D
 var output: String
+var moving_boat: ImportedDraftVessel
 
 func capture(tag: String) -> void:
 	for frame in 15: await get_tree().process_frame
@@ -34,6 +35,14 @@ func review() -> void:
 	camera.look_at(Vector3(0,-2,0))
 	renderer=WorldRenderer.new()
 	add_child(renderer)
+	if OS.get_cmdline_user_args().has("--drive-review"):
+		await drive_review()
+		get_tree().quit()
+		return
+	if OS.get_cmdline_user_args().has("--surface-review"):
+		await surface_review()
+		get_tree().quit()
+		return
 	var boat := VesselSpawn.instantiate_from_record(CompanyService.build_starter_vessel_record("fishing")) as ImportedDraftVessel
 	boat.freeze=true
 	add_child(boat)
@@ -133,3 +142,59 @@ func profile() -> void:
 			samples.append(RenderingServer.viewport_get_measured_render_time_gpu(viewport))
 		samples.sort()
 		print("OCEAN GPU ",variant," median ms=",samples[60])
+
+func surface_review() -> void:
+	for condition in [{"name":"clear","time":.5,"cloud":.05,"sea":.2},{"name":"cloudy","time":.5,"cloud":.65,"sea":.35},{"name":"sunset","time":.91,"cloud":.35,"sea":.2},{"name":"rough","time":.5,"cloud":.8,"sea":.8}]:
+		WorldClock.snap_time_of_day(condition.time)
+		WeatherLighting.time_of_day=condition.time
+		WeatherLighting.cloud_cover=condition.cloud
+		WeatherLighting.sea_state=condition.sea
+		renderer._apply_weather_lighting()
+		camera.position=Vector3(0,4,0)
+		var solar := SolarCycle.sample(condition.time)
+		var bearing: Vector3=solar.sun_direction
+		camera.look_at(camera.position+Vector3(bearing.x*70,-4,bearing.z*70))
+		await get_tree().create_timer(5.0).timeout
+		await capture("surface-"+condition.name)
+		camera.look_at(Vector3(15,-2,-15))
+		await capture("close-"+condition.name)
+	await profile()
+
+func _process(_delta: float) -> void:
+	if is_instance_valid(moving_boat):
+		camera.global_position=moving_boat.global_position+moving_boat.global_basis*Vector3(17,10,23)
+		camera.look_at(moving_boat.global_position+Vector3(0,1,0))
+
+func drive_review() -> void:
+	WeatherLighting.cloud_cover=.5
+	WeatherLighting.sea_state=.25
+	renderer._apply_weather_lighting()
+	moving_boat=VesselSpawn.instantiate_from_record(CompanyService.build_starter_vessel_record("fishing")) as ImportedDraftVessel
+	add_child(moving_boat)
+	moving_boat.place_at_waterline(WaveSurface.WATER_LEVEL)
+	moving_boat.get_node("BoatController").set_physics_process(false)
+	WaveSurface.set_local_visual_vessel(moving_boat)
+	await get_tree().create_timer(5).timeout
+	await capture("drive-settled")
+	moving_boat.get_node("PropulsionComponent").throttle=-1
+	for step in 5:
+		await get_tree().create_timer(6).timeout
+		assert(moving_boat.global_position.is_finite())
+		assert(absf(moving_boat.global_position.y-WaveSurface.WATER_LEVEL)<6)
+		await capture("drive-ahead-%02d" % step)
+	print("DRIVE speed knots=",moving_boat.linear_velocity.length()*1.94384)
+	assert(moving_boat.linear_velocity.length()>2)
+	var start_heading := moving_boat.rotation.y
+	moving_boat.get_node("RudderComponent").rudder_input=.65
+	await get_tree().create_timer(8).timeout
+	await capture("drive-turn")
+	print("DRIVE turn radians=",wrapf(moving_boat.rotation.y-start_heading,-PI,PI))
+	assert(absf(wrapf(moving_boat.rotation.y-start_heading,-PI,PI))>.03)
+	WorldClock.snap_time_of_day(0)
+	WeatherLighting.time_of_day=0
+	renderer._apply_weather_lighting()
+	var lights := moving_boat.get_node("ShipLighting") as ShipLighting
+	lights._preset=ShipLighting.Preset.ALL
+	lights._apply_preset()
+	await capture("drive-night")
+	print("DRIVE REVIEW PASS")
