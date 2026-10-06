@@ -1,5 +1,5 @@
 shader_type spatial;
-// Water owns its specular — Godot GGX on a flat ocean reads as plastic wrap.
+// Dielectric water, with the simulation's filtered slopes resolving its surface.
 render_mode diffuse_burley, cull_disabled;
 
 
@@ -11,7 +11,7 @@ uniform float transmission_strength : hint_range(0.0, 1.0) = 1.0;
 uniform vec3 absorption_per_metre = vec3(0.65, 0.27, 0.19);
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
-uniform sampler2DArray slope_map : filter_linear, repeat_enable;
+uniform sampler2DArray slope_map : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec4 length_scales = vec4(256.0, 64.0, 16.0, 4.0);
 uniform vec4 cascade_fade_end = vec4(5500.0, 1536.0, 384.0, 96.0);
 uniform float geomorph_strength : hint_range(0.0, 1.0) = 1.0;
@@ -189,11 +189,9 @@ void fragment() {
 	// across metre-sized mesh triangles. Geometry and physics are unchanged.
 	float horizontal_distance = length(v_world_pos.xz - CAMERA_POSITION_WORLD.xz);
 	vec2 fine_slope = vec2(0.0);
-	float slope_footprint = max(length(dFdx(v_fft_xz)), length(dFdy(v_fft_xz)));
 	for (int i = 0; i < 4; i++) {
 		float weight = 1.0 - smoothstep(cascade_fade_end[i] * 0.75, cascade_fade_end[i], horizontal_distance);
-		weight *= 1.0 - smoothstep(length_scales[i] / 512.0, length_scales[i] / 128.0, slope_footprint);
-		fine_slope += textureLod(slope_map, vec3(v_fft_xz / length_scales[i], float(i)), 0.0).xy * weight;
+		fine_slope += texture(slope_map, vec3(v_fft_xz / length_scales[i], float(i))).xy * weight;
 	}
 	vec3 nm = normalize(vec3(-fine_slope.x * v_amplitude, 1.0, -fine_slope.y * v_amplitude));
 	if (!FRONT_FACING) {
@@ -218,19 +216,13 @@ void fragment() {
 		}
 	}
 
-	// Capillary chop — analytic sines near camera (FFT slopes carry the rest).
-	float near_w = 1.0 - smoothstep(35.0, 280.0, dist_to_cam);
+	// The mip-filtered FFT already supplies short waves. Three extra metre-scale
+	// sine waves formed an unrelated crosshatch pattern across sheltered water.
 	vec3 world_n = nm;
 	if (wake_sample.y > 0.001) {
 		vec3 wake_lateral = vec3(-wake_gradient.x, 0.0, -wake_gradient.y)
 			* 0.18 * wake_visual_strength;
 		world_n = normalize(world_n + wake_lateral - world_n * dot(world_n, wake_lateral));
-	}
-	if (near_w > 0.01 && chop_strength > 0.001) {
-		vec2 g_eta = ocean_chop_gradient(xz + wt * vec2(0.22, -0.18), wt);
-		float ripple_gain = chop_strength * 1.85 * near_w;
-		vec3 lateral = vec3(-g_eta.x, 0.0, -g_eta.y) * ripple_gain;
-		world_n = normalize(world_n + lateral - world_n * dot(world_n, lateral));
 	}
 	NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
 

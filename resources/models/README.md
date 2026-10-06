@@ -1282,3 +1282,15 @@ becomes subpixel. The 2m wake atlas must not saturate into a solid white ribbon.
 OceanTransmissionReview accepts --surface-review and --drive-review for actual
 rendered weather and powered-vessel checks. Sunset is around22:00 in SolarCycle,
 not18:00. Cloud layer is still procedural2D; do not describe it as volumetric.
+
+### Filtered ocean slope field
+
+FFT assembly writes base signed slopes; fft_ocean_slope_mip.glsl builds their
+nine-level averaged mip chain in a separate compute list (D3D12 push-constant
+layout differs from FFT passes). Near/mid/far/horizon sample filtered slopes per
+pixel, retaining the existing cascade distance fades and shared wave amplitude.
+Do not restore synthetic metre-scale cosine chop or discard an entire cascade
+just because its highest frequencies become subpixel. All water tiers use the
+same weather roughness driver. The review fixture verifies GPU mip averages;
+--surface-review and --drive-review still require visual inspection. Added memory
+is2.667MiB; measured mip compute0.049ms on RTX5070 is not a universal frame budget.

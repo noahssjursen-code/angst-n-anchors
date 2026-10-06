@@ -30,17 +30,6 @@ float ocean_fbm(vec2 p) {
 	return v;
 }
 
-vec2 ocean_chop_gradient(vec2 xz, float wt) {
-	vec2 d = vec2(0.0);
-	float p1 = dot(xz, vec2(1.73, -1.19)) + wt * 2.15;
-	float p2 = dot(xz, vec2(-2.41, 1.37)) + wt * 2.85;
-	float p3 = dot(xz, vec2(0.91, 2.63)) + wt * (-3.35);
-	d += vec2(1.73, -1.19) * cos(p1) * 0.55;
-	d += vec2(-2.41, 1.37) * cos(p2) * 0.35;
-	d += vec2(0.91, 2.63) * cos(p3) * 0.22;
-	return d;
-}
-
 vec2 ocean_wake_uv(vec2 world_xz, vec2 wake_origin, float wake_extent) {
 	return (world_xz - wake_origin) / max(wake_extent, 0.001);
 }

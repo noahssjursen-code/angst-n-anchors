@@ -1,4 +1,5 @@
 shader_type spatial;
+uniform float chop_strength : hint_range(0.0, 1.0) = 0.2;
 render_mode diffuse_burley, cull_disabled;
 
 
@@ -6,7 +7,7 @@ render_mode diffuse_burley, cull_disabled;
 // so the seam doesn't turn into a plastic mirror.
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
-uniform sampler2DArray slope_map        : filter_linear, repeat_enable;
+uniform sampler2DArray slope_map        : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float length_scale_0 = 256.0;
 
 uniform float wave_time = 0.0;
@@ -36,6 +37,8 @@ uniform float glint_strength : hint_range(0.0, 4.0) = 0.18;
 uniform vec4 debug_tint : source_color = vec4(0.0);
 
 varying vec3 v_world_pos;
+varying vec2 v_fft_xz;
+varying float v_amplitude;
 varying vec3 v_local_pos;
 varying vec3 v_world_normal;
 varying float v_fresnel;
@@ -58,6 +61,8 @@ void vertex() {
 	}
 
 	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * wave_fade * shelter;
+	v_fft_xz = wp.xz;
+	v_amplitude = amp_scale;
 
 	vec2 uv = wp.xz / length_scale_0;
 	vec3 disp  = textureLod(displacement_map, vec3(uv, 0.0), 0.0).xyz;
@@ -79,7 +84,8 @@ void fragment() {
 	if (discard_half > 0.0 && abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
 		discard;
 	}
-	vec3 nm = normalize(v_world_normal);
+	vec2 pixel_slope = texture(slope_map, vec3(v_fft_xz / length_scale_0, 0.0)).xy;
+	vec3 nm = normalize(vec3(-pixel_slope.x * v_amplitude, 1.0, -pixel_slope.y * v_amplitude));
 	if (!FRONT_FACING) {
 		nm = -nm;
 	}
@@ -104,7 +110,9 @@ void fragment() {
 	col = mix(col, debug_tint.rgb, debug_tint.a);
 
 	ALBEDO = col;
-	ROUGHNESS = 0.22;
+	float normal_variance = max(length(dFdx(nm)), length(dFdy(nm)));
+	ROUGHNESS = clamp(0.14 + chop_strength * 0.30 + normal_variance * 0.35, 0.14, 0.38);
 	METALLIC = 0.0;
 	SPECULAR = 0.25;
+	NORMAL = normalize((VIEW_MATRIX * vec4(nm, 0.0)).xyz);
 }

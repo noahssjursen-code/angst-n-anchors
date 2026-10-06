@@ -1,5 +1,5 @@
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
-uniform sampler2DArray slope_map : filter_linear, repeat_enable;
+uniform sampler2DArray slope_map : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec4 length_scales = vec4(256.0, 64.0, 16.0, 4.0);
 uniform vec4 cascade_fade_end = vec4(5500.0, 1536.0, 384.0, 96.0);
 
@@ -19,6 +19,7 @@ uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.52;
 uniform float near_color_lift : hint_range(0.0, 1.0) = 0.14;
 uniform float glint_strength : hint_range(0.0, 4.0) = 0.35;
 uniform float foam_strength : hint_range(0.0, 2.0) = 0.55;
+uniform float chop_strength : hint_range(0.0, 1.0) = 0.2;
 uniform float foam_steep_start : hint_range(0.0, 1.0) = 0.22;
 uniform float foam_steep_end : hint_range(0.0, 1.0) = 0.65;
 
@@ -35,6 +36,8 @@ uniform float wake_visual_strength : hint_range(0.0, 2.0) = 1.0;
 #endif
 
 varying vec3 v_world_pos;
+varying vec2 v_fft_xz;
+varying float v_amplitude;
 varying vec3 v_world_normal;
 varying float v_wave_steep;
 varying float v_fresnel;
@@ -69,6 +72,8 @@ void vertex() {
 	}
 
 	float amplitude = wave_intensity * wave_energy_multiplier * 0.42 * shelter;
+	v_fft_xz = wp.xz;
+	v_amplitude = amplitude;
 	displacement *= amplitude;
 	slopes *= amplitude;
 	vec3 displaced_world = vec3(
@@ -104,7 +109,13 @@ void vertex() {
 }
 
 void fragment() {
-	vec3 normal_world = normalize(v_world_normal);
+	vec2 pixel_slope = vec2(0.0);
+	float horizontal_distance = length(v_world_pos.xz - CAMERA_POSITION_WORLD.xz);
+	for (int i = 0; i < OCEAN_CASCADE_COUNT; i++) {
+		float weight = 1.0 - smoothstep(cascade_fade_end[i] * .75, cascade_fade_end[i], horizontal_distance);
+		pixel_slope += texture(slope_map, vec3(v_fft_xz / length_scales[i], float(i))).xy * weight;
+	}
+	vec3 normal_world = normalize(vec3(-pixel_slope.x * v_amplitude, 1.0, -pixel_slope.y * v_amplitude));
 	if (!FRONT_FACING) {
 		normal_world = -normal_world;
 	}
@@ -138,6 +149,8 @@ void fragment() {
 		water_level, near_color_lift, crest, crest_noise
 	);
 	vec3 color = body;
+	float normal_variance = max(length(dFdx(normal_world)), length(dFdy(normal_world)));
+	float water_roughness = clamp(0.14 + chop_strength * 0.30 + normal_variance * 0.35, 0.14, 0.38);
 
 
 
@@ -164,12 +177,12 @@ void fragment() {
 	vec3 foam_color = mix(vec3(0.75, 0.84, 0.88), vec3(0.97, 0.98, 1.0), foam);
 	color = mix(color, foam_color, foam * 0.7);
 #if OCEAN_WAKE
-	ROUGHNESS = mix(mix(0.18, 0.34, wake_churn), 0.95, foam);
+	ROUGHNESS = mix(mix(water_roughness, 0.38, wake_churn), 0.85, foam);
 #else
-	ROUGHNESS = mix(0.18, 0.85, foam);
+	ROUGHNESS = mix(water_roughness, 0.85, foam);
 #endif
 #else
-	ROUGHNESS = 0.22;
+	ROUGHNESS = water_roughness;
 #endif
 
 	color = mix(color, debug_tint.rgb, debug_tint.a);

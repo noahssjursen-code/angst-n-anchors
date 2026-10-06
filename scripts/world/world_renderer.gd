@@ -958,6 +958,7 @@ func _apply_ocean_shader(
 		_ocean_far_material.set_shader_parameter("fresnel_sky_mix",    fres_blend)
 		_ocean_far_material.set_shader_parameter("near_color_lift",    near_lift)
 		_ocean_far_material.set_shader_parameter("glint_strength",     glint * 0.55)
+		_ocean_far_material.set_shader_parameter("chop_strength", chop_val)
 
 	if _ocean_horizon_material != null:
 		_ocean_horizon_material.set_shader_parameter("shallow_albedo",    Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
@@ -969,6 +970,7 @@ func _apply_ocean_shader(
 		_ocean_horizon_material.set_shader_parameter("fresnel_sky_mix",   fres_blend)
 		_ocean_horizon_material.set_shader_parameter("near_color_lift",   near_lift)
 		_ocean_horizon_material.set_shader_parameter("glint_strength",    glint * 0.32)
+		_ocean_horizon_material.set_shader_parameter("chop_strength", chop_val)
 
 
 func _low_sun_factor(solar: Dictionary) -> float:

@@ -72,6 +72,7 @@ func review() -> void:
 	renderer._apply_weather_lighting()
 	await capture("waterline-night")
 	await spectrum_test()
+	check_slope_mips()
 	WorldClock.snap_time_of_day(.5)
 	WeatherLighting.time_of_day=.5
 	renderer._apply_weather_lighting()
@@ -94,6 +95,7 @@ func review() -> void:
 	await capture("transition-retarget")
 	assert(WaveSurface.get_applied_wave_intensity() > .3)
 	await profile()
+	await profile_slope_mips()
 	print("OCEAN REVIEW PASS ",output)
 	get_tree().quit()
 
@@ -120,6 +122,51 @@ func spectrum_test() -> void:
 	assert(error/maxf(total_change,.000001)<.001)
 	assert(total_change/total_target<.02)
 	print("SPECTRUM first-frame fraction=",total_change/total_target," relative error=",error/maxf(total_change,.000001))
+
+func check_slope_mips() -> void:
+	var fft: FFTWaterSystem = renderer._fft_system
+	# Blocking GPU readback is confined to this paused regression fixture.
+	for layer in 4:
+		var data := fft.rd.texture_get_data(fft.slope_tex, layer).to_float32_array()
+		assert(data.size() == 699050, "512-to-1 RG32F mip chain must exist")
+		var source_offset := 0
+		var source_size := 512
+		for level in range(1, 10):
+			var target_offset := source_offset + source_size * source_size * 2
+			var target_size := source_size / 2
+			for sample_index in mini(31, target_size * target_size):
+				var pixel := (sample_index * 719) % (target_size * target_size)
+				var x := pixel % target_size
+				var y := pixel / target_size
+				for channel in 2:
+					var source := source_offset + (y*2*source_size+x*2)*2+channel
+					var expected := (data[source]+data[source+2]+data[source+source_size*2]+data[source+source_size*2+2])*.25
+					var actual := data[target_offset+pixel*2+channel]
+					assert(is_finite(actual) and absf(expected-actual)<.00001, "Slope mip must average its four children")
+			source_offset = target_offset
+			source_size = target_size
+	print("SLOPE MIP PASS: all four cascades, nine levels, exact filtered samples")
+
+func profile_slope_mips() -> void:
+	var fft: FFTWaterSystem = renderer._fft_system
+	fft.set_process(false)
+	var samples: Array[float] = []
+	for frame in 150:
+		fft.rd.capture_timestamp("SlopeMip.Begin")
+		fft._run_slope_mips()
+		fft.rd.capture_timestamp("SlopeMip.End")
+		await get_tree().process_frame
+		var begin := -1
+		var end := -1
+		for index in fft.rd.get_captured_timestamps_count():
+			var tag := fft.rd.get_captured_timestamp_name(index)
+			if tag == "SlopeMip.Begin": begin = fft.rd.get_captured_timestamp_gpu_time(index)
+			if tag == "SlopeMip.End": end = fft.rd.get_captured_timestamp_gpu_time(index)
+		if frame > 20 and begin >= 0 and end >= begin:
+			samples.append(float(end-begin)/1000000.0)
+	assert(not samples.is_empty())
+	samples.sort()
+	print("SLOPE MIP GPU median ms=",samples[samples.size()/2]," extra memory=2.667MiB")
 
 func profile() -> void:
 	Engine.max_fps=0
