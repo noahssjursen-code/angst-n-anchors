@@ -1,0 +1,41 @@
+MARINE MODELING SESSION — 6 October 2026
+Authorized by Noah: continue working during his birthday party for two hours.
+Start 16:24 Europe/Oslo (14:24 UTC); end 18:24 Oslo (16:24 UTC).
+This explicitly supersedes the expired overnight 08:00 stop. Existing 30-minute
+heartbeat resumed with the new deadline as continuity protection. Work actively
+through the session, not a succession of short token batches.
+Branch feature/3d-model-migration. Commit/push verified scopes; no main/reset/force.
+
+Ordered work list
+[ ] 1. Crane quality: bevel/trim cabin, structural pedestal/gussets, access and
+      guards, coherent visible hoist route, richer articulated grab mechanics.
+      Preserve pivots, cutting lip, control ranges and gameplay contracts.
+[ ] 2. A distinct 32 x 10 m hull: 0.5 m outline lattice, exact 2:1 / 1:1 bow
+      edges, authored underwater form, separate hatch/coaming components,
+      builder palette/grid/perimeter, provisional handling and stern hardware.
+      No stretching an existing entire boat or scaling metre-based accessories.
+[ ] 3. Useful deck fittings and lights: pick next needed reusable parts after
+      hull review; route working lights through existing lighting state. Verify
+      daytime/off/night presentation. Do not bypass authority or save contracts.
+[ ] 4. Visual iteration, relevant interaction/draft/playtest checks, scoped pushes,
+      remote verification and final screenshots/handoff; pause at 18:24 Oslo.
+
+Quality bar
+Use primary equipment/vessel visual references, Blender source + GLB pairs,
+separate reusable parts and material channels. Close and in-context Godot renders
+are mandatory. Correct visible intersections and unsupported components. Record
+unresolved limits explicitly. No claims of completed fleet/network migration.
+
+Progress
+16:24 Started at clean 276ab84. Read repository/model contracts and prior handoff.
+
+16:35 Crane geometry pass built/imported: fabricated edge treatment, pedestal
+radial gussets, race bolts/access plate, complete service guards/gate/ladder,
+glazing gaskets/wiper/door trim, hoist drum/windings/bearings, dynamic feed lines,
+boom-top ropes, grab power enclosure/pin bosses and two independent hydraulics.
+Actual Godot close renders corrected planar cheek thickness and shaft scaling.
+Expanded rig checks pass 5 grab poses at 3 scales, feed-wire anchors at 8/32/72deg,
+existing lip/mouth/jaw/slew/luff checks. Existing auto crane loading passes real
+lot/mass conservation. Still simplified sheave contact and missing power umbilical;
+ladder is visual rather than a new climbing interaction. Next: final rear capture,
+scoped push, then 32 x 10 hull work. No whole-session completion claim.

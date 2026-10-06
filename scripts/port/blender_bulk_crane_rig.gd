@@ -7,6 +7,8 @@ var parts: Dictionary = {}
 var grab_visual: Node3D
 var luff_barrel: Node3D
 var luff_rod: Node3D
+var feed_wire: Node3D
+var grab_actuators: Array[Dictionary] = []
 
 func _ready() -> void:
 	var base := _part_node("base", self, Vector3.ZERO)
@@ -25,6 +27,8 @@ func _ready() -> void:
 	_asset(luff_barrel,"crane_luff_barrel")
 	luff_rod=_part_node("luff_rod",cabin,Vector3.ZERO)
 	_asset(luff_rod,"crane_luff_rod")
+	feed_wire = _part_node("feed_wire", cabin, Vector3.ZERO)
+	_asset(feed_wire,"crane_wire_10m")
 	var wire := _part_node("wire", boom, Vector3(0,0,-30))
 	_asset(wire, "crane_wire_10m")
 	var bucket := _part_node("bucket", boom, Vector3.ZERO)
@@ -33,6 +37,12 @@ func _ready() -> void:
 	for side in ["left","right"]:
 		var jaw := _part_node("shell_"+side,grab_visual,Vector3(0,-1,0))
 		_asset(jaw,"grab_jaw_"+side)
+		var barrel := _part_node("grab_barrel_"+side,grab_visual,Vector3.ZERO)
+		_asset(barrel,"grab_actuator_barrel")
+		var rod := _part_node("grab_rod_"+side,grab_visual,Vector3.ZERO)
+		_asset(rod,"grab_actuator_rod")
+		grab_actuators.append({"barrel":barrel,"rod":rod,"base":grab_visual.find_child("ActuatorBase"+side.capitalize(),true,false),"end":jaw.find_child("ActuatorEnd",true,false)})
+
 
 func get_part(part_name: String) -> Node3D:
 	return parts.get(part_name) as Node3D
@@ -49,6 +59,24 @@ func update_luff_cylinder() -> void:
 	luff_barrel.basis=rotation_basis
 	luff_rod.position=luff_barrel.position+direction*3.5
 	luff_rod.basis=rotation_basis.scaled_local(Vector3(1,(delta.length()-3.5)/4,1))
+	# Two tensioned feed lines connect the authored drum to the boom heel.
+	var start := Vector3(-1.75,2.49,1)
+	var heel := boom.transform * Vector3(0,.75,0)
+	var feed := heel-start
+	feed_wire.position=start
+	feed_wire.basis=Basis(Quaternion(Vector3.DOWN,feed.normalized())).scaled_local(Vector3(1,feed.length()/10,1))
+
+func update_grab_actuators() -> void:
+	for item in grab_actuators:
+		var start := grab_visual.to_local((item.base as Node3D).global_position)
+		var end := grab_visual.to_local((item.end as Node3D).global_position)
+		var direction := (end-start).normalized()
+		var rotation_basis := Basis(Quaternion(Vector3.UP,direction))
+		item.barrel.position=start
+		item.barrel.basis=rotation_basis
+		item.rod.position=start+direction*.50
+		item.rod.basis=rotation_basis.scaled_local(Vector3(1,(end-start).length()*2-1,1))
+
 
 func _part_node(part_name: String, parent: Node3D, offset: Vector3) -> Node3D:
 	var node:=Node3D.new();node.name="ModelPart_"+part_name;node.position=offset

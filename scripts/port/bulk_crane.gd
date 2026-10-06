@@ -763,6 +763,8 @@ func _apply_bucket() -> void:
 	if _shell_left != null and is_instance_valid(_shell_left):
 		_shell_left.rotation_degrees = Vector3(
 			lerpf(LEFT_CLOSED_DEG, LEFT_OPEN_DEG, t), 0.0, 0.0)
+	if _assembler is BlenderBulkCraneRig:
+		(_assembler as BlenderBulkCraneRig).update_grab_actuators()
 	bucket_changed.emit(bucket_open)
 
 

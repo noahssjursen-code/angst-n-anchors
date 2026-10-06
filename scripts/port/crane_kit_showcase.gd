@@ -16,7 +16,7 @@ func _ready() -> void:
 	camera.position=Vector3(35,25,-38);camera.look_at(Vector3(0,10,-12));camera.make_current()
 	var canvas:=CanvasLayer.new();add_child(canvas);label=Label.new();label.position=Vector2(24,70)
 	label.add_theme_font_size_override("font_size",20);canvas.add_child(label)
-	label.text="BLENDER BULK CRANE / nine independent models\nExisting slew, luff, hoist and grab controls / imported seated operator"
+	label.text="BLENDER BULK CRANE / eleven independent models\nExisting slew, luff, hoist and grab controls / imported seated operator"
 	for i in 12:await get_tree().process_frame
 	assert(crane._assembler is BlenderBulkCraneRig)
 	assert(is_equal_approx(crane.get_boom_length_m(),30))
@@ -29,6 +29,12 @@ func _ready() -> void:
 		await get_tree().process_frame
 		assert(right.global_position.distance_to(left.global_position)<.001,"Closed jaw cutting lips must meet")
 		assert(right.global_position.distance_to(crane.get_bucket_mouth_global())<.001,"Gameplay mouth must match authored lips")
+		for opening in [0.0,.25,.5,.75,1.0]:
+			crane.bucket_open=opening
+			var articulated := crane._assembler as BlenderBulkCraneRig
+			for actuator in articulated.grab_actuators:
+				assert((actuator.rod as Node3D).to_global(Vector3(0,.5,0)).distance_to((actuator.end as Node3D).global_position)<.001,"Grab piston must stay attached through the full opening")
+				assert((actuator.barrel as Node3D).global_position.distance_to((actuator.base as Node3D).global_position)<.001)
 		crane.bucket_open=1
 		assert(right.global_position.distance_to(left.global_position)>.65*scale_value,"Jaws must open apart")
 		assert(crane._bucket.to_local(right.global_position).z>0 and crane._bucket.to_local(left.global_position).z<0,"Jaws must open outward, not pass through each other")
@@ -44,8 +50,10 @@ func _ready() -> void:
 	var rig:=crane._assembler as BlenderBulkCraneRig
 	for angle in [8,32,72]:
 		crane.boom_angle_deg=angle
+		var feed_end := rig.feed_wire.to_global(Vector3(0,-10,0))
+		assert(feed_end.distance_to(crane._boom.to_global(Vector3(0,.75,0)))<.001,"Feed wire must follow boom heel")
 		assert(rig.luff_rod.to_global(Vector3(0,4,0)).distance_to(crane._boom.to_global(Vector3(0,-.58,-6)))<.001)
-	print("CRANE RIG PASS: nine imports, seated operator, 30 m boom, scaled jaw seam/mouth, outward jaws, slew/luff/cylinder, vertical cable endpoint")
+	print("CRANE RIG PASS: eleven imports, seated operator, 30 m boom, scaled jaw seam/mouth, outward jaws, slew/luff/cylinder, feed wires, both grab cylinders across five poses, vertical cable endpoint")
 	crane.slew_degrees=0;crane.boom_angle_deg=32;crane.hoist_length_m=10
 	var args:=OS.get_cmdline_user_args();var index:=args.find("--capture")
 	if index>=0:
@@ -58,6 +66,9 @@ func _ready() -> void:
 		await _capture(path.get_basename()+"-open.png")
 		camera.size=9;camera.position=Vector3(7,6,-8);camera.look_at(Vector3(-.7,3,0));label.text="SLEWING CABIN / separate machinery, service deck and seated operator"
 		await _capture(path.get_basename()+"-cabin.png")
+		camera.size=9;camera.position=Vector3(-7,7,7);camera.look_at(Vector3(-.7,3.4,0))
+		label.text="MACHINERY / hoist drum, feed wires, bearing blocks and boarding ladder"
+		await _capture(path.get_basename()+"-service.png")
 		crane.queue_free()
 		for i in 4:await get_tree().process_frame
 		get_tree().quit()

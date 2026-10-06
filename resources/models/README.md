@@ -48,9 +48,9 @@ tank artwork and service details. Functional passes are not final art acceptance
 
 ## Harbour bulk crane (6 October 2026)
 
-`_source/crane_kit/build_crane.py` produces nine independent editable Blender/GLB
+`_source/crane_kit/build_crane.py` produces eleven independent editable Blender/GLB
 pairs in `parts/crane_kit`: pedestal, slewing cabin/machinery, 30 m lattice boom,
-luff-cylinder barrel and rod, paired 10 m rest hoist ropes, grab head and two jaws.
+luff-cylinder barrel and rod, paired 10 m rest hoist ropes, grab head, two jaws and separate grab-cylinder barrels/piston shafts.
 Paint and fixed glass, steel, rope and piston materials remain distinct. These
 are internal equipment components, not nine new shipyard palette choices.
 
@@ -62,8 +62,9 @@ The current game pivots remain: slew Y at 2.29 m, boom hinge (-1.75,3.7,-.25)
 relative to cabin, 30 m local -Z outreach, cable vertically below the tip.
 The luff piston follows the actual boom attachment across its 8–72 degree range.
 This is a game presentation with inherited reach/capacity, not a manufacturer
-replica or validated engineering/reeving design. Detailed winch routing, sway,
-collision/damage on moving boom/grab and full service access remain unfinished.
+replica or validated engineering/reeving design. Hoist feed wires now run from an exposed drum to the moving boom heel, then
+along the boom to the tip. Exact sheave contact/reeving, sway and moving boom/grab
+collision remain simplified. The ladder/guard/access artwork does not add climbing.
 
 Only the single origin-centred cable mesh stretches with hoist length. The bucket
 root stays unscaled and vertical; GrabScale scales the imported head, jaw pivots
@@ -85,6 +86,14 @@ cylinder endpoints and seated operator. Arrows slew/luff, PgUp/PgDn hoist, Space
 opens/closes. `-- --capture <absolute.png>` writes whole/closed/open/cabin views.
 The bulk kit's actual auto-load cycle also runs through this imported default rig;
 both rendered scenes now exit without the old crane mesh/RID cleanup warnings.
+The afternoon refinement also tests both grab-cylinder endpoints at five opening
+fractions and three scales, plus feed-wire endpoints at three boom angles.
+Primary visual comparison: Liebherr floating crane brochure page 2 for machinery,
+hoist routing and service access,
+https://www.liebherr.com/shared/media/maritime-cranes/downloads-and-brochures/fts/fts_downloads_brochures/liebherr-floating-cranes-cbg-300-350.pdf
+The game keeps its existing two hoist lines and luff hydraulics, not that
+manufacturer's four-rope arrangement or engineering ratings. Grab power supply
+umbilical and exact sheave contact remain to be modeled.
 
 Primary visual reference inspected: Liebherr CBG 360 general arrangement, page 2,
 https://www.liebherr.com/shared/media/maritime-cranes/downloads-and-brochures/fts/fts_downloads_brochures/liebherr-sc-fts-cbg-360-datasheet.pdf
