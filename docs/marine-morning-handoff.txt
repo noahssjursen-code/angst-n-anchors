@@ -1,9 +1,8 @@
 MARINE OVERNIGHT HANDOFF — 6 October 2026
 
-Morning checkpoint: Noah subsequently resumed work and requested a 30-minute
-cadence with substantially more effort on visual quality. Automation is ACTIVE.
-The previous 08:00 Oslo cutoff remains unless Noah extends it. This file records
-the overnight baseline, not completed art acceptance.
+Overnight closeout, 6 October 2026: the 08:00 Oslo stop remains in effect.
+The 30-minute automation is PAUSED so its next run cannot exceed that cutoff.
+Work remains unfinished; this is a handoff, not final art acceptance.
 Branch: feature/3d-model-migration. No reset, force-push or merge to main.
 
 Delivered and checked
@@ -62,6 +61,7 @@ ec11112 accurate headless cleanup note
 d8dec8a bulk holds/inventory/crane transfer
 4fe8747 articulated Blender bulk crane
 ec1c94c initial port kit, mooring sockets and morning checkpoint
+0081c2f refined PV plant, continuous hose and deck mooring guides
 
 Review captures (absolute directory)
 C:\Users\noahs\Documents\Codex\2026-10-05\referenced-chatgpt-conversation-this-is-an\outputs\marine
@@ -91,3 +91,23 @@ transfer and disconnect. Actual ocean regression passes helm/seats/doors/HUD,
 walking, drive/rudder and reset. Both rendered runs exit without script errors.
 Remaining priorities: crane detail/reeving, vessel equipment, lighting and broader
 mooring route validation. Their earlier gaps remain open.
+
+Final crane review (07:55 Oslo), no new model changes
+Fresh actual Godot captures: morning-crane-review.png, -cabin.png, -open.png and
+-closed.png. Movement assertions still pass, with a clean process exit:
+scaled cutting-lip closure/gameplay mouth, outward opening, slew/luff, cylinder
+endpoints, vertical cable and seated operator. Log: morning-crane-review.log.
+Visible shortcomings requiring the next substantive modeling pass:
+1. Crane service deck has incomplete perimeter guards and no convincing access
+   ladder/stairs. Cabin panels/roof need edge treatment, door hardware and trim.
+2. Hoist lines terminate at tip sheaves without a modeled route along the boom
+   to a winch. Establish a coherent mechanism before decorating it.
+3. Grab head is a plain cylinder; jaws need credible pin bosses, actuator/linkage
+   and reinforced edges. Preserve the verified cutting-lip/mouth/pivot contract.
+4. Pedestal and mounting plate need structural detail and a better load-path
+   silhouette. Current dimensions and capacities remain gameplay approximations.
+5. Trawler still lacks deployment equipment; cargo/bulk need deck service detail.
+   Stern installation and lighting/night review remain open as recorded above.
+No rushed final model revision was made in the last five minutes before cutoff.
+Latest implementation commit 0081c2f was confirmed on origin; this closeout is a
+separate documentation commit. Main, unrelated work and user saves untouched.

@@ -273,3 +273,13 @@ F helm/seats, doors, walking, normal HUD, drive/rudder and reset. Clean exits.
 Captures: port-refined*.png and fairlead-ocean.png. Logs: port-refined-verified.log,
 fairlead-ocean.log; source diagram: work/iras-pump-reference.png.
 NEXT: crane/vessel details and lighting remain unfinished; preserve 08:00 cutoff.
+
+6 October 07:55 Oslo closeout: latest implementation 0081c2f is pushed and remote
+SHA verified. Re-rendered existing crane whole/cabin/open/closed; all articulation
+assertions pass and process exits cleanly. This is validation/review, not new art.
+Recorded concrete next-pass failures in marine-morning-handoff.txt: incomplete
+access/guards, abrupt cabin edges, missing winch-to-tip cable route, simplified
+grab mechanics and pedestal support details. No rushed model change before the
+08:00 stop. Paused the 30-minute automation to prevent its next post-cutoff run.
+Remaining packages are unfinished. Resume only with renewed continuation scope;
+do not report functional checks as art approval or all marine work complete.
