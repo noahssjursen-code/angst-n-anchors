@@ -95,6 +95,23 @@ tank artwork and service details. Functional passes are not final art acceptance
 
 ## Harbour bulk crane (6 October 2026)
 
+Paint finish (7 October): `crane_kit/paint_bake.py` authors metre-space staining,
+localized panel-edge/cylinder-collar chips and fine surface relief in Blender.
+Cycles bakes base colour, roughness and tangent normals into the individual GLBs;
+no runtime world-space rust shader, so slew/luff movement carries the finish.
+Intact paint is dielectric. Glass, cables, dark steel and polished piston rods
+retain separate materials. Bake-only coordinate empties are removed before export.
+Equal paint slots MUST be compacted after joining: the boom remains three surfaces,
+not one draw surface per lattice member. Triangle counts and all pivots are unchanged.
+Maps use 1024px for large parts, 512px for jaws/head and 256px for barrels,
+with mipmaps and committed VRAM-compressed import settings (normal maps explicit).
+Do not replace these settings with uncompressed automatic imports. Source blends
+pack their own maps; purge orphan meshes/materials/images between generated parts.
+Actual close-up and daylight port renders plus the existing loading-cycle and
+articulation checks cover this finish; wear is artistic, not a corrosion simulation.
+Primary maintenance reference: https://www.liebherr.com/en-us/maritime-cranes/customer-service/services/inspections-4433279
+Texture import contract: https://docs.godotengine.org/en/4.6/classes/class_resourceimportertexture.html
+
 `_source/crane_kit/build_crane.py` produces eleven independent editable Blender/GLB
 pairs in `parts/crane_kit`: pedestal, slewing cabin/machinery, 30 m lattice boom,
 luff-cylinder barrel and rod, paired 10 m rest hoist ropes, grab head, two jaws and separate grab-cylinder barrels/piston shafts.

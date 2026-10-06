@@ -97,6 +97,10 @@ static func _build_pile_mesh(size: Vector3, commodity_id: String, seed: int) -> 
 
 ## Height fields face upward, including flat perimeter triangles at y=0.
 static func _add_mound_triangle(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
+	# Empty corners of the height-field grid are pavement, not a square plate of
+	# ore. Omitting them also avoids coplanar flicker against the asphalt below.
+	if maxf(a.y, maxf(b.y, c.y)) <= 0.0001:
+		return
 	var n := (b - a).cross(c - a)
 	if n.y > 0.0:
 		st.add_vertex(a)

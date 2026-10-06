@@ -1,10 +1,12 @@
 """Separate metre-scale harbour crane parts. Blender +Y outreach, +Z up.
 Existing gameplay contract: 30 m boom, 10 m rest wire, mouth 1.6 m below hook.
 """
-import bpy, bmesh, math
+import bpy, bmesh, math, sys
 from mathutils import Vector, Matrix
 from pathlib import Path
 HERE=Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from paint_bake import author_paint, bake_paint, wear_space
 OUT=HERE.parents[1]/'parts/crane_kit';OUT.mkdir(parents=True,exist_ok=True)
 bpy.context.scene.unit_settings.system='METRIC'
 def mat(n,c,metal=.3):
@@ -12,12 +14,23 @@ def mat(n,c,metal=.3):
     p=m.node_tree.nodes.get('Principled BSDF');p.inputs['Base Color'].default_value=(*c,1)
     p.inputs['Metallic'].default_value=metal;p.inputs['Roughness'].default_value=.48
     return m
-paint=mat('Warm white painted steel',(.66,.42,.075));steel=mat('Fixed_DarkSteel',(.065,.085,.10),.65)
+paint=mat('Ochre painted steel',(.66,.42,.075));steel=mat('Fixed_DarkSteel',(.065,.085,.10),.65)
+author_paint(paint)
 glass=mat('Fixed_CabinGlass',(.12,.26,.31),.35);silver=mat('Fixed_PinSteel',(.38,.43,.46),.8)
 glass.node_tree.nodes.get('Principled BSDF').inputs['Alpha'].default_value=.28
 glass.diffuse_color=(.12,.26,.31,.28);glass.surface_render_method='DITHERED'
+def purge_authoring_orphans():
+    # Every source blend is standalone; do not carry previous parts' packed maps.
+    for mesh in list(bpy.data.meshes):
+        if mesh.users==0:bpy.data.meshes.remove(mesh)
+    for material in list(bpy.data.materials):
+        if material.users==0 and material not in (paint,steel,glass,silver):bpy.data.materials.remove(material)
+    for image in list(bpy.data.images):
+        if image.users==0:bpy.data.images.remove(image)
+
 def clear():
     bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
+    purge_authoring_orphans()
 def box(n,p,s,m=paint):
     bpy.ops.mesh.primitive_cube_add(size=1,location=p);o=bpy.context.object;o.name=n;o.dimensions=s
     bpy.ops.object.transform_apply(location=False,rotation=False,scale=True);o.data.materials.append(m)
@@ -43,6 +56,8 @@ def socket(n,p):
 def export(n):
     # One origin-centred mesh per GLB; cable length scales about its upper endpoint.
     meshes=[o for o in bpy.context.scene.objects if o.type=='MESH']
+    for o in meshes:
+        wear_space(o, paint, o.data.name.startswith('Cylinder'))
     bpy.ops.object.select_all(action='DESELECT')
     for o in meshes:
         bpy.context.view_layer.objects.active=o
@@ -52,6 +67,8 @@ def export(n):
     bpy.context.scene.cursor.location=(0,0,0);bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
     bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
     bpy.context.object.name=n
+    bake_paint(bpy.context.object, paint, n, HERE/'textures')
+    purge_authoring_orphans()
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.wm.save_as_mainfile(filepath=str(HERE/(n+'.blend')))
     bpy.ops.export_scene.gltf(filepath=str(OUT/(n+'.glb')),export_format='GLB',use_selection=True,export_apply=True)
