@@ -1,0 +1,76 @@
+Procedural port facilities — 6 October 2026
+==========================================
+
+Implemented in port generation 47. PortLandPlan embeds a version-1 facility_plan
+in the initial graph. PortFacilityPlan groups active import/export commodities
+into shared functional precincts, links each to realized compatible berth IDs,
+then packs metre-sized parcels inside the traced paved foundation. A waterfront
+collector and inland route are reserved before packing; facilities receive clear
+access connections. Unplaceable facilities are explicitly recorded in unmet.
+The planner does not silently enlarge terrain or overlap another facility.
+
+Office/parking, general cargo shelters, fishing shelters/drains, empty container
+storage slots, open bulk bays, grain silos, diesel tanks, crude tanks and insulated
+gas vessels are supported. Liquid product identities remain separate. General
+imports and exports share a yard. Existing berth cranes, unloading equipment,
+trade identities, NPC commands and cargo authority remain in the existing systems.
+Player/staff spawn positions use the public office forecourt when one fits.
+
+Ten individual Blender assets accompany their source .blend files and generator:
+harbour_office, cargo_shelter_8m, kerb_2m, wheel_stop, bulk_divider_4m,
+yard_fence_4m, empty_pallet, grain_silo, liquid_tank, insulated_gas_vessel.
+PortFacilityVisual composes these; it does not bake an entire port into one mesh.
+Fences use MultiMesh. Simple deliberate walking collision covers structures,
+fences, parking stops and dividers. Quay lamps switch on during the night through
+the existing WeatherLighting presentation state; there is no new time authority.
+
+Saved graphs preserve the exact facility records. Graphs without facility_plan
+retain their old apron/blueprint rendering path; no established port is regenerated.
+Changing the initial generation recipe requires the usual generation version bump.
+
+Visual reference: Port of Blyth Terminal Plans, inspected pages 3 and 4 for
+office/welfare, parking, port roads, open storage and specialist terminal layout:
+https://portofblyth.co.uk/wp-content/uploads/2025/09/POB-Terminal-Plans-Brochure.pdf
+This is an original compact game interpretation, not a reconstruction of Blyth.
+
+Review
+------
+scenes/showcases/port_showcase.tscn: real seeded coast, daylight, T real-player
+walking, H details. Seed 424242 / regional Gronnvik has office, general, fishing
+and bulk precincts, with three original quays and no unmet facilities.
+scenes/showcases/port_facility_showcase.tscn: isolated daylight family gallery;
+Left/Right cycle, Space switches to a closer view. Both isolate captain saves.
+
+Verified: deterministic plan; all nine precinct types fit the broad fixture;
+no parcel overlap/road obstruction; constrained sites report unmet needs; missing
+berths cannot invent facilities; liquid product-to-berth matching; graph JSON
+round trip. Actual rendered harbour: 6.79m real-player quay/apron crossing remains
+supported and office wall stops player at local Z=4.35m. Foundation regression:
+2,568 samples, zero missing support and zero outside ghost floor. Cache test passes.
+All nine precincts rendered in Godot Forward+ and reviewed; day/night lamp check
+passes. Screenshots are archived in Pictures/machinescreenshots/
+2026-10-06_harbour-rebuild (1791315472/73 main harbour; 1791315532–34 family gallery).
+
+Remaining limits
+----------------
+These are initial layout and presentation facilities. New shore-side storage
+inventory/capacity, leasing, production and vehicle pathfinding are not implemented.
+Existing quay gameplay remains authoritative. Office is an exterior shell, not an
+enterable building; fish shelters are not an implemented cold chain. Tank models
+are illustrative and do not claim engineering specifications. Current materials
+are separate named regions but still need the requested worn PBR texture pass.
+Public-road continuation beyond the foundation,
+yard gates and varied office architecture remain future refinements. Large empty
+apron areas are retained rather than filled with fake cargo. This is not final art
+acceptance for every generated coastline or a finished port economy.
+
+Road correction after visual review
+-----------------------------------
+HarbourRoadSurface unions quay, connection and apron road polygons before drawing
+their perimeter. Intersections have no internal edge stripes; centre dashes use
+a fixed 6m repeat / 2.5m paint length and stop through crossing roads. Yard entrances
+are open. The pavement shader is continuous in world metres, with no per-piece UV
+restart. Road paint uses screen-filtered width and a small depth-tested view bias
+to prevent coplanar flicker and subpixel dotted edges. This applies to parking and
+yard marking strips too. The new real-harbour daylight captures 1791315810–14 show
+both the wide view and office junction. Walking and collision checks still pass.

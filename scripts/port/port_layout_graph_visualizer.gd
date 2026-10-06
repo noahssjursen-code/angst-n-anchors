@@ -61,6 +61,7 @@ static var _material_cache: Dictionary = {}
 
 var _graph: PortLayoutGraph
 var _harbour: HarbourController
+var _road_routes: Array = []
 
 
 func configure(graph: PortLayoutGraph, harbour: HarbourController = null) -> void:
@@ -75,6 +76,7 @@ func _ready() -> void:
 
 
 func _rebuild() -> void:
+	_road_routes.clear()
 	for child in get_children():
 		child.free()
 	if _graph == null:
@@ -85,6 +87,7 @@ func _rebuild() -> void:
 	_stamp_apron_access()
 	_stamp_apron_pads()
 	_stamp_land_structures()
+	preload("res://scripts/port/harbour_road_surface.gd").build(self,_road_routes)
 	for instance_id in _graph.module_ids():
 		_stamp_module(_graph.modules[instance_id] as PortPlacedModule)
 	if show_open_slots:
@@ -740,13 +743,18 @@ func _apron_access_points() -> PackedVector2Array:
 
 
 func _stamp_apron_access() -> void:
+	var facilities: Dictionary = _graph.initial_attributes.get("land_plan",{}).get("facility_plan",{})
+	if not facilities.is_empty():
+		for r in facilities.get("routes",[]):
+			_road_routes.append({"a":Vector3(r.a[0],_foundation_surface_y()+.032,r.a[1]),"b":Vector3(r.b[0],_foundation_surface_y()+.032,r.b[1]),"width":float(r.width)})
+		return
 	var points := _apron_access_points()
 	var y := _foundation_surface_y()+.012
 	var root := Node3D.new()
 	root.name = "ApronAccess"
 	add_child(root)
 	for i in range(points.size()-1):
-		HarbourEnvironmentKit.lane(root,Vector3(points[i].x,y,points[i].y),Vector3(points[i+1].x,y,points[i+1].y),7.0)
+		_road_routes.append({"a":Vector3(points[i].x,y,points[i].y),"b":Vector3(points[i+1].x,y,points[i+1].y),"width":7.0})
 
 
 func _stamp_access_lane(terminal: Node3D, x: float, width: float, length: float) -> void:
@@ -758,7 +766,7 @@ func _stamp_access_lane(terminal: Node3D, x: float, width: float, length: float)
 	HarbourEnvironmentKit.repeated(terminal,"drain_2m",drains)
 	var y := QUAY_DECK_TOP_LOCAL_Y+.012
 	# Existing terminal convention is +Z seaward, -Z landward.
-	HarbourEnvironmentKit.lane(terminal,Vector3(x,y,length*.45),Vector3(x,y,-length*.5),width)
+	_road_routes.append({"a":terminal.transform*Vector3(x,y,length*.45),"b":terminal.transform*Vector3(x,y,-length*.5),"width":width})
 	var a := terminal.transform * Vector3(x,y,-length*.5)
 	var point := Vector2(a.x,a.z)
 	var points := _apron_access_points()
@@ -770,7 +778,7 @@ func _stamp_access_lane(terminal: Node3D, x: float, width: float, length: float)
 			distance = point.distance_squared_to(candidate)
 			nearest = candidate
 	if nearest != Vector2.INF:
-		HarbourEnvironmentKit.lane(self,a,Vector3(nearest.x,_foundation_surface_y()+.012,nearest.y),width)
+		_road_routes.append({"a":a,"b":Vector3(nearest.x,_foundation_surface_y()+.032,nearest.y),"width":width})
 
 
 ## Pack cargo along the storage flank, split into commodity zones when shared.
@@ -1093,6 +1101,13 @@ func _stamp_apron_pads() -> void:
 	var land_plan := _graph.initial_attributes.get("land_plan", {}) as Dictionary
 	if land_plan.is_empty():
 		return
+	if land_plan.has("facility_plan"):
+		var root := Node3D.new()
+		root.name = "Facilities"
+		add_child(root)
+		for record in land_plan.facility_plan.get("facilities",[]):
+			PortFacilityVisual.build(root,record,_foundation_surface_y())
+		return
 	var apron_pads: Dictionary = land_plan.get("apron_pads", {}) as Dictionary
 	var pads: Array = apron_pads.get("pads", []) as Array
 	if pads.is_empty():
@@ -1319,6 +1334,8 @@ func _stamp_apron_hatch(parent: Node3D) -> void:
 
 
 func _stamp_land_structures() -> void:
+	# New facility parcels replace disconnected legacy trade/house decoration.
+	if _graph.initial_attributes.get("land_plan",{}).has("facility_plan"): return
 	## Cheap primitive village from land_plan.terrain_grid — houses + trade yards
 	## on sampled terrain. Always stamped with the port (not a gizmo / equipment toggle).
 	var plan := _graph.initial_attributes.get("land_plan", {}) as Dictionary

@@ -5,7 +5,8 @@ extends RefCounted
 const ROOT := "res://resources/models/parts/harbour_kit/"
 static var _scenes: Dictionary = {}
 static var _paving: ShaderMaterial
-static var _paint: StandardMaterial3D
+static var _paint: ShaderMaterial
+static var _paint_widths: Dictionary = {}
 
 static func paving() -> ShaderMaterial:
 	if _paving == null:
@@ -14,11 +15,15 @@ static func paving() -> ShaderMaterial:
 	return _paving
 
 static func model(parent: Node3D, id: String, position: Vector3, yaw: float = 0.0) -> Node3D:
-	if not _scenes.has(id): _scenes[id] = load(ROOT + id + ".glb")
+	if not _scenes.has(id): _scenes[id] = load(id if id.begins_with("res://") else ROOT + id + ".glb")
 	var node := (_scenes[id] as PackedScene).instantiate() as Node3D
 	parent.add_child(node)
 	node.position = position
 	node.rotation.y = yaw
+	if id == "quay_light" and not Engine.is_editor_hint():
+		var lamp := preload("res://scripts/port/harbour_area_light.gd").new()
+		node.add_child(lamp)
+		lamp.position = Vector3(0,7.4,-1.2)
 	return node
 
 static func repeated(parent: Node3D, id: String, poses: Array[Transform3D]) -> void:
@@ -28,7 +33,7 @@ static func repeated(parent: Node3D, id: String, poses: Array[Transform3D]) -> v
 	for raw in meshes:
 		var source := raw as MeshInstance3D
 		var batch := MultiMeshInstance3D.new()
-		batch.name = id + "_batch"
+		batch.name = id.get_file().get_basename() + "_batch"
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
 		multi.mesh = source.mesh
@@ -87,14 +92,17 @@ static func quay(parent: Node3D, length: float, width: float, top: float) -> voi
 static func line(parent: Node3D, a: Vector3, b: Vector3, width: float = .12) -> void:
 	if a.distance_to(b) < .01: return
 	if _paint == null:
-		_paint = StandardMaterial3D.new()
-		_paint.albedo_color = Color(.76,.73,.60)
-		_paint.roughness = .95
+		_paint = ShaderMaterial.new()
+		_paint.shader = preload("res://resources/shaders/harbour_road_paint.gdshader")
 	var mesh := PlaneMesh.new()
 	mesh.size = Vector2(width,a.distance_to(b))
 	var node := MeshInstance3D.new()
 	node.mesh = mesh
-	node.material_override = _paint
+	if not _paint_widths.has(width):
+		var paint := _paint.duplicate() as ShaderMaterial
+		paint.set_shader_parameter("paint_width",width)
+		_paint_widths[width]=paint
+	node.material_override = _paint_widths[width]
 	parent.add_child(node)
 	node.position = (a+b)*.5
 	node.rotation.y = atan2(b.x-a.x,b.z-a.z)

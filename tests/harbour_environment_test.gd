@@ -32,9 +32,13 @@ func verify() -> void:
 	var terminals: Array[Node3D] = []
 	for raw in visual.find_children("*","Node3D",true,false):
 		var node := raw as Node3D
-		if node.has_meta("warehouse_shell"): warehouses.append(node)
+		if node.has_meta("office_shell"): warehouses.append(node)
 		if node.has_meta("review_walk_spawn"): terminals.append(node)
-	check(warehouses.size()==4,"Four supplied apron plots use imported shells")
+	check(warehouses.size()==1,"Exactly one imported harbour office")
+	var facilities: Dictionary = _last_data.layout_graph.initial_attributes.land_plan.facility_plan
+	print("FACILITY PLAN count=",facilities.facilities.size()," unmet=",facilities.unmet.size())
+	check(facilities.facilities.size()==4,"Office, shared general cargo, fish and ore facilities fit")
+	check(facilities.unmet.is_empty(),"Reference site fits its required facilities")
 	check(terminals.size()==3,"Three original quay terminals preserved")
 	check(visual.find_children("arch_fender_batch","MultiMeshInstance3D",true,false).size()==3,"Fenders batched per quay")
 	check(not _meta_panel.visible,"Details collapsed on entry")
@@ -44,9 +48,12 @@ func verify() -> void:
 	await capture("daylight-overview")
 	if not warehouses.is_empty():
 		var building := warehouses[0]
-		_camera.global_position = building.to_global(Vector3(17,8,24))
+		_camera.global_position = building.to_global(Vector3(12,7,18))
 		_camera.look_at(building.to_global(Vector3(0,3,0)))
-		await capture("warehouse-loading-face")
+		await capture("office-parking")
+		_camera.global_position = building.to_global(Vector3(35,35,48))
+		_camera.look_at(building.to_global(Vector3(0,0,12)))
+		await capture("facility-precinct")
 	if not terminals.is_empty():
 		var terminal := terminals[0]
 		var width: float = terminal.get_meta("deck_half_w",22.0)
@@ -77,7 +84,7 @@ func verify() -> void:
 		await capture("player-walking-apron")
 		if not warehouses.is_empty():
 			var shell := warehouses[0]
-			_review_player.global_position = shell.to_global(Vector3(0,.1,12))
+			_review_player.global_position = shell.to_global(Vector3(3,.1,8))
 			_review_player.velocity = Vector3.ZERO
 			_review_player.rotation.y = shell.global_rotation.y
 			for i in 20: await get_tree().physics_frame
@@ -85,9 +92,9 @@ func verify() -> void:
 			for i in 100: await get_tree().physics_frame
 			Input.action_release("move_forward")
 			var local := shell.to_local(_review_player.global_position)
-			check(local.z>9.25 and local.z<9.7,"Warehouse shell physically blocks entry through closed door")
-			check(_review_player.is_on_floor(),"Player supported at warehouse entrance")
-			print("WAREHOUSE COLLISION local=",local)
+			check(local.z>4.25 and local.z<4.7,"Office wall physically blocks entry")
+			check(_review_player.is_on_floor(),"Player supported outside office")
+			print("OFFICE COLLISION local=",local)
 	_toggle_walk_review()
 	check(not is_instance_valid(_review_player) and _camera.current,"Fly mode restored")
 	get_node("GeneratedPort").queue_free()

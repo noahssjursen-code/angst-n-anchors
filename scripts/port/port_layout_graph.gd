@@ -205,6 +205,10 @@ func spawn_local_position() -> Vector3:
 	var foundation := initial_attributes.get("foundation", {}) as Dictionary
 	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M))
 	var top_y := surface_y + PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var facility_plan: Dictionary = initial_attributes.get("land_plan",{}).get("facility_plan",{})
+	for facility in facility_plan.get("facilities",[]):
+		if facility.kind=="office":
+			return Vector3(facility.origin[0],top_y+1.0,facility.origin[1]+float(facility.size_m[1])*.5-18.0)
 	var spine := foundation.get("spine", []) as Array
 	if spine.size() >= 2:
 		var mid_i := int(spine.size() / 2)

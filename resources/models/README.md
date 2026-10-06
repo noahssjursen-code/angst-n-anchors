@@ -1126,3 +1126,31 @@ partly covered rejection, invalid coaming placement, overflow, vessel mass,
 inventory JSON restoration and the actual existing crane operator. Add
 `--capture <absolute.png>` for whole-vessel, hold and loading captures. The 24 m
 two-compartment bulk example retains its two separate 40 t holds.
+
+## Procedural port facilities (generation 47)
+
+Sources: `_source/port_facilities/build_facilities.py` and ten individual .blend
+files. Exports: `parts/port_facilities/*.glb`. These are metric individual assets,
+not baked precincts. Blender Z is up, +Y exports to Godot -Z; origin is pavement
+level. Office entrance is Blender -Y / Godot +Z and the port places it at yaw PI.
+Its PublicEntrance socket is cosmetic until an interior/door system is added.
+Fixed office glass/doors must not be advertised as interactive.
+
+Named materials keep Office cladding, Ivory trim, Roof paint, Fixed glass,
+Galvanized, Dark steel, Concrete and Dunnage timber separate. Preserve those
+regions for future local paint overrides and worn texture maps. No shared imported
+material should be mutated globally for an individual port's custom colour.
+
+PortFacilityPlan owns persisted metre parcels and compatible berth links;
+PortFacilityVisual composes the assets and explicit walking collision. Keep the
+central seven-metre handling lane clear; do not fill empty storage bays with fake
+inventory. General cargo import/export share a precinct; incompatible liquids
+remain separate. Bulk dividers mate in four-metre runs; fence runs may adjust
+length but equipment/office dimensions are fixed. Facilities that cannot fit are
+reported in unmet, not shrunk to toy scales. New asset placement needs checks at
+both 24m fallback and full-size footprints.
+
+Use port_showcase for the real coastline and port_facility_showcase for all nine
+precinct types (Left/Right and Space). Details, tests and remaining limits are in
+`docs/procedural-port-facilities.txt`. All machine captures must also be archived
+under C:/Users/noahs/Pictures/machinescreenshots.

@@ -184,6 +184,7 @@ static func build(
 		"terrain_grid": terrain_grid,
 		"apron_decor": apron_decor,
 		"apron_pads": apron_pads,
+		"facility_plan": PortFacilityPlan.build(foundation,berth_plan,profile,size),
 		"structures": [],
 		"structure_count": 0,
 		"notes": notes,

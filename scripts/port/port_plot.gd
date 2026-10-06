@@ -190,6 +190,10 @@ func _staff_apron_local() -> Vector3:
 		PortCoastTracer.FOUNDATION_SURFACE_Y_M,
 	))
 	var deck_y := surface_y + PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var facility_plan: Dictionary = _layout_graph.initial_attributes.get("land_plan",{}).get("facility_plan",{})
+	for facility in facility_plan.get("facilities",[]):
+		if facility.kind=="office":
+			return Vector3(facility.origin[0],deck_y,facility.origin[1]+float(facility.size_m[1])*.5-13.0)
 	var spawn := _layout_graph.spawn_local_position()
 	## Keep XZ from spawn anchor; replace the player-body Y lift with deck height.
 	return Vector3(spawn.x, deck_y, spawn.z)
