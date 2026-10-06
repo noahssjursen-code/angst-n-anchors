@@ -9,6 +9,7 @@ signal fill_changed(state: CatchHoldState)
 @export var hold_id: String = "catch_hold"
 @export var capacity_kg: float = 4000.0
 
+var authored_visual: Node3D
 var state := CatchHoldState.new()
 var _fill_root: Node3D
 var _boat: BoatBody
@@ -120,6 +121,10 @@ func _find_boat() -> BoatBody:
 
 
 func _build_visual() -> void:
+	if authored_visual != null:
+		_pump_connection = authored_visual.find_child("PumpConnection*", true, false)
+		_hose_drop = authored_visual.find_child("HoseDrop*", true, false)
+		return # Closed imported tank: inventory remains data, no legacy fill overlay.
 	for child in get_children():
 		child.queue_free()
 	var hold := Node3D.new()

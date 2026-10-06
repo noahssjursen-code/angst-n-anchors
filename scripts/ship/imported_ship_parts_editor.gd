@@ -1554,6 +1554,11 @@ func _furniture_candidate(point: Vector3) -> Dictionary:
 	var p:=Vector3(snappedf(point.x,.1),floor_y(),snappedf(point.z,.1))
 	var id: String=editor.get("_brick_id")
 	if not _on_deck(p): return {}
+	if id in ["trawl_winch", "insulated_catch_tank"]:
+		var bounds := Rect2(-.55,-1.16,1.10,2.13) if id=="trawl_winch" else Rect2(-.72,-.62,1.64,1.24)
+		var rotation := Basis(Vector3.UP,deg_to_rad(furniture_yaw))
+		for corner in [bounds.position,Vector2(bounds.end.x,bounds.position.y),bounds.end,Vector2(bounds.position.x,bounds.end.y)]:
+			if not _on_deck(p+rotation*Vector3(corner.x,0,corner.y)): return {}
 	if id in ["helm_wheel","helm_throttle","helm_display"]:
 		var found:=false
 		for record in records.values():

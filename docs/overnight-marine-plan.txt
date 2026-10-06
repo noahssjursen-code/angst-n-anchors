@@ -121,3 +121,23 @@ turn, walking, door, pause/reset, unchanged parent draft regression passed.
 Captures: outputs/marine/stern-gear.png and stern-gear-reverse.png.
 NEXT RUN: package 3, an assembled reusable trawler draft plus fishing equipment
 using FishingSystem and CatchHoldComponent. Cargo/bulk and port kit still pending.
+
+6 October, third scheduled batch: package 3 first playable trawler assembly is
+implemented as resources/models/examples/coastal_trawler_draft.json (60 reusable
+placements). Four new individual Blender assets: fixed winch frame, drum/warp,
+insulated catch tank and separate lid. Two equipment palette families, actual
+footprint bounds, named moving pivot/rope payout/hose connections. Runtime uses
+FishingSystem and CatchHoldComponent (600 kg per tank), preserving inventory,
+mass and real unloading through FishLandingPump/ShoreRswTankBank. No new economy.
+Verified imported drum start/stop, hose socket, 250 kg real shore transfer;
+builder load/save/reload passes. Headless builder teardown emits thumbnail
+material/environment cleanup warnings (documented, not fixed in this batch).
+Rendered showcase exits cleanly. Complete example passed the normal ocean
+playtest with actual F-to-helm, door/walking, movement, steering, HUD and reset.
+Screenshots: outputs/marine/trawler.png, trawler-deck.png, trawler-ocean.png.
+Remaining trawler art: net/doors, gantry and safety/working fittings, lighting.
+Existing FishingSystem still fills only first hold; no multi-hold logic claimed.
+These are follow-up shared-equipment/final-polish items, not finished assets.
+NEXT RUN: package 4 cargo hull/descriptor and editable cargo example; preserve
+the metre-scale kit and avoid the legacy 2x scale catalog shortcut. Packages
+5-7 and the trawler follow-ups above remain outstanding.

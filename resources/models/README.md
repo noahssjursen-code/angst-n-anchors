@@ -1,5 +1,55 @@
 # Imported 3D models
 
+## Fishing equipment and editable trawler example (6 October 2026)
+
+Open `resources/models/examples/coastal_trawler_draft.json` through the builder's
+Drafts > Open. It is a normal version-1 draft containing 60 reusable placements:
+angled wheelhouse, crowned roof, consoles/helm, rising half-walls, stern working
+opening, winch and two compact insulated deck tanks. It is not a merged boat
+mesh or a commissioned fleet record. Tank spacing leaves a 0.9 m central route
+behind the wheelhouse door. Side clearances are narrower; use the central route.
+
+`_source/fishing_kit/build_fishing_kit.py` authors four separate .blend/.glb pairs:
+fixed trawl-winch frame/motor, rotating drum with wound warp, insulated tank and
+removable lid. The catalog exposes only Trawl winch and Insulated catch tank;
+manufacturing components remain internal. `DrumPivot` is 0.95 m above the foot
+plane; the exported drum axis is Godot Z. In this example yaw -90 places that
+axis across the deck. `PayoutSocket` gives the rope's actual departure point.
+Do not rotate the fixed bearings, motor, feet or mounting bolts with the drum.
+Equipment placement checks all footprint corners against the deck polygon.
+
+ImportedDraftVessel attaches the existing FishingSystem to placed winches and
+CatchHoldComponent to tanks. The former consumes its existing trawling state
+and animates the imported drum; the latter retains CatchLot inventory, capacity,
+FIFO withdrawal and payload mass. Imported visuals bypass the old primitive
+winch/hold presentation only on this path. Net and dynamic tow rope still use
+the existing gameplay presentation; a realistic authored net, trawl doors,
+gantry and working-gear deployment remain unfinished. Do not claim a complete
+physical trawl simulation. FishingSystem currently fills the first discovered
+hold; changing multi-hold distribution is separate gameplay work.
+
+Each deck tank has a nominal game capacity of 600 kg. Its above-deck insulated
+walls and closed lid do not imply a hole in the uncut hull deck. Named
+PumpConnection/HoseDrop sockets meet the external flange; the existing dock
+pump transfers real lots to ShoreRswTankBank. Opening lids, fill visuals and
+animated lid handling remain future work. Tank metal/paint surfaces remain
+separate; paint uses the existing wall region. No new fleet/server save schema.
+
+`scenes/showcases/fishing_kit_showcase.tscn` inspects the assembly and deck.
+`-- --capture <path.png>` verifies drum start/stop, hold discovery, imported hose
+socket and real pump transfer, then renders two views. `-- --verify-draft`
+checks real builder load/save/reload with temporary cache output. Headless
+builder teardown currently reports thumbnail material/environment cleanup
+warnings after assertions pass; ordinary rendered showcase and ocean verification
+exit cleanly. The complete example also passes the normal isolated playtest's
+F-to-helm, doors, walking, driving, steering, HUD and reset checks.
+
+Reference accessed 6 October 2026: MacGregor's fishing deck-handling overview,
+https://newproduction.macgregor.com/services/services-fishery-and-research/
+distinguishes trawler machinery from purse-seine handling. This small winch is an
+original game-scale design, not a dimensionally accurate manufacturer replica.
+Further primary references and ship silhouettes are in docs/marine-integration-audit.txt.
+
 ## Default imported stern gear (6 October 2026)
 
 `_source/stern_gear/build_stern_gear.py` authors three independent Blender files

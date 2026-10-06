@@ -32,6 +32,7 @@ const NET_MESH_HEIGHT := 7.0
 ## How far the net mouth trails horizontally beyond the rope head ring.
 const NET_MOUTH_AFT_OFFSET := 2.6
 
+var authored_winch: Node3D
 var _body: BoatBody = null
 var _propulsion: PropulsionComponent = null
 
@@ -155,73 +156,77 @@ func _setup_visuals() -> void:
 			stern_local.x -= 0.6 * scale
 		position = Vector3(stern_local.x, deck_y + 0.2 * scale, stern_local.z)
 	
-	# 1. Trommel Winch Mount Node
-	_trommel_winch = Node3D.new()
-	_trommel_winch.name = "TrommelWinch"
-	_add_child_with_owner(self, _trommel_winch)
+	if authored_winch != null:
+		_trommel_winch = authored_winch
+		_drum_rotation_node = authored_winch.find_child("DrumPivot*", true, false)
+	else:
+		# 1. Trommel Winch Mount Node
+		_trommel_winch = Node3D.new()
+		_trommel_winch.name = "TrommelWinch"
+		_add_child_with_owner(self, _trommel_winch)
 	
-	# 2. Spin-capable drum
-	_drum_rotation_node = Node3D.new()
-	_drum_rotation_node.name = "DrumRotationNode"
-	_add_child_with_owner(_trommel_winch, _drum_rotation_node)
+		# 2. Spin-capable drum
+		_drum_rotation_node = Node3D.new()
+		_drum_rotation_node.name = "DrumRotationNode"
+		_add_child_with_owner(_trommel_winch, _drum_rotation_node)
 	
-	# 3. Main drum mesh (horizontal cylinder)
-	var drum_mi := MeshInstance3D.new()
-	drum_mi.name = "WinchDrum"
-	var drum_mesh := CylinderMesh.new()
-	drum_mesh.top_radius = 0.22
-	drum_mesh.bottom_radius = 0.22
-	drum_mesh.height = 1.6
-	drum_mesh.radial_segments = 16
-	drum_mi.mesh = drum_mesh
+		# 3. Main drum mesh (horizontal cylinder)
+		var drum_mi := MeshInstance3D.new()
+		drum_mi.name = "WinchDrum"
+		var drum_mesh := CylinderMesh.new()
+		drum_mesh.top_radius = 0.22
+		drum_mesh.bottom_radius = 0.22
+		drum_mesh.height = 1.6
+		drum_mesh.radial_segments = 16
+		drum_mi.mesh = drum_mesh
 	
-	# Steel material
-	var steel_mat := StandardMaterial3D.new()
-	steel_mat.albedo_color = Color(0.20, 0.22, 0.24)
-	steel_mat.metallic = 0.9
-	steel_mat.roughness = 0.25
-	drum_mi.material_override = steel_mat
+		# Steel material
+		var steel_mat := StandardMaterial3D.new()
+		steel_mat.albedo_color = Color(0.20, 0.22, 0.24)
+		steel_mat.metallic = 0.9
+		steel_mat.roughness = 0.25
+		drum_mi.material_override = steel_mat
 	
-	# Rotate horizontal (align with Z axis)
-	drum_mi.rotation.x = PI * 0.5
-	_add_child_with_owner(_drum_rotation_node, drum_mi)
+		# Rotate horizontal (align with Z axis)
+		drum_mi.rotation.x = PI * 0.5
+		_add_child_with_owner(_drum_rotation_node, drum_mi)
 	
-	# 4. Flanges (side metal plates)
-	for side in [-0.8, 0.8]:
-		var flange := MeshInstance3D.new()
-		flange.name = "Flange_" + ("Port" if side < 0 else "Stbd")
-		var flange_mesh := CylinderMesh.new()
-		flange_mesh.top_radius = 0.38
-		flange_mesh.bottom_radius = 0.38
-		flange_mesh.height = 0.08
-		flange_mesh.radial_segments = 16
-		flange.mesh = flange_mesh
-		flange.material_override = steel_mat
-		flange.rotation.x = PI * 0.5
-		flange.position.z = side
-		_add_child_with_owner(_drum_rotation_node, flange)
+		# 4. Flanges (side metal plates)
+		for side in [-0.8, 0.8]:
+			var flange := MeshInstance3D.new()
+			flange.name = "Flange_" + ("Port" if side < 0 else "Stbd")
+			var flange_mesh := CylinderMesh.new()
+			flange_mesh.top_radius = 0.38
+			flange_mesh.bottom_radius = 0.38
+			flange_mesh.height = 0.08
+			flange_mesh.radial_segments = 16
+			flange.mesh = flange_mesh
+			flange.material_override = steel_mat
+			flange.rotation.x = PI * 0.5
+			flange.position.z = side
+			_add_child_with_owner(_drum_rotation_node, flange)
  
-	# 5. Trommel Winch Supports (V-shaped legs down to the deck at 70 degrees stilt angle)
-	var leg_angle_rad := deg_to_rad(20.0) # 70 degrees relative to horizontal deck
-	var leg_length := 1.49 * _visual_scale
-	var leg_thickness := 0.08 * _visual_scale
-	var leg_width := 0.12 * _visual_scale
-	for side in [-0.8, 0.8]:
-		for tilt in [-1.0, 1.0]:
-			var leg_pivot := Node3D.new()
-			leg_pivot.name = "LegPivot_" + ("Port" if side < 0 else "Stbd") + "_" + ("Fwd" if tilt > 0 else "Aft")
-			leg_pivot.position = Vector3(0.0, 0.0, side)
-			leg_pivot.rotation.z = tilt * leg_angle_rad
-			_add_child_with_owner(_trommel_winch, leg_pivot)
+		# 5. Trommel Winch Supports (V-shaped legs down to the deck at 70 degrees stilt angle)
+		var leg_angle_rad := deg_to_rad(20.0) # 70 degrees relative to horizontal deck
+		var leg_length := 1.49 * _visual_scale
+		var leg_thickness := 0.08 * _visual_scale
+		var leg_width := 0.12 * _visual_scale
+		for side in [-0.8, 0.8]:
+			for tilt in [-1.0, 1.0]:
+				var leg_pivot := Node3D.new()
+				leg_pivot.name = "LegPivot_" + ("Port" if side < 0 else "Stbd") + "_" + ("Fwd" if tilt > 0 else "Aft")
+				leg_pivot.position = Vector3(0.0, 0.0, side)
+				leg_pivot.rotation.z = tilt * leg_angle_rad
+				_add_child_with_owner(_trommel_winch, leg_pivot)
 			
-			var leg_mesh_instance := MeshInstance3D.new()
-			leg_mesh_instance.name = "LegMesh"
-			var leg_mesh := BoxMesh.new()
-			leg_mesh.size = Vector3(leg_width, leg_length, leg_thickness)
-			leg_mesh_instance.mesh = leg_mesh
-			leg_mesh_instance.material_override = steel_mat
-			leg_mesh_instance.position = Vector3(0.0, -leg_length * 0.5, 0.0)
-			_add_child_with_owner(leg_pivot, leg_mesh_instance)
+				var leg_mesh_instance := MeshInstance3D.new()
+				leg_mesh_instance.name = "LegMesh"
+				var leg_mesh := BoxMesh.new()
+				leg_mesh.size = Vector3(leg_width, leg_length, leg_thickness)
+				leg_mesh_instance.mesh = leg_mesh
+				leg_mesh_instance.material_override = steel_mat
+				leg_mesh_instance.position = Vector3(0.0, -leg_length * 0.5, 0.0)
+				_add_child_with_owner(leg_pivot, leg_mesh_instance)
  
 	# 6. Tow rope + trawl net trailing far astern on the pay-out line.
 	_rope_mesh = MeshInstance3D.new()
@@ -521,6 +526,9 @@ func _scaled_rope_length() -> float:
 
 
 func _rope_payout_local() -> Vector3:
+	if is_instance_valid(authored_winch):
+		var socket := authored_winch.find_child("PayoutSocket*", true, false) as Node3D
+		if socket != null: return to_local(socket.global_position)
 	# Drum pay-out point just aft of the trommel drum centre.
 	return Vector3(0.18 * _visual_scale, 0.0, 0.0)
 

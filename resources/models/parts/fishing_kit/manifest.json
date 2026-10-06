@@ -1,0 +1,87 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "trawl_winch",
+      "style": "winch",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/fishing_kit/trawl_winch.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        1.4,
+        1.2
+      ],
+      "height_start_m": 1.43,
+      "height_end_m": 1.43,
+      "paintable": true,
+      "components": [
+        {
+          "id": "trawl_drum",
+          "pivot": "DrumPivot"
+        }
+      ]
+    },
+    {
+      "id": "trawl_drum",
+      "style": "winch_drum",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/fishing_kit/trawl_drum.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        1.4,
+        1.2
+      ],
+      "height_start_m": 0.96,
+      "height_end_m": 0.96,
+      "paintable": true,
+      "components": []
+    },
+    {
+      "id": "insulated_catch_tank",
+      "style": "catch_tank",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/fishing_kit/insulated_catch_tank.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        1.4,
+        1.2
+      ],
+      "height_start_m": 1.0,
+      "height_end_m": 1.0,
+      "paintable": true,
+      "components": [
+        {
+          "id": "catch_tank_lid",
+          "pivot": "LidMount"
+        }
+      ]
+    },
+    {
+      "id": "catch_tank_lid",
+      "style": "tank_lid",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/fishing_kit/catch_tank_lid.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        1.4,
+        1.2
+      ],
+      "height_start_m": 0.15,
+      "height_end_m": 0.15,
+      "paintable": true,
+      "components": []
+    }
+  ]
+}

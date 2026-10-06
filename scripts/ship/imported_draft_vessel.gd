@@ -69,6 +69,19 @@ func configure(snapshot: Dictionary) -> void:
 	add_child(collision)
 
 func _add_interactions(part: Node3D, state: ShipPartState) -> void:
+	var style := str(BrickCatalog.get_entry(str(part.get_meta("asset_id", ""))).get("style", ""))
+	if style == "winch":
+		var fishing := FishingSystem.new()
+		fishing.name = "FishingSystem"
+		fishing.anchored_to_brick = true
+		fishing.authored_winch = part
+		part.add_child(fishing)
+	elif style == "catch_tank":
+		var hold := CatchHoldComponent.new()
+		hold.name = "CatchHold"
+		hold.configure("tank_%d" % part_roots.find(part), 600.0)
+		hold.authored_visual = part
+		part.add_child(hold)
 	if not part.find_children("WheelPivot*", "Node3D", true, false).is_empty():
 		var eye := Node3D.new()
 		eye.name = "HelmEye"
