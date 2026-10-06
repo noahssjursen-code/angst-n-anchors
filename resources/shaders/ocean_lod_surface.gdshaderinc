@@ -157,15 +157,7 @@ void fragment() {
 		vec3(v_world_pos.xz / length_scales.y, 1.0),
 		0.0
 	).w * 0.45;
-	float erosion = ocean_fbm(
-		v_world_pos.xz * vec2(0.91, 0.63)
-		+ wave_time * vec2(0.4, -0.32)
-	);
-	float foam = smoothstep(
-		0.15 + erosion * 0.45,
-		0.85,
-		clamp(jacobian, 0.0, 1.0) + v_wave_steep * 0.3
-	) * foam_strength;
+	float foam = ocean_foam_coverage(v_world_pos.xz, wave_time, clamp(jacobian, 0.0, 1.0), v_wave_steep) * foam_strength * 0.78;
 #if OCEAN_WAKE
 	float wake_erode = ocean_fbm(
 		v_world_pos.xz * vec2(1.35, 0.78)

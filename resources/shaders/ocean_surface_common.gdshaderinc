@@ -113,3 +113,51 @@ float ocean_glint(vec3 normal_world, vec3 view_dir, vec3 sun_dir, float distance
 	glint *= 1.0 - smoothstep(50.0, 450.0, distance_to_camera) * 0.9;
 	return min(glint, 0.85);
 }
+
+// Independent high-precision hash: the legacy noise hash multiplies very large
+// float values before fract(), which quantizes cell jitter into visible rows.
+float ocean_foam_hash(vec2 p) {
+	vec3 q = fract(vec3(p.xyx) * 0.1031);
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.x + q.y) * q.z);
+}
+
+float ocean_foam_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(ocean_foam_hash(i), ocean_foam_hash(i + vec2(1,0)), u.x),
+		mix(ocean_foam_hash(i + vec2(0,1)), ocean_foam_hash(i + vec2(1)), u.x), u.y);
+}
+
+// Coarse FFT compression decides where foam is possible, not its texture.
+float ocean_foam_coverage(vec2 xz, float wt, float breaking, float steep) {
+	vec2 drift = xz + wt * vec2(0.16, -0.11);
+	float footprint = max(length(dFdx(xz)), length(dFdy(xz)));
+	float rafts = mix(0.5, ocean_foam_noise(drift * 2.3), 1.0 - smoothstep(0.12, 0.6, footprint));
+	float lace = mix(0.5, ocean_foam_noise(drift * 9.7 + vec2(rafts * 2.0)), 1.0 - smoothstep(0.03, 0.18, footprint));
+	float density = breaking + steep * 0.10 - rafts * 0.65 - lace * 0.30;
+	return smoothstep(0.24, 0.37, density);
+}
+
+float ocean_foam_bubbles(vec2 xz, float wt, float footprint) {
+	vec2 drift = xz + wt * vec2(0.16, -0.11);
+	vec2 p = drift * 14.0;
+	p += vec2(ocean_foam_noise(drift * 3.1), ocean_foam_noise(drift * 3.1 + vec2(37.1))) * 2.0;
+	vec2 cell = floor(p);
+	vec2 local = fract(p);
+	float nearest = 10.0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 offset = vec2(float(x), float(y));
+			vec2 id = cell + offset;
+			vec2 centre = vec2(ocean_foam_hash(id), ocean_foam_hash(id + vec2(37.2, 11.8)));
+			float radius = mix(0.08, 0.40, ocean_foam_hash(id + vec2(9.3, 53.1)));
+			nearest = min(nearest, length(offset + centre - local) - radius);
+		}
+	}
+	float aa = clamp(footprint * 14.0, 0.025, 0.3);
+	float holes = smoothstep(-aa, aa, nearest);
+	float resolved = 1.0 - smoothstep(0.018, 0.06, footprint);
+	return mix(0.78, mix(0.25, 1.0, holes), resolved);
+}

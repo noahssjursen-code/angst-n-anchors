@@ -269,7 +269,7 @@ void fragment() {
 	vec2 xz_b = ROT_B * xz;
 	// Soft edge erosion — one FBM is enough (was two).
 	float erode = ocean_fbm(xz_a * 1.2 + xz_b * 0.35 + wt * vec2(0.4, -0.32));
-	float foam_shape = smoothstep(0.15 + erode * 0.45, 0.85, jac_foam + steep * 0.3);
+	float foam_shape = ocean_foam_coverage(xz, wt, jac_foam, steep);
 
 	float foam = foam_shape * foam_strength;
 	// Wake foam laces into Jacobian foam — readable near the stern, not a
@@ -284,7 +284,12 @@ void fragment() {
 
 	col = mix(col, col * vec3(0.72, 0.82, 0.88), wake_churn * 0.18);
 
-	float foam_mask = foam;
+	float footprint = max(length(dFdx(xz)), length(dFdy(xz)));
+	float bubble_detail = 0.78;
+	if (foam > 0.01 && footprint < 0.09) {
+		bubble_detail = ocean_foam_bubbles(xz, wt, footprint);
+	}
+	float foam_mask = foam * bubble_detail;
 	vec3 foam_col = mix(vec3(0.75, 0.84, 0.88), vec3(0.97, 0.98, 1.0), foam_mask);
 	col = mix(col, foam_col, foam_mask * 0.78);
 	col = mix(col, debug_tint.rgb, debug_tint.a);
