@@ -1,7 +1,7 @@
 class_name ImportedBulkHold
 extends BulkHoldComponent
 ## Inventory/transfer API remains BulkHoldComponent. Blender supplies real walls.
-const DESIGN_CAPACITY_T := 40.0
+var design_capacity_t := 40.0
 var boat: BoatBody
 
 func get_crane_aim_toward(_world_hint: Vector3) -> Vector3:
@@ -14,7 +14,7 @@ func contains_grab_mouth(world_point: Vector3) -> bool:
 
 func _ready() -> void:
 	super._ready()
-	state.capacity_tonnes_t = DESIGN_CAPACITY_T
+	state.capacity_tonnes_t = design_capacity_t
 	_on_state_changed(state)
 
 func _rebuild_visual() -> void:

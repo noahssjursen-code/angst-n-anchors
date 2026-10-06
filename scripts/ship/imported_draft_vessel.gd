@@ -99,6 +99,9 @@ func _add_mooring_fittings(hull_id: String, deck_y: float) -> void:
 			assert(point.rope_lead != null)
 
 func _configure_bulk_holds() -> void:
+	if draft.get("hull") == "hull_32x10":
+		_configure_coaster_hold()
+		return
 	if draft.get("hull") != "hull_24x8": return
 	for part in part_roots:
 		if part.get_meta("asset_id") != "bulk_divider_5m": continue
@@ -117,6 +120,38 @@ func _configure_bulk_holds() -> void:
 				if cover.get_meta("asset_id") == "hatch_cover_5x4" and absf(cover.position.z-station)<.1 and absf(cover.position.x)<.1 and absf(cover.position.y-4.34)<.1:
 					hold.cargo_accessible = false
 			part.add_child(hold)
+
+func _configure_coaster_hold() -> void:
+	# One continuous space: four covers do not manufacture four compartments.
+	# Its floor and lip come from the Blender sockets, not a second visual pit.
+	for part in part_roots:
+		if part.get_meta("asset_id") != "hold_coaming_6x12": continue
+		if not part.position.is_equal_approx(Vector3(0,4.5,0)) or not part.basis.is_equal_approx(Basis.IDENTITY): continue
+		var floor_socket := get_node("HullVisual").find_child("HoldCentre",true,false) as Node3D
+		assert(floor_socket != null)
+		var floor_y := _relative_transform(floor_socket).origin.y
+		var lip := Vector3.ZERO
+		for index in 4:
+			var seat := part.find_child("CoverSeat%d" % index,true,false) as Node3D
+			assert(seat != null)
+			lip += _relative_transform(seat).origin * .25
+		var hold := ImportedBulkHold.new()
+		hold.name = "MainBulkHold"
+		hold.boat = self
+		# Provisional game load limit; geometric volume is not safe deadweight.
+		hold.design_capacity_t = 120.0
+		hold.configure("bulk_main",6.0,12.0,lip.y-floor_y,hold.design_capacity_t)
+		hold.position = part.transform.affine_inverse() * lip
+		for cover in part_roots:
+			var entry := BrickCatalog.get_entry(str(cover.get_meta("asset_id")))
+			if entry.get("style","") != "cargo_hatch": continue
+			# Conservatively close this undivided hold while any lift-off cover
+			# overlaps its opening, including a shifted/rotated authoring record.
+			var bounds := cover.transform * BrickCatalog.visual_bounds(cover)
+			if bounds.intersects(AABB(Vector3(-3,lip.y-.25,-6),Vector3(6,.75,12))):
+				hold.cargo_accessible = false
+		part.add_child(hold)
+		return # Duplicate authoring records cannot duplicate hull capacity.
 
 func _add_interactions(part: Node3D, state: ShipPartState) -> void:
 	var style := str(BrickCatalog.get_entry(str(part.get_meta("asset_id", ""))).get("style", ""))

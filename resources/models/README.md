@@ -944,3 +944,19 @@ Visual reference: Sealux Marine 2022 catalogue page 49, mushroom weather hoods,
 fly-screen gaps and slatted wall openings. This is original, larger game-scale
 fabrication; it is not a scaled copy or rated version of that small-vessel product.
 https://www.sealuxmarine.com/wp-content/uploads/2022-METS-CATALOUE-07-High.pdf
+# Continuation: 32 m cargo hold (6 October 2026)
+
+The 32 m draft now exposes one `ImportedBulkHold` through `BoatBody.get_bulk_holds()`
+when `hold_coaming_6x12` is seated at (0, 4.5, 0) with its authored orientation.
+The hull's `HoldCentre` socket supplies tank-top height (1.4 m); the four coaming
+`CoverSeat` sockets supply the lip (5.24 m). The continuous volume is 6 × 12 m,
+3.84 m deep. Its 120 t limit is provisional game tuning, not certified deadweight.
+Any hatch cover overlapping the opening blocks cargo handling for this undivided
+hold. Remove all four lift-off covers in the builder to run an open-hold playtest.
+No powered hatch, vessel commissioning or owned-save migration is implied.
+
+`coaster_cargo_showcase.tscn -- --shipyard-playtest --verify` exercises covered and
+partly covered rejection, invalid coaming placement, overflow, vessel mass,
+inventory JSON restoration and the actual existing crane operator. Add
+`--capture <absolute.png>` for whole-vessel, hold and loading captures. The 24 m
+two-compartment bulk example retains its two separate 40 t holds.

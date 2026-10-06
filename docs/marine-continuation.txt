@@ -1,0 +1,20 @@
+MARINE CONTINUATION — 6 October 2026, after Noah's “Continue”
+Foreground continuation; recurring automation remains paused.
+Branch: feature/3d-model-migration. Preserve user saves and main.
+
+WORK LIST
+[x] Connect the 32 m continuous cargo hold to inventory, weight and existing crane.
+[ ] Animate trawl launch/recovery, winch/sheave direction and collision handoff.
+[ ] Inspect Godot transition captures and normal ocean input; document limitations.
+[ ] Commit/push verified batches and verify remote SHA.
+
+CARGO BATCH
+One 6 x 12 m hold, socket-derived floor/lip and provisional 120 t cap.
+All/partial/rotated covers block loading; misplaced coaming creates no capacity.
+Existing BulkHoldState and crane APIs own cargo; no parallel cargo authority.
+Actual crane cycle completed: 45 t initial -> 54.8 t, with ship mass matching.
+Capacity overflow, commodity rejection, state restoration and mass checks pass.
+24 m two-hold regression and actual auto loading also pass.
+Godot images inspected: coaster-cargo.png, coaster-cargo-hold.png,
+coaster-cargo-loading.png in the workspace outputs/marine folder.
+Final logs: coaster-cargo-render.log and bulk-regression-continue.log; no errors.
