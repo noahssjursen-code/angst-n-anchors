@@ -1,0 +1,10 @@
+{
+  "presets": [
+    {"id":"compact_300","name":"Compact diesel · 300 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":300,"mass_kg":950,"fuel_lph":75,"shaft_rpm":240,"default":true},
+    {"id":"compact_450","name":"Compact diesel · 450 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":450,"mass_kg":1050,"fuel_lph":113,"shaft_rpm":275},
+    {"id":"coastal_700","name":"Coastal diesel · 700 kW","hull":"hull_24x8","model":"marine_i6_coastal","power_kw":700,"mass_kg":2450,"fuel_lph":175,"shaft_rpm":210,"default":true},
+    {"id":"coastal_950","name":"Coastal diesel · 950 kW","hull":"hull_24x8","model":"marine_i6_coastal","power_kw":950,"mass_kg":2650,"fuel_lph":238,"shaft_rpm":240},
+    {"id":"freighter_1100","name":"Freighter diesel · 1100 kW","hull":"hull_32x10","model":"marine_v12_freighter","power_kw":1100,"mass_kg":4050,"fuel_lph":275,"shaft_rpm":180,"default":true},
+    {"id":"freighter_1600","name":"Freighter diesel · 1600 kW","hull":"hull_32x10","model":"marine_v12_freighter","power_kw":1600,"mass_kg":4400,"fuel_lph":400,"shaft_rpm":210}
+  ]
+}
