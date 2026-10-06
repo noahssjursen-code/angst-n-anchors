@@ -43,6 +43,11 @@ func configure(snapshot: Dictionary) -> void:
 		part.set_meta("asset_id", record["asset_id"])
 		add_child(part)
 		part_roots.append(part)
+	var posts := Node3D.new()
+	posts.name = "RailPosts"
+	add_child(posts)
+	for record in assembler.rail_joints():
+		posts.add_child(assembler.create_part(record))
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
 	_add_mooring_fittings(hull_id, float(ImportedHullCatalog.outline(hull_id).deck_y))
 	_configure_bulk_holds()
@@ -188,6 +193,8 @@ func _ensure_walk_deck() -> void:
 		if mesh.has_meta("stern_gear_visual"): continue
 		if mesh.has_meta("bulk_fill_visual"): continue
 		if mesh.has_meta("fishing_rig_visual"): continue
+		# Authored tread pans carry the player; millimetre grip ribs are surface detail.
+		if mesh.has_meta("walk_detail_visual"): continue
 		# Small hinges/lever handles are visual hardware, not doorway obstacles.
 		# Keep the complete moving leaf, frame and header collidable.
 		if str(mesh.name).begins_with("Door hinge") or str(mesh.name).begins_with("Lever handle"):

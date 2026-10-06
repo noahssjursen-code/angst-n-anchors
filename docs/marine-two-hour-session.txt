@@ -75,3 +75,13 @@ helm control, with catch/drag/authority unchanged. Shore-transfer and draft chec
 pass. Reviewed close pulley/deck/net and in-ocean captures. Deployment remains
 instant pose switching; no seabed/rope physics claim. Next: a usable standard
 stair module and a more substantial editable superstructure for the 32 m hull.
+
+18:02 Access/accommodation batch: two independent Blender access assets and
+162-part two-level coaster, solid support attachment panels, wraparound bridge.
+Actual player climbs/descends at slow/normal speed and with +/- tilt, enters the
+upper door and approaches the helm. Fixed missing playtest rail posts plus slow
+step/nosing contact handling. Low-ceiling/tall-obstacle checks pass. Corrected
+coplanar grip mats and floor finish after close visual review. Forward+ close
+stairs/bridge/full vessel and actual ocean F-to-helm/HUD/drive/reset pass.
+Completing regression checks and pushing; then a small reusable ventilation kit
+will add useful manufactured roof/deck detail, followed by final handoff.

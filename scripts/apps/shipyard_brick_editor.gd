@@ -2087,7 +2087,7 @@ func _bake_brick_thumbnail(brick_id: String, target: TextureRect) -> void:
 	var cam := Camera3D.new()
 	cam.fov = 32.0
 	cam.current = true
-	var sz := BrickCatalog.size_m(brick_id)
+	var sz := BrickCatalog.visual_bounds(visual).size
 	var reach := maxf(sz.x, maxf(sz.y, sz.z))
 	if brick_id == "hull_ladder":
 		reach = maxf(reach, 3.2)

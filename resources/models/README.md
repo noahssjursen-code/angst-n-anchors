@@ -877,3 +877,46 @@ ribs, shoe and towing chain) and Morgere 2025 catalogue PDF page 4 (fabrication 
 tow-test arrangement). Original small game models, not copies of proprietary foil.
 https://thyboron-trawldoor.dk/wp-content/uploads/2020/10/Produktblad-TTD-Type-2-Standard.pdf
 https://www.morgere.com/wp-content/uploads/2025/06/catalogue-morgere-2025-filiere-peche-en-1.pdf
+
+### Standard stairs and two-level coaster (6 October afternoon)
+
+access_kit has separate deck_stair_220cm and deck_bracket_2m Blender/GLB assets.
+The stair has exactly 11 x 0.2 m rises and a 3 m run (3/11 m going). LowerFloor
+is the placement datum; UpperFloor is (0,2.2,-3) in Godot. One metre tread width,
+1 m-high top rails at the landing, individual grip ribs, nosings, stringers and
+bolted attachments. Rail/step materials stay fixed; structural steel exposes wall.
+The 2 m knee is a separate under-deck support, with its top 0.1 m below the
+placement datum to meet the underside of a standard floor. Do not scale stairs
+to change floor heights: author a corresponding tread/rise variant.
+
+32 m example now contains 162 editable placements: 5 x 6 m lower accommodation,
+wraparound 2:1/45-degree upper bridge, separate console/controls/chairs, balcony,
+external stairs and two knees attached to solid wall panels. Upper structural
+floor datum is 6.7 m; the floor finish sits 5 mm above it to avoid a coplanar wall
+cap. Roof datum is 8.9 m. The small white mast light moved to the aft balcony.
+No accommodation occupancy/economy system is implied by this arrangement.
+
+Rail posts are derived from panel endpoints by the same method in both editor
+and ImportedDraftVessel. Previously playtest omitted these supports. They are
+included in real walk collisions, remain panel-owned and add no save records.
+Palette thumbnails now frame actual imported mesh bounds (including components),
+so centred gantries and origin-at-wall brackets aren't cropped or off-centre.
+
+Real-player testing exposed slow-motion step detection and capsule/nosing normals.
+The controller now considers millimetre motion, checks the actual tread surface
+when a capsule edge contact appears steep, and maintains step eligibility across
+that brief contact. Full-body up/forward/down casts remain authoritative; low
+ceilings and tall walls still block. tests/coaster_access_test.tscn checks slow
+and normal speeds, +/- roll/pitch, ascent/descent, upper doorway and helm approach,
+plus ceiling/tall-obstacle limits. Run rendered with --shipyard-playtest for real
+mouse-captured input; headless mouse state does not simulate walking here.
+
+Coaster showcase keys 3/4 inspect stairs and the bridge cutaway. Forward+ captures
+are preferred: Compatibility shadow acne exaggerates small metal tread details.
+Arrangement reference: the previously inspected Damen Combi Freighter sheet;
+this is a compact original game arrangement, not its dimensions or certification.
+Stair grip mats, nosing paint and millimetre ribs are tagged through the optional
+walk_exclude_materials manifest contract. Only meshes entirely made of those
+materials skip walk collision. The actual eleven imported tread pans, stringers,
+rails and supports remain physical; there is no invisible ramp. Final refined
+geometry repeats the full access checks successfully.

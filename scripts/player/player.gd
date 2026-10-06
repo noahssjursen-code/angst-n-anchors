@@ -52,6 +52,7 @@ const WALK_ANIM_MIN_SPEED := 0.15
 var _smoothed_input:   Vector2 = Vector2.ZERO
 var _current_speed:    float   = 0.0
 var _was_on_floor:     bool    = true
+var _stepped_last_frame: bool = false
 var _last_safe_position: Vector3 = Vector3.ZERO
 var _water_submerge_time: float = 0.0
 var _vehicle_occupied: bool = false
@@ -188,13 +189,16 @@ func _physics_process(delta: float) -> void:
 	# Step-climb recovery: if we were grounded, intended to move horizontally,
 	# but made noticeably less progress than asked, try to ghost-step over a
 	# low ledge. Restores velocity so we don't lose momentum to the wall.
-	if (on_floor or _was_on_floor) and pre_velocity.y <= 0.5 and max_step_height > 0.0:
+	var may_step := on_floor or _was_on_floor or _stepped_last_frame
+	_stepped_last_frame = false
+	if may_step and pre_velocity.y <= 0.5 and max_step_height > 0.0:
 		var intended := Vector3(pre_velocity.x, 0.0, pre_velocity.z) * delta
-		if intended.length_squared() > 0.0001:
+		if intended.length_squared() > 0.000001:
 			var actual := global_position - pre_move_pos
 			actual.y = 0.0
 			if actual.length() < intended.length() * 0.6:
 				if _try_step_up(intended):
+					_stepped_last_frame = true
 					velocity.x = pre_velocity.x
 					velocity.z = pre_velocity.z
 
@@ -263,7 +267,7 @@ func is_vehicle_occupied() -> bool:
 ## Returns true on a successful step.
 func _try_step_up(horizontal_motion: Vector3) -> bool:
 	var motion := Vector3(horizontal_motion.x, 0.0, horizontal_motion.z)
-	if motion.length_squared() < 0.0001:
+	if motion.length_squared() < 0.000001:
 		return false
 
 	var up_vec := Vector3.UP * max_step_height
@@ -304,7 +308,15 @@ func _try_step_up(horizontal_motion: Vector3) -> bool:
 	# Reject steep surfaces — would be unwalkable.
 	var normal := down_result.get_collision_normal()
 	if normal.dot(Vector3.UP) < cos(floor_max_angle):
-		return false
+		# A capsule touching a tread's nosing produces a diagonal contact normal,
+		# even when the actual tread is flat. Check the surface just inside that
+		# contact before rejecting it as a steep slope. Full capsule casts above
+		# still enforce ceiling, forward clearance and the maximum step height.
+		var sample := down_result.get_collision_point() + motion.normalized() * .025
+		var query := PhysicsRayQueryParameters3D.create(sample + Vector3.UP * .08,sample - Vector3.UP * .12,collision_mask,[rid])
+		var surface := get_world_3d().direct_space_state.intersect_ray(query)
+		if surface.is_empty() or surface.normal.dot(Vector3.UP) < cos(floor_max_angle):
+			return false
 
 	global_position = raised_fwd.origin + down_result.get_travel()
 	return true

@@ -589,11 +589,23 @@ func rebuild() -> void:
 	for child in parts_root.get_children():
 		parts_root.remove_child(child)
 		child.queue_free()
-	var joints: Dictionary = {}
 	for record in records.values():
 		var model := create_part(record)
 		model.set_meta("record_key", slot_key(record))
 		parts_root.add_child(model)
+	for joint in rail_joints():
+		var post := create_part(joint)
+		post.set_meta("record_key", joint["owner_key"])
+		parts_root.add_child(post)
+	_sync_selection_visuals()
+	_apply_floor_view()
+
+
+func rail_joints() -> Array:
+	# One derived post per endpoint, shared by the editor and the playable draft.
+	# Posts remain owned by their panel; no extra user save records are needed.
+	var joints: Dictionary = {}
+	for record in records.values():
 		var spec := BrickCatalog.get_entry(record["asset_id"])
 		if spec["style"] != "rail" or spec["kind"] == "joint":
 			continue
@@ -603,12 +615,7 @@ func rebuild() -> void:
 			var key := "%.4f,%.4f,%.4f" % [point.x,point.y,point.z]
 			var level := clampi(roundi((height-1.0)/0.15),0,5)
 			joints[key] = {"asset_id":"rail_joint_%d" % level, "position":[point.x,point.y,point.z], "yaw_degrees":0,"owner_key":slot_key(record)}
-	for joint in joints.values():
-		var post := create_part(joint)
-		post.set_meta("record_key", joint["owner_key"])
-		parts_root.add_child(post)
-	_sync_selection_visuals()
-	_apply_floor_view()
+	return joints.values()
 
 
 func reset_colors() -> void:

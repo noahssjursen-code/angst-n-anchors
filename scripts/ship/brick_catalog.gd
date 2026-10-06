@@ -6,20 +6,20 @@ static var _imported: Dictionary = {}
 
 static func imported_entries() -> Dictionary:
 	if _imported.is_empty():
-		for path in ["res://resources/models/parts/trawl_rig/manifest.json","res://resources/models/parts/lighting_kit/manifest.json","res://resources/models/parts/coaster_kit/manifest.json", "res://resources/models/parts/coaster_perimeter/manifest.json","res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
+		for path in ["res://resources/models/parts/access_kit/manifest.json","res://resources/models/parts/trawl_rig/manifest.json","res://resources/models/parts/lighting_kit/manifest.json","res://resources/models/parts/coaster_kit/manifest.json", "res://resources/models/parts/coaster_perimeter/manifest.json","res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
 			var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 			for raw in data["assets"]:
 				var entry: Dictionary = raw.duplicate(true)
 				var id := str(entry["id"])
 				entry["display"] = id.replace("_", " ").capitalize()
-				entry["tags"] = ["structure" if id.begins_with("cabin_") or entry["style"] in ["floor", "roof"] else "railing", "ship_only", "imported"]
+				entry["tags"] = ["structure" if id.begins_with("cabin_") or entry["style"] in ["floor", "roof", "stair", "support"] else "railing", "ship_only", "imported"]
 				if entry["style"]=="light":entry["tags"]=["light","ship_only","imported"]
 				entry["color"] = ModelPaint.DEFAULTS["wall"] if entry["style"] != "rail" else Color(0.58, 0.64, 0.65)
 				_imported[id] = entry
 	return _imported
 static func ids() -> Array[String]:
 	# Palette families; exact asset variants remain addressable for placement and saves.
-	return ["rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight", "trawl_winch", "trawl_gantry_4m", "insulated_catch_tank", "hold_coaming_5x8", "hatch_cover_5x4", "bulk_divider_5m", "deck_floodlight", "nav_port", "nav_starboard", "nav_stern", "mast_lantern"]
+	return ["rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "deck_stair_220cm", "deck_bracket_2m", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight", "trawl_winch", "trawl_gantry_4m", "insulated_catch_tank", "hold_coaming_5x8", "hatch_cover_5x4", "bulk_divider_5m", "deck_floodlight", "nav_port", "nav_starboard", "nav_stern", "mast_lantern"]
 
 static func ids_for_buildings() -> Array[String]:
 	## Land building editor palette — shared kit minus marine-only systems.
@@ -87,6 +87,12 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 	if not entry.is_empty():
 		var model := (load(entry["model"]) as PackedScene).instantiate() as Node3D
 		root.add_child(model)
+		for mesh: MeshInstance3D in model.find_children("*","MeshInstance3D",true,false):
+			var all_detail := mesh.mesh.get_surface_count()>0
+			for i in mesh.mesh.get_surface_count():
+				var material := mesh.mesh.surface_get_material(i)
+				all_detail = all_detail and material != null and entry.get("walk_exclude_materials",[]).has(material.resource_name)
+			if all_detail:mesh.set_meta("walk_detail_visual",true)
 		for component in entry.get("components",[]):
 			var part := create_visual(component["id"])
 			if component.has("pivot"):
@@ -110,8 +116,21 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			light.spot_angle_deg=48
 			aim.add_child(light)
 		if bool(opts.get("preview_mesh", false)):
-			var end: Array = entry["end_xz"]
-			model.position = -Vector3(float(end[0]) * 0.5, size_m(brick_id).y * 0.5, float(end[1]) * 0.5)
+			model.position -= visual_bounds(root).get_center()
 		if (entry["style"] == "halfwall" or entry.get("paintable", false)) and opts.has("color"):
 			ModelPaint.apply(model, {"wall": opts["color"]})
 	return root
+
+static func visual_bounds(root: Node3D) -> AABB:
+	var bounds := AABB()
+	var initialized := false
+	for mesh: MeshInstance3D in root.find_children("*","MeshInstance3D",true,false):
+		var transform := mesh.transform
+		var parent := mesh.get_parent()
+		while parent != root:
+			if parent is Node3D:transform=parent.transform*transform
+			parent=parent.get_parent()
+		var box: AABB = transform * mesh.get_aabb()
+		bounds=bounds.merge(box) if initialized else box
+		initialized=true
+	return bounds

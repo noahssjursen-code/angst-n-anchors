@@ -18,7 +18,10 @@ for name,deck,beam,front,rear,house in [
     add('nav_port',-beam/2+.3,front+.45)
     add('nav_starboard',beam/2-.3,front+.45)
     add('nav_stern',.9,rear)
-    add('mast_lantern',1.85,house)
+    if beam==10:
+        add('mast_lantern',4,14.4)
+        parts[-1]['position'][1]=6.7
+    else:add('mast_lantern',1.85,house)
     if beam==5:
         add('deck_floodlight',-2.12,.5,215);add('deck_floodlight',2.12,.5,145)
     else:
