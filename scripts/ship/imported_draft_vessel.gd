@@ -50,6 +50,9 @@ func configure(snapshot: Dictionary) -> void:
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
 	_add_mooring_fittings(hull_id, float(ImportedHullCatalog.outline(hull_id).deck_y))
 	_assemble_parts()
+	var doors := preload("res://scripts/ship/imported_door_interaction.gd").new()
+	doors.name = "DoorInteraction"
+	add_child(doors)
 	(hull.get_node("DriveGear") as ShipDriveVisual).bind_local(self)
 	_install_engine()
 	var camera := get_node("BoatCamera") as BoatCamera

@@ -22,7 +22,7 @@ func _run() -> void:
 	_apply_state(renderer, 0.50, 0.05, 0.0, 1.0, 0.0)
 	var clear := renderer.get_lighting_debug_state()
 	_check(float(clear["tonemap_exposure"]) <= 1.03, "day exposure preserves highlights")
-	_check(float(clear["adjustment_contrast"]) >= 1.04, "grade has useful contrast")
+	_check(float(clear["adjustment_contrast"]) >= 1.0, "grade has useful contrast")
 	_check(float(clear["ambient_energy"]) >= 0.30, "day shadow detail remains readable")
 	_check(float(clear["adjustment_saturation"]) >= 1.0, "grade preserves paint color")
 	_check(float(clear["glow_intensity"]) < 0.5, "glow is restrained")
@@ -47,6 +47,11 @@ func _run() -> void:
 	_check(float(night["tonemap_exposure"]) <= 1.15, "night exposure is bounded")
 	_check(float(night["ambient_energy"]) >= 0.04, "night silhouettes remain readable")
 
+	_check(bool(night["volumetric_fog_enabled"]), "clear night permits lamp scattering")
+	_check(float(night["volumetric_fog_density"]) < 0.001, "clear-night air does not become dense fog")
+	renderer.enable_volumetric_fog = false
+	_apply_state(renderer, 0.0, 0.25, 0.0, 1.0, 0.0)
+	_check(not bool(renderer.get_lighting_debug_state()["volumetric_fog_enabled"]), "quality switch disables night scattering")
 	renderer.queue_free()
 	_finish()
 

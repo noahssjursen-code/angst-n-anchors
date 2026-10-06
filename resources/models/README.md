@@ -1195,3 +1195,31 @@ Screenshots live in C:/Users/noahs/Pictures/machinescreenshots/night-lighting-*
 not a claim of sea-trial physics validation or completed cabin lighting design.
 WorldLightingGrade, ArtificialLightDayScale and the real L-switch marine showcase
 also pass, including independent vessels and disabled emission in OFF mode.
+
+### Natural night lighting follow-up
+
+The initial brightness checks above did not establish visual acceptance. The next
+pass uses finite emitter sizes (quay 0.65m, work flood 0.35m), broader quay pools
+at energy20/range32, and neutral scattering albedo rather than dark night-sky
+colour. Clear-night density is only0.00065, fades away by daylight0.3, and respects
+the existing volumetric quality switch. Dense weather is still a separate term.
+Night contrast is1.0 and ambient floor0.14; daylight contrast remains1.045.
+SSIL adds local screen-space indirect detail (radius5/intensity0.65), controlled
+by enable_ssil. It cannot bounce off-screen geometry and is not full world GI.
+Do not present it as such. Godot reference:
+https://docs.godotengine.org/en/4.6/classes/class_environment.html
+Night review now includes eye-level and real weather grading/SSAO. Optional
+--profile-lighting compares the extra effects with uncapped frame and GPU times.
+
+### Imported cabin door runtime
+
+ImportedDraftVessel installs DoorInteraction in owned, replicated and sea-trial
+boats. Target the actual animated leaf collider with F; world surfaces occlude
+it. Do not add another playtest-only keyboard handler. ShipPartState continues
+to pose the authored hinge and existing moving collision follows it. Registered
+vessels route open/close plus swing sign through WorldStateBinding using vessel
+identity and stable part placement identity. No local optimistic mutation while
+registered authority is unavailable. Unregistered isolated previews remain local.
+Runtime regression: tests/imported_door_runtime_test.tscn -- --shipyard-playtest
+[--capture-doors]. Covers both sides, occlusion, F input, open/close, late identity,
+authority replay and stale rejection; captures are archived in machinescreenshots.

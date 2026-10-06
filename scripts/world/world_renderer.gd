@@ -50,6 +50,7 @@ const HORIZON_DISCARD_HALF : float = MID_OCEAN_SIZE * 0.5 - 15.0
 ## profiling and future quality presets.
 @export var enable_ssao := true
 @export var enable_glow := true
+@export var enable_ssil := true
 @export var enable_volumetric_fog := true
 @export var enable_weather_post_fx := true
 
@@ -404,6 +405,9 @@ func _build_sky() -> void:
 	environ.tonemap_white    = 3.0
 
 	environ.ssao_enabled = enable_ssao
+	environ.ssil_enabled = enable_ssil
+	environ.ssil_radius = 5.0
+	environ.ssil_intensity = 0.65
 	environ.ssao_radius = 1.35
 	environ.ssao_intensity = 0.72
 	environ.ssao_power = 1.0
@@ -419,7 +423,7 @@ func _build_sky() -> void:
 
 	environ.adjustment_enabled    = true
 	environ.adjustment_brightness = 1.0
-	environ.adjustment_contrast   = 1.045
+	environ.adjustment_contrast   = 1.0
 	environ.adjustment_saturation = 1.04
 
 	environ.fog_enabled            = true
@@ -696,7 +700,7 @@ func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: 
 		# A dark sky cubemap must not multiply night fill almost to zero.
 		_environment.ambient_light_sky_contribution = daylight
 		_environment.ambient_light_energy = (
-			lerpf(0.055, 0.36, daylight * daylight)
+			lerpf(0.14, 0.36, daylight * daylight)
 			* lerpf(1.0, 0.94, cloud)
 			* lerpf(1.0, 0.92, storm)
 		)
@@ -717,6 +721,7 @@ func _apply_exposure(daylight: float, cloud: float, storm: float, fog_t: float) 
 	var night_lift := lerpf(1.12, 1.02, daylight)
 	var weather_lift := cloud * 0.012 + storm * 0.012
 	_environment.tonemap_exposure = clampf(night_lift + weather_lift, 1.0, 1.14)
+	_environment.adjustment_contrast = lerpf(1.0, 1.045, daylight)
 
 
 func _apply_fog(solar: Dictionary, fog_t: float, daylight: float, cloud: float, storm: float) -> void:
@@ -739,24 +744,23 @@ func _apply_fog(solar: Dictionary, fog_t: float, daylight: float, cloud: float, 
 	_environment.fog_aerial_perspective = 0.24 * fog_t
 	_environment.fog_sky_affect = 0.30 * distance_haze
 
-	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness).
-	# Godot runs the full 64³ froxel compute every frame as long as
-	# volumetric_fog_enabled = true — density only scales the visible
-	# contribution, not the compute cost. In clear weather we'd be paying ~2-4 ms
-	# for fog with zero visible effect, so we gate the whole pass on a small
-	# density threshold. Mid fog should stay translucent; only dense bands crush.
-	const VOLUMETRIC_FOG_START := 0.44
-	var vol_amount := smoothstep(VOLUMETRIC_FOG_START, 0.94, fog_t)
-	var vol_density := 0.018 * vol_amount
-	var want_volumetric := enable_volumetric_fog and fog_t > VOLUMETRIC_FOG_START
+	# A thin clear-night medium gives nearby lamps depth without reducing the
+	# weather visibility. Dense weather adds extinction independently.
+	var night_air := (1.0 - smoothstep(0.0, 0.3, daylight)) * 0.00065
+	var vol_amount := smoothstep(0.44, 0.94, fog_t)
+	var vol_density := night_air + 0.018 * vol_amount
+	var want_volumetric := enable_volumetric_fog and vol_density > 0.00001
 	_environment.volumetric_fog_enabled = want_volumetric
+	_environment.volumetric_fog_density = vol_density if want_volumetric else 0.0
 	if want_volumetric:
-		_environment.volumetric_fog_albedo  = base_fog_col
-		_environment.volumetric_fog_density = vol_density
+		# Albedo is particle scattering efficiency, not the night sky colour.
+		_environment.volumetric_fog_albedo = Color(0.82, 0.86, 0.90)
 		_environment.volumetric_fog_emission = Color.BLACK
 		_environment.volumetric_fog_emission_energy = 0.0
-		# Keep fog farther out so near-field ships/ports stay readable.
-		_environment.volumetric_fog_length  = lerpf(560.0, 260.0, fog_t)
+		_environment.volumetric_fog_ambient_inject = 0.15
+		_environment.volumetric_fog_anisotropy = 0.25
+		_environment.volumetric_fog_length = lerpf(160.0, 260.0, vol_amount)
+
 
 
 func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: float) -> void:

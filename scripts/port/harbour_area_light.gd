@@ -6,11 +6,14 @@ var lenses: Array[StandardMaterial3D] = []
 func _ready() -> void:
 	rotation.x = -PI*.5
 	light_color = Color(1.0,.87,.68)
-	light_energy = 28.0
-	light_volumetric_fog_energy = .12
+	light_energy = 20.0
+	light_volumetric_fog_energy = 0.75
 	spot_attenuation = 1.0
-	spot_range = 28.0
-	spot_angle = 62.0
+	spot_range = 32.0
+	spot_angle = 72.0
+	spot_angle_attenuation = 1.25
+	light_size = 0.65
+	shadow_blur = 2.0
 	shadow_enabled = true
 	shadow_normal_bias = .25
 	shadow_bias = .03
@@ -39,6 +42,6 @@ func _process(delta: float) -> void:
 func _update() -> void:
 	var daylight := WeatherLighting.daylight_factor()
 	visible = daylight < .65
-	light_energy = 28.0 * (1.0-smoothstep(.15,.65,daylight))
+	light_energy = 20.0 * (1.0-smoothstep(.15,.65,daylight))
 
-	for lens in lenses: lens.emission_energy_multiplier=3.0*(light_energy/28.0)
+	for lens in lenses: lens.emission_energy_multiplier=3.0*(light_energy/20.0)

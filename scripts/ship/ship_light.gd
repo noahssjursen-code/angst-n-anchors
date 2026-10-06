@@ -314,13 +314,13 @@ func _make_spot(pitch_deg: float, range_m: float, energy: float, angle_deg: floa
 	light.spot_range = range_m
 	light.spot_attenuation = 1.25
 	_base_energy = energy
-	_base_vol_energy = 0.18 # Scatter is secondary to the illuminated deck.
+	_base_vol_energy = 0.55 # Scatter is secondary to the illuminated deck.
 	light.light_energy = energy * _day_scale
 	light.light_volumetric_fog_energy = _base_vol_energy * _vol_scale
 	light.spot_angle = angle_deg
 	light.spot_angle_attenuation = 1.8
 	light.light_specular = 0.85
-	light.light_size = 0.15
+	light.light_size = 0.35
 	light.shadow_enabled = true
 	light.shadow_bias = 0.06
 	light.shadow_normal_bias = 0.25

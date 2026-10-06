@@ -27,6 +27,8 @@ func weather(fog: bool) -> void:
 	WeatherLighting.sea_state=.15
 	var renderer := get_node("ShowcaseWorldRenderer")
 	renderer.enable_volumetric_fog=true
+	renderer.enable_weather_post_fx=true
+	renderer._environment.ssao_enabled=true
 	renderer._apply_weather_lighting()
 	for node in find_children("*","SpotLight3D",true,false):
 		if node.get_script()==preload("res://scripts/port/harbour_area_light.gd"): node._update()
@@ -52,6 +54,9 @@ func review() -> void:
 	_camera.global_position=pole.global_position+Vector3(13,3,16)
 	_camera.look_at(pole.global_position+Vector3(0,-5,0))
 	await capture_review("quay-clear")
+	_camera.global_position=pole.global_position+terminal.global_basis*Vector3(4,-5.7,-9)
+	_camera.look_at(pole.global_position+Vector3(0,-3,0))
+	await capture_review("quay-eye-level")
 	weather(true)
 	await capture_review("quay-fog")
 	review_boat=ImportedDraftVessel.new()
@@ -90,6 +95,8 @@ func review() -> void:
 	_camera.global_position=shore+Vector3(11,8,13)*maxf(1,review_boat.length_m/18.0)
 	_camera.look_at(shore+Vector3(0,3,0))
 	await capture_review("shore-clear-close")
+	if OS.get_cmdline_user_args().has("--profile-lighting"):
+		await profile_lighting()
 	WorldClock.snap_time_of_day(.5)
 	WeatherLighting.time_of_day=.5
 	get_node("ShowcaseWorldRenderer")._apply_weather_lighting()
@@ -111,3 +118,25 @@ func surface_difference(a: Image,b: Image) -> float:
 			total+=maxf(0,a.get_pixel(x,y).get_luminance()-b.get_pixel(x,y).get_luminance())
 			count+=1
 	return total/count
+
+func profile_lighting() -> void:
+	Engine.max_fps=0
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
+	var renderer := get_node("ShowcaseWorldRenderer")
+	for enabled in [true,false,true]:
+		renderer._environment.ssil_enabled=enabled
+		renderer.enable_volumetric_fog=enabled
+		renderer._apply_weather_lighting()
+		for frame in 45: await get_tree().process_frame
+		var durations: Array[float]=[]
+		var gpu: Array[float]=[]
+		for frame in 120:
+			var start := Time.get_ticks_usec()
+			await get_tree().process_frame
+			durations.append((Time.get_ticks_usec()-start)/1000.0)
+			gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(get_viewport().get_viewport_rid()))
+		durations.sort()
+		gpu.sort()
+		print("LIGHTING FRAME MS effects=",enabled," median=",durations[60]," p95=",durations[114]," gpu_median=",gpu[60])
+		await capture_review(("profile-effects-on-" if enabled else "profile-effects-off-")+str(Time.get_ticks_msec()))

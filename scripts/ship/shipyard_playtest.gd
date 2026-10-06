@@ -7,7 +7,6 @@ var player: CharacterBody3D
 var controller: BoatController
 var camera: BoatCamera
 var status: Label
-var prompt: Label
 var start_transform: Transform3D
 var spawn_point := Vector3(0, 3.0, 4)
 var ready_to_play := false
@@ -87,15 +86,6 @@ func _build_ui() -> void:
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	status.text = "BOAT PLAYTEST · Daylight / moderate waves\nHome · Reset boat\nEsc · Menu / return to builder"
 	status.modulate = Color(.8, .9, 1)
-	prompt = Label.new()
-	layer.add_child(prompt)
-	prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	prompt.offset_left = -180
-	prompt.offset_right = 180
-	prompt.offset_top = -92
-	prompt.offset_bottom = -48
-	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt.add_theme_font_size_override("font_size", 22)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not ready_to_play:
@@ -103,11 +93,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_HOME:
 		_reset()
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("interact"):
-		var door := _looked_at_door()
-		if door != null:
-			door.request_door_from(player.global_position)
-			get_viewport().set_input_as_handled()
 
 func _find_spawn() -> void:
 	# Capsule clearance includes rails, roofs, console and furniture; stern first.
@@ -156,32 +141,11 @@ func _reset() -> void:
 func _process(_delta: float) -> void:
 	if not ready_to_play or get_tree().paused:
 		return
-	prompt.text = "Press F to open / close door" if _looked_at_door() != null else ""
+
 	if not player.is_vehicle_occupied() and (player.global_position.y < WaveSurface.WATER_LEVEL - .3 or player.global_position.distance_to(boat.global_position) > 30):
 		_place_player()
 	if Vector2(boat.position.x, boat.position.z).length() > 1500 or boat.position.y < -15:
 		_reset()
-
-func _looked_at_door() -> ShipPartState:
-	if not is_instance_valid(player) or player.is_vehicle_occupied() or GameMenu._screen != GameMenu.Screen.NONE:
-		return null
-	var view := get_viewport().get_camera_3d()
-	var ray := PhysicsRayQueryParameters3D.create(view.global_position, view.global_position - view.global_basis.z * 3.0, BoatBody.LAYER_BOAT_WALK)
-	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
-	if hit.is_empty():
-		return null
-	# Map the actual hit shape to its moving door mesh, so walls occlude interaction.
-	var body := hit.collider as CollisionObject3D
-	var shape := body.shape_owner_get_owner(body.shape_find_owner(hit.shape))
-	for item in boat.moving_colliders:
-		if item.collision == shape:
-			var node: Node = item.mesh
-			while node != boat:
-				var state := node.get_node_or_null("PartState") as ShipPartState
-				if state != null:
-					return state
-				node = node.get_parent()
-	return null
 
 func _quit() -> void:
 	get_tree().quit()
