@@ -1,0 +1,104 @@
+MARINE SESSION HANDOFF — 6 October 2026
+Session: 16:24–18:24 Europe/Oslo. Branch: feature/3d-model-migration.
+
+DELIVERED AND PUSHED
+24 new individual GLB models with matching Blender sources (9.05 MB of new GLBs),
+plus revisions to existing crane and fishing hardware. All model manifest paths
+resolve. Seven implementation commits were pushed and their remote SHAs checked:
+
+352c76f  Crane fabrication, cabin/service details, animated grab cylinders,
+         winch feed wires and operating clearances.
+3542586  New 32 x 10 m hull with exact half-metre outline, 2:1 / 1:1 bow,
+         real 6 x 12 hold, coaming, four removable covers and editor support.
+7058fac  Five removable marine lighting models; existing L presets drive actual
+         lamps and individual lenses, with night/off/day checks on examples.
+cf8e4e3  Dedicated 1.8 m propeller, 2.1 m rudder and shaft/support hardware;
+         raised underwater counter and verified rotation/steering clearance.
+32ddd38  Seven trawl components: gantry, block, sheave, mirrored doors, open net
+         and stowed bundle. Two-bay winch and routed warps. Normal G helm input.
+b779acf  Reusable 2.2 m-rise / 3 m-run stairs, separate balcony supports, larger
+         two-level coaster bridge; real player access and rail-post runtime fix.
+a7a02d2  Separate deck ventilator and wall intake; 165-part coaster arrangement,
+         visible/selectable finished floor and verified portside walking route.
+
+WHAT TO OPEN
+Use the existing Vessel Builder > Drafts > Open with these repository files:
+resources/models/examples/coastal_32m_draft.json      165 placements
+resources/models/examples/coastal_trawler_draft.json  67 placements
+resources/models/examples/coastal_cargo_draft.json    93 placements
+resources/models/examples/coastal_bulk_draft.json     93 placements
+
+Floor 1 shows the new upper bridge. Playtest boat uses the normal isolated ocean
+mode; F on the helm chair drives, G deploys/retracts the trawler net, L cycles
+lighting. No saved captain or server connection is needed. Original drafts are
+editable examples: no monolithic ship export replaces their individual records.
+
+RUNNABLE INSPECTION SCENES
+All under scenes/showcases/. Launch with -- --shipyard-playtest for save/network
+isolation. Coaster keys 1/2/3/4/5 select vessel/hold/stairs/bridge cutaway/vent.
+coaster_kit_showcase.tscn
+fishing_kit_showcase.tscn
+crane_kit_showcase.tscn
+marine_lighting_showcase.tscn
+stern_gear_showcase.tscn (add --coaster for the 32 m assembly)
+
+REVIEW CAPTURES
+Absolute capture folder:
+C:\Users\noahs\Documents\Codex\2026-10-05\referenced-chatgpt-conversation-this-is-an\outputs\marine
+
+Start with coaster-accommodation.png, coaster-accommodation-stairs.png,
+coaster-accommodation-bridge.png and coaster-library.png.
+Trawler: trawler-gantry-deck.png, trawler-gantry-deployed.png,
+trawler-gantry-net.png, trawler-gantry-block.png, trawler-ocean-trawling.png.
+Crane: crane-refined-service.png, crane-refined-cabin.png,
+crane-refined-open.png, crane-refined-loading-hold.png.
+Hardware/light: coaster-stern-gear-side.png, marine-lighting.png,
+marine-lighting-fixture.png, marine-lighting-day.png.
+
+VERIFICATION
+- Actual Godot renders inspected close up and in context; visible failures were
+  corrected (tread overlaps, unsupported rails, bracket through window, hood
+  shading, louvre depth, roof/floor seam). Forward+ used for final coaster images.
+- New GLBs validate as glTF 2; every new asset has a Blender source; manifest
+  model paths resolve. Import passes, with no parse errors in final runs.
+- Four example draft save/reload checks; 32 m cross-hull load and invalid-load
+  preservation; painted instances remain independent; upper-floor finish visible.
+- Actual player climbs and descends at slow/normal speed and +/- roll/pitch,
+  passes the upper doorway and reaches the helm; low ceiling/tall wall still
+  block; portside passage stays open. 20 existing tilted door crossings pass.
+- Final 165-part coaster and 67-part trawler ocean tests pass normal F-to-helm,
+  passenger seating, HUD, doors, walking, pause, propulsion, rudder and reset.
+  Trawler G input deploys/retracts the new gear. Fresh .verified markers written.
+- Crane jaw/actuator/hoist checks, three scales, luff routing and real operator
+  bulk loading/mass conservation pass. Trawl inventory/shore transfer pass.
+- Propeller ahead/astern/stop/dry-fuel and rudder local/remote snapshot/reload
+  checks; sampled hull clearance and original 14 m stern regression pass.
+- New imported lights follow existing L presets; independent vessels, lens off
+  and daytime dimming checked. No duplicated gameplay control path.
+
+Logs and scratch are beside outputs under work. Final useful logs include
+final-coaster-ocean.log, final-trawler-ocean.log, ventilation-access.log,
+coaster-library.log, ventilation-render.log, access-doors.log,
+crane-session-render.log, crane-session-loading.log, lights-render.log,
+coaster-gear-render.log and trawl-rig-render.log. Earlier failed iteration logs
+are retained there deliberately; final results above refer to the named runs.
+
+REMAINING LIMITATIONS — NOT CLAIMED COMPLETE
+- Trawl deployment switches poses. No animated recovery, seabed solver, door
+  hydrodynamics or true cable catenary. Arbitrary custom rigs may need routing.
+- New 32 m hull has provisional handling and hydrostatics; no 32 m bulk inventory
+  integration, powered hatch or commissioning flow was added. Underwater mesh
+  clearance is checked, not a real naval-engineering sizing certification.
+- Crane power umbilical and more complete sheave routing remain to refine.
+  Access ladder is visual, not a climbing interaction.
+- Light screens are modeled but navigation light sectors use approximate game
+  fill. Ventilation models are static; no airflow/flooding simulation.
+- Broad fleet migration, multiplayer transport and final material/weathering
+  polish remain. These are reviewed iterations, not Noah's final art approval.
+- Walking follows physical tread pans. Millimetre grip ribs are visual detail;
+  there is no invisible stair ramp. The upper deck has a 5 mm finish allowance.
+
+Rules, dimensions, pivots, paint channels, sources and reproduction scripts are
+recorded in resources/models/README.md. Main was not reset, force-pushed or merged.
+User saves were preserved. The two-hour continuity automation is to be paused at
+18:24; this handoff does not authorize another workday of background execution.

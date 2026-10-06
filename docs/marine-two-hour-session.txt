@@ -14,10 +14,10 @@ Ordered work list
       edges, authored underwater form, separate hatch/coaming components,
       builder palette/grid/perimeter, provisional handling and stern hardware.
       No stretching an existing entire boat or scaling metre-based accessories.
-[ ] 3. Useful deck fittings and lights: pick next needed reusable parts after
+[x] 3. Useful deck fittings and lights: pick next needed reusable parts after
       hull review; route working lights through existing lighting state. Verify
       daytime/off/night presentation. Do not bypass authority or save contracts.
-[ ] 4. Visual iteration, relevant interaction/draft/playtest checks, scoped pushes,
+[x] 4. Visual iteration, relevant interaction/draft/playtest checks, scoped pushes,
       remote verification and final screenshots/handoff; pause at 18:24 Oslo.
 
 Quality bar
@@ -91,3 +91,5 @@ placements on the coaster (165 total). Inspected manufacturer photographs;
 corrected hood centre/shading and wall mounting depth after close renders.
 Player test confirms portside passage; per-instance paint is isolated. Final
 library/upper-floor save-load capture and source/import checks in progress.
+
+18:22 Final audit: 24 new valid GLBs, every one with a Blender source; all model manifest paths resolve. Twelve named final evidence logs are clean. Fresh final coaster/trawler ocean verification markers passed. Seven implementation batches pushed and remote SHAs verified. Handoff saved in docs/marine-two-hour-handoff.txt; no unfinished implementation is hidden. Pausing the continuity automation at the 18:24 session boundary.
