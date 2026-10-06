@@ -308,6 +308,8 @@ static func _bake_field(
 	var corridor_points: Array[PackedVector2Array] = []
 	var corridor_widths: Array[PackedFloat32Array] = []
 	var corridor_cumlen: Array[PackedFloat32Array] = []
+	var corridor_bounds: Array[Rect2] = []
+	var corridor_half_width := PackedFloat32Array()
 	for waterway in waterways:
 		var points: PackedVector2Array = waterway["points"]
 		var widths: PackedFloat32Array = waterway.get("widths_m", PackedFloat32Array())
@@ -319,6 +321,14 @@ static func _bake_field(
 		corridor_points.append(points)
 		corridor_widths.append(widths)
 		corridor_cumlen.append(_polyline_cumlen(points))
+		var bounds := Rect2(points[0], Vector2.ZERO)
+		for point in points: bounds = bounds.expand(point)
+		# Conservative padding prevents boundary float rounding from rejecting a
+		# curve which could still improve either the distance or the water cut.
+		corridor_bounds.append(bounds.grow(1.0))
+		var largest_width := 0.0
+		for width in widths: largest_width = maxf(largest_width, width)
+		corridor_half_width.append(largest_width * .5 + 1.0)
 	for z_idx in range(resolution):
 		var z := -half + float(z_idx) * cell
 		var coast := _coast_x(z, config["mainland"], coast_shape)
@@ -330,6 +340,11 @@ static func _bake_field(
 			var fingers := coast_fingers.get_noise_2d(x + 9000.0, z - 4200.0) * 190.0 * scale
 			land_distance += erosion + fingers
 			for lobe in island_lobes:
+				# Simplex FBM is bounded by +/-1; bite only adds distance. This
+				# L-infinity bound is deliberately looser than the eroded circle.
+				var axis_distance := maxf(absf(x-lobe.x), absf(z-lobe.y))
+				if axis_distance - lobe.z * 1.45 >= land_distance:
+					continue
 				var island_distance := _eroded_island_distance(
 					point,
 					Vector2(lobe.x, lobe.y),
@@ -341,6 +356,14 @@ static func _bake_field(
 			var nearest_waterway := INF
 			var water_cut_distance := INF
 			for waterway_index in range(corridor_points.size()):
+				var bounds := corridor_bounds[waterway_index]
+				var outside := Vector2(
+					maxf(maxf(bounds.position.x-x, x-bounds.end.x), 0.0),
+					maxf(maxf(bounds.position.y-z, z-bounds.end.y), 0.0),
+				)
+				var lower_distance := outside.length()
+				if lower_distance >= nearest_waterway and lower_distance - corridor_half_width[waterway_index] >= water_cut_distance:
+					continue
 				var sample := _distance_and_width_on_polyline(
 					point,
 					corridor_points[waterway_index],

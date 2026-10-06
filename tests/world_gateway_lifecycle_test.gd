@@ -49,7 +49,7 @@ func _run() -> void:
 	WorldGateway.stop_session()
 	await get_tree().process_frame
 	if not failed:
-		print("WORLD GATEWAY LIFECYCLE PASS: berth claims, freed listeners, unsubscribe, dispatch mutations, harbour unload, harbourmaster spawn/replacement")
+		print("WORLD GATEWAY LIFECYCLE PASS: berth claims, freed listeners, unsubscribe, dispatch mutations, harbour unload, harbourmaster spawn/replacement, dispatched door input and authority open/close")
 	get_tree().quit(1 if failed else 0)
 
 
@@ -171,6 +171,8 @@ func _test_harbourmaster_deployment() -> void:
 	await get_tree().process_frame
 	for starter_id in ["fishing", "general_cargo"]:
 		var record := CompanyService.build_starter_vessel_record(starter_id)
+		# Exercise registered vessel doors through the real authority echo, too.
+		record["server_vessel_id"] = "lifecycle-" + str(record.uid)
 		master._deploy_fleet_vessel(record)
 		var ship := PlayerVessel.find_active_ship(get_tree())
 		check(ship != null, "Harbourmaster must spawn " + starter_id)
@@ -184,8 +186,57 @@ func _test_harbourmaster_deployment() -> void:
 		await get_tree().process_frame
 		var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 		check(mooring != null and mooring.bow_line_tied and mooring.stern_line_tied, "Deployed ship ties both lines")
+		await _test_deployed_door(ship as ImportedDraftVessel)
 	PlayerVessel.despawn_all_ships(get_tree())
 	plot.queue_free()
 	await get_tree().process_frame
 	check(not WorldGateway.active_interests().has("port:master-deploy-test"), "Deployed harbour unload releases authority interest")
 	check(WorldGateway._subscriptions.is_empty(), "Deployed harbour unload removes listeners")
+
+
+func _test_deployed_door(ship: ImportedDraftVessel) -> void:
+	var interaction := ship.get_node("DoorInteraction")
+	var door: ShipPartState
+	var leaf: MeshInstance3D
+	for part in ship.part_roots:
+		if BrickCatalog.get_entry(str(part.get_meta("asset_id", ""))).get("style", "") != "door": continue
+		door = part.get_node("PartState")
+		for item in ship.moving_colliders:
+			if part.is_ancestor_of(item.mesh):
+				leaf = item.mesh
+				break
+		break
+	check(door != null and leaf != null, "Deployed starter must expose a real cabin door")
+	if door == null or leaf == null: return
+	var actor := CharacterBody3D.new()
+	actor.add_to_group("player")
+	add_child(actor)
+	var camera := Camera3D.new()
+	actor.add_child(camera)
+	camera.make_current()
+	var center := leaf.to_global(leaf.get_aabb().get_center())
+	var normal := door.visual.global_basis.x.normalized()
+	# A starter's interior furniture may legitimately occlude one approach.
+	# Use an unobstructed side; the separate door test covers wall occlusion.
+	for side in [-1.0, 1.0]:
+		actor.global_position = center + normal * side * 1.2
+		camera.look_at(center)
+		for frame in 4: await get_tree().physics_frame
+		if interaction.looked_at_door(actor) == door: break
+	check(interaction.looked_at_door(actor) == door, "Harbourmaster-spawned door must be ray-targetable")
+	var binding: WorldStateBinding = interaction.ensure_binding(door)
+	check(binding != null, "Registered deployed door must bind to authority")
+	if binding != null:
+		var event := InputEventAction.new()
+		event.action = "interact"
+		event.pressed = true
+		Input.parse_input_event(event)
+		for frame in 50: await get_tree().physics_frame
+		check(door.state.door_open and door.current_door > .9, "Dispatched F action must animate the deployed door")
+		check(binding.state().get("open", false), "Door opening must be echoed by local authority")
+		interaction.interact(door, actor.global_position)
+		for frame in 50: await get_tree().physics_frame
+		check(not door.state.door_open and door.current_door < .01, "Authority close must animate the same deployed door")
+		check(not binding.state().get("open", true), "Door close must be echoed by authority")
+	actor.queue_free()
+	await get_tree().process_frame
