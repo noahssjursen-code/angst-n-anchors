@@ -1303,3 +1303,24 @@ propellers and stainless shafts retain their metal response. A metallic lower
 hull creates an artificial pale sky-reflection band through transparent water;
 do not hide that material problem by disabling transmission. The --waterline-review
 fixture compares opaque/transmissive/hidden water and asserts the imported finish.
+
+### Cloud volume presentation (supersedes the earlier 2D cloud limitation)
+
+Sky clouds now integrate a shallow 3D density layer at half resolution:64 view
+samples with early exit, four light-path samples and distance-filtered density.
+The offline-baked64^3 R8 texture includes all six downsampled levels (~.286MiB).
+Run resources/textures/sky/bake_cloud_volume.gd with the graphical Godot renderer
+when rebaking; Dummy/headless does not return the generated texture slices.
+No noise worker runs at game start. Keep the deterministic seed and complete mip
+chain. Cloud colour is premultiplied radiance; compose sky*(1-opacity)+cloud.
+The same layer participates in sky radiance, with REALTIME cubemap processing.
+Sun/moon/stars are occluded by local cloud opacity rather than a global coverage
+multiplier in the sky shader. World weather still owns cover, convection and
+lighting; the new density field is presentation, not gameplay weather authority.
+This is a bounded slab, not planet-scale volumetric weather: no cloud shadows on
+terrain, multiple scattering solver or fly-through acceptance. Keep those limits
+explicit. tests/cloud_volume_review.tscn archives day/overcast/dusk/night/storm,
+zenith and moving-camera frames and rejects black-sky shader failures. Compare
+GPU runs with identical final camera/weather; storm and broken sky differ in cost.
+References: https://docs.godotengine.org/en/4.6/tutorials/shaders/shader_reference/sky_shader.html
+https://www.guerrilla-games.com/read/the-real-time-volumetric-cloudscapes-of-horizon-zero-dawn

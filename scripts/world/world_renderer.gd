@@ -387,11 +387,13 @@ func _sync_wake_field() -> void:
 func _build_sky() -> void:
 	var sky_sm := ShaderMaterial.new()
 	sky_sm.shader        = SKY_SHADER
+	sky_sm.set_shader_parameter("cloud_volume", preload("res://resources/textures/sky/cloud_density.res"))
 	_sky_shader_material = sky_sm
 
 	var sky := Sky.new()
 	sky.sky_material  = sky_sm
 	sky.radiance_size = Sky.RADIANCE_SIZE_128
+	sky.process_mode = Sky.PROCESS_MODE_REALTIME
 
 	var environ := Environment.new()
 	_environment = environ
