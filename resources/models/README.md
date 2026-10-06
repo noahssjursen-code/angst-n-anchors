@@ -1236,3 +1236,19 @@ Use tests/live_lighting_review.tscn for normal-world spawn and owned-vessel deck
 views. Weather fixtures must write cloud_cover, precipitation, convection_index;
 cloud_coverage/rain_amount/storm_intensity are DERIVED GETTERS. Do not assign them.
 Both review scenes require --shipyard-playtest and archive machine captures.
+
+### Ocean depth and weather transitions
+
+Near water reads opaque scene colour/depth, reconstructs water thickness, and
+uses per-channel absorption plus restrained refraction. Lit scene colour goes
+through EMISSION, not ALBEDO (avoid lighting it twice). Preserve foreground depth
+rejection, Fresnel/foam opacity and fade before the near/mid boundary. This is
+screen-space transmission; transparent/off-screen objects are not represented.
+FFT initial amplitudes are the active sea; a separate target spectrum receives
+weather repacks. UPDATE evolves active complex amplitudes without resetting phase.
+The shared WaveSurface.get_applied_wave_intensity drives both visuals and physics.
+Do not restore instantaneous spectrum replacement or smooth only visual waves.
+Run tests/ocean_transmission_review.tscn with -- --shipyard-playtest for GPU
+convergence checks and archived renders. Optional --compare-shader=<absolute path>
+compares shader GPU timing, not FFT cost. Depth convention reference:
+https://docs.godotengine.org/en/4.6/tutorials/shaders/advanced_postprocessing.html

@@ -178,21 +178,21 @@ func _process(_delta: float) -> void:
 	_update_underwater_effect()
 	if _ocean_shader_material:
 		_ocean_shader_material.set_shader_parameter("wave_time",      WaveSurface.get_sim_time())
-		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_shader_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 		WaveSurface.sync_ocean_coupling_to_shader(_ocean_shader_material)
 		_sync_land_shelter()
 	if _ocean_mid_material:
 		_ocean_mid_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
-		_ocean_mid_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_mid_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_mid_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	if _ocean_far_material:
 		_ocean_far_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
-		_ocean_far_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_far_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_far_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	if _ocean_horizon_material:
 		_ocean_horizon_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
-		_ocean_horizon_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_horizon_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_horizon_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	_bind_fft_maps_once()
 	_sync_wake_field()

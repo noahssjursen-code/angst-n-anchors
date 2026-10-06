@@ -34,6 +34,11 @@ var main_shader: RID
 var physics_query_shader: RID
 var _shader_rids: Array[RID] = []
 
+var target_spectrum_tex: RID
+var _spectrum_initialized := false
+var applied_wave_intensity := 1.0
+var wave_intensity_velocity := 0.0
+const SPECTRUM_RESPONSE_SECONDS := 1.5
 var initial_spectrum_tex: RID
 var spectrum_tex: RID
 var displacement_tex: RID
@@ -94,6 +99,7 @@ const SIM_TICK_RATE: float = 60.0
 const SIM_STEP: float = 1.0 / SIM_TICK_RATE
 
 func _ready() -> void:
+	applied_wave_intensity = WaveSurface.wave_intensity
 	add_to_group("fft_water_system")
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null and telemetry.has_method("register_provider"):
@@ -145,6 +151,7 @@ func _exit_tree() -> void:
 	]:
 		_free_rd_rid(rid)
 	for rid in [
+		target_spectrum_tex,
 		initial_spectrum_tex,
 		spectrum_tex,
 		displacement_tex,
@@ -175,6 +182,9 @@ func _process(delta: float) -> void:
 	var sim_delta = minf(_sim_timer, 0.1)
 	_sim_timer = 0.0
 	
+	var previous_intensity := applied_wave_intensity
+	applied_wave_intensity = lerpf(applied_wave_intensity, WaveSurface.wave_intensity, 1.0 - exp(-sim_delta / SPECTRUM_RESPONSE_SECONDS))
+	wave_intensity_velocity = (applied_wave_intensity - previous_intensity) / sim_delta
 	time += sim_delta
 	_run_update_fft_assemble(sim_delta)
 
@@ -217,10 +227,10 @@ func _on_buoyancy_async(bytes: PackedByteArray, layer: int) -> void:
 func get_debug_stats() -> Dictionary:
 	var resolution_f := float(RESOLUTION)
 	# Persistent GPU textures:
-	# initial/displacement: 4×RGBA32F each; spectrum: 8×RGBA32F;
+	# target/initial/displacement: 4×RGBA32F each; spectrum: 8×RGBA32F;
 	# slope: 4×RG32F; buoyancy: 4×R32F.
 	var texture_bytes := resolution_f * resolution_f * (
-		4.0 * 16.0 + 8.0 * 16.0 + 4.0 * 16.0 + 4.0 * 8.0 + 4.0 * 4.0
+		8.0 * 16.0 + 8.0 * 16.0 + 4.0 * 16.0 + 4.0 * 8.0 + 4.0 * 4.0
 	)
 	var query_resolution_f := float(PHYSICS_QUERY_RESOLUTION)
 	var readback_mb_s := (
@@ -345,6 +355,7 @@ func _create_buffers_and_textures() -> void:
 	fmt_rgba32_8.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
 	fmt_rgba32_8.array_layers = 8
 	
+	target_spectrum_tex = rd.texture_create(fmt_rgba32, RDTextureView.new())
 	initial_spectrum_tex = rd.texture_create(fmt_rgba32, RDTextureView.new())
 	spectrum_tex = rd.texture_create(fmt_rgba32_8, RDTextureView.new())
 	displacement_tex = rd.texture_create(fmt_rgba32, RDTextureView.new())
@@ -438,6 +449,12 @@ func _create_uniform_set() -> void:
 	u_fourier.add_id(spectrum_tex)
 	uniforms.append(u_fourier)
 	
+	var u_target := RDUniform.new()
+	u_target.uniform_type = RenderingDevice.UNIFORM_TYPE_IMAGE
+	u_target.binding = 7
+	u_target.add_id(target_spectrum_tex)
+	uniforms.append(u_target)
+
 	# Any pipeline is fine to query the set layout, as they all share set 0
 	uniform_set = rd.uniform_set_create(uniforms, main_shader, 0)
 
@@ -542,7 +559,7 @@ func _update_push_constants(delta_time: float) -> void:
 	push_constant_params.encode_u32(64, int(length_scales.y))
 	push_constant_params.encode_u32(68, int(length_scales.z))
 	push_constant_params.encode_u32(72, int(length_scales.w))
-	push_constant_params.encode_float(76, 0.0) # pad
+	push_constant_params.encode_float(76, 1.0 if not _spectrum_initialized else 1.0 - exp(-delta_time / SPECTRUM_RESPONSE_SECONDS))
 
 func _run_init_pack() -> void:
 	_update_push_constants(0.0)
@@ -572,6 +589,7 @@ func _run_update_fft_assemble(delta: float) -> void:
 	if profile:
 		rd.capture_timestamp("WaterFFT.Begin")
 	_update_push_constants(delta)
+	_spectrum_initialized = true
 	var compute_list = rd.compute_list_begin()
 	
 	# UPDATE

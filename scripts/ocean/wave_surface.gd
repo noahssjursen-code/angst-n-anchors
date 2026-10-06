@@ -18,6 +18,13 @@ static var fft_system: Node = null
 static var _sample_cache_frame: int = -1
 static var _sample_cache: Dictionary = {}
 
+## The requested setting remains editable; rendering and queries share the
+## same gradually applied amplitude, owned by the running FFT simulation.
+static func get_applied_wave_intensity() -> float:
+	if is_instance_valid(fft_system) and "applied_wave_intensity" in fft_system:
+		return float(fft_system.applied_wave_intensity)
+	return wave_intensity
+
 static func bump_wave_intensity(delta: float) -> void:
 	set_wave_intensity(wave_intensity + delta)
 
@@ -180,9 +187,12 @@ static func sample_at(x: float, z: float) -> WaterSample:
 		return sample
 
 	var raw := _sample_query_raw(x, z)
-	var scale := wave_intensity * get_wave_energy_multiplier() * 0.42 * sample.shelter
+	var scale := get_applied_wave_intensity() * get_wave_energy_multiplier() * 0.42 * sample.shelter
 	sample.height = WATER_LEVEL + raw.x * scale
 	sample.velocity = Vector3(raw.y, raw.z, raw.w) * scale
+	# Height changes with both the FFT and the weather amplitude.
+	if "wave_intensity_velocity" in fft_system:
+		sample.velocity.y += raw.x * float(fft_system.wave_intensity_velocity) * get_wave_energy_multiplier() * 0.42 * sample.shelter
 	sample.snapshot_time = float(fft_system.physics_query_snapshot_time)
 	sample.age_seconds = float(fft_system.get_physics_query_age_seconds())
 	sample.stale = sample.age_seconds > STALE_AFTER_SECONDS

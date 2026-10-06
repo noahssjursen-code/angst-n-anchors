@@ -3,6 +3,13 @@ shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 
 
+// Opaque scene colour is already lit. Transmit it through EMISSION so it is
+// not lit a second time. Depth remains authoritative for hull/shore occlusion.
+uniform sampler2D scene_color : hint_screen_texture, repeat_disable, filter_linear;
+uniform sampler2D scene_depth : hint_depth_texture, repeat_disable, filter_nearest;
+uniform float transmission_strength : hint_range(0.0, 1.0) = 1.0;
+uniform vec3 absorption_per_metre = vec3(0.65, 0.27, 0.19);
+
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
 uniform sampler2DArray slope_map : filter_linear, repeat_enable;
 uniform vec4 length_scales = vec4(256.0, 64.0, 16.0, 4.0);
@@ -282,7 +289,31 @@ void fragment() {
 	col = mix(col, foam_col, foam_mask * 0.78);
 	col = mix(col, debug_tint.rgb, debug_tint.a);
 
-	ALBEDO = col;
+	// Reconstruct the opaque surface behind this water fragment (Forward+ reverse Z).
+	float raw_depth = textureLod(scene_depth, SCREEN_UV, 0.0).r;
+	vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, raw_depth, 1.0);
+	vec3 behind_view = behind.xyz / behind.w;
+	vec3 surface_view = (VIEW_MATRIX * vec4(v_world_pos, 1.0)).xyz;
+	float water_path = max(length(behind_view) - length(surface_view), 0.0);
+	float valid_behind = step(0.000001, raw_depth) * step(0.001, -behind_view.z + surface_view.z);
+	// Small normal-driven refraction. Reject offsets landing on an above-water
+	// foreground object so a cabin/pier cannot smear into the water beneath it.
+	vec2 refracted_uv = clamp(SCREEN_UV + NORMAL.xy * 0.012 * (1.0 - exp(-water_path * 0.5)), vec2(0.001), vec2(0.999));
+	float refracted_depth = textureLod(scene_depth, refracted_uv, 0.0).r;
+	vec4 refracted = INV_PROJECTION_MATRIX * vec4(refracted_uv * 2.0 - 1.0, refracted_depth, 1.0);
+	vec3 refracted_view = refracted.xyz / refracted.w;
+	if (refracted_depth <= 0.000001 || -refracted_view.z <= -surface_view.z + 0.02) {
+		refracted_uv = SCREEN_UV;
+	} else {
+		water_path = max(length(refracted_view) - length(surface_view), 0.0);
+	}
+	float near_transmission = 1.0 - smoothstep(90.0, 180.0, dist_to_cam);
+	vec3 transmission = exp(-absorption_per_metre * water_path)
+		* (1.0 - fres) * (1.0 - foam_mask) * near_transmission
+		* valid_behind * transmission_strength;
+	if (!FRONT_FACING) { transmission = vec3(0.0); }
+	ALBEDO = col * (vec3(1.0) - transmission);
+	EMISSION = textureLod(scene_color, refracted_uv, 0.0).rgb * transmission;
 	ROUGHNESS = mix(mix(0.58, 0.78, wake_churn), 0.95, foam_mask);
 	METALLIC = 0.0;
 	SPECULAR = 0.0;

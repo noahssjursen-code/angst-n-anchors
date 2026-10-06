@@ -55,6 +55,10 @@ func review() -> void:
 	camera.current=true
 	weather(0.0)
 	await get_tree().create_timer(1.3).timeout # Let pre-boot rain particles expire.
+	if OS.get_cmdline_user_args().has("--shadow-review"):
+		await shadow_review()
+		get_tree().quit()
+		return
 	var origin := camera.global_position
 	for time in [0.0,.23,.5]:
 		weather(time)
@@ -95,3 +99,16 @@ func review() -> void:
 	world.queue_free()
 	for frame in 5: await get_tree().process_frame
 	get_tree().quit()
+
+func shadow_review() -> void:
+	var lamps := []
+	for node in world.find_children("*","SpotLight3D",true,false):
+		if node.get_script()==preload("res://scripts/port/harbour_area_light.gd"): lamps.append(node)
+	print("SHADOW FILTER ",ProjectSettings.get_setting("rendering/lights_and_shadows/positional_shadow/soft_shadow_filter_quality"))
+	for variant in ["current","large-emitter","high-filter","low-bias"]:
+		for lamp in lamps:
+			lamp.light_size=2.0 if variant=="large-emitter" else .65
+			lamp.shadow_normal_bias=.02 if variant=="low-bias" else .25
+			lamp.shadow_bias=.005 if variant=="low-bias" else .03
+		RenderingServer.positional_soft_shadow_filter_set_quality(4 if variant=="high-filter" else 2)
+		await capture("shadow-"+variant)
