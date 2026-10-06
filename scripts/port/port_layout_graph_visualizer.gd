@@ -18,7 +18,7 @@ const SLOT_COLORS := {
 }
 
 const STEEL := Color(0.45, 0.46, 0.48)
-## Solid harbour pavement — flat #222222, no lighting variation.
+## Lit harbour pavement; shader detail uses world metres.
 const FOUNDATION_PAVEMENT_COLOR := Color(0.133, 0.133, 0.133)
 ## Quay pier mass (underwater face) — slightly lighter so depth reads in clear water.
 const QUAY_PIER_MASS_COLOR := Color(0.18, 0.19, 0.20)
@@ -49,15 +49,8 @@ const PORT_STRUCTURE_LOD := preload("res://scripts/core/port_structure_lod.gd")
 const IMPOSTOR_SERVICE := preload("res://scripts/core/impostor_service.gd")
 
 
-static func _foundation_pavement_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = FOUNDATION_PAVEMENT_COLOR
-	material.roughness = 1.0
-	material.metallic = 0.0
-	material.metallic_specular = 0.0
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.disable_receive_shadows = true
-	return material
+static func _foundation_pavement_material() -> ShaderMaterial:
+	return HarbourEnvironmentKit.paving()
 
 ## Shared materials across stamps — recreating StandardMaterial3D per box was a hitch.
 static var _material_cache: Dictionary = {}
@@ -89,6 +82,7 @@ func _rebuild() -> void:
 	_stamp_foundation()
 	## Apron props deferred — layout first via asphalt/apron gizmos, then decorate.
 	_stamp_berth_terminals()
+	_stamp_apron_access()
 	_stamp_apron_pads()
 	_stamp_land_structures()
 	for instance_id in _graph.module_ids():
@@ -525,15 +519,7 @@ func _stamp_berth_quay(
 
 	_stamp_quay_pier_model(terminal, length_m, width_m, surface_y)
 
-	var road := MeshBuilder.box(
-		Vector3(road_w, 0.14, usable_len),
-		Color(0.07, 0.07, 0.08),
-		1.0,
-		0.0,
-	)
-	road.name = "Road"
-	road.position = Vector3(road_x, QUAY_DECK_TOP_LOCAL_Y + 0.08, 0.0)
-	terminal.add_child(road)
+	_stamp_access_lane(terminal, road_x, road_w, length_m)
 
 	if family == "fishing":
 		## Use the exact approved crane-showcase composition. Fishing has a
@@ -620,15 +606,7 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 
 	_stamp_quay_pier_model(terminal, length_m, width_m, surface_y)
 
-	var road := MeshBuilder.box(
-		Vector3(road_w, 0.14, usable_len),
-		Color(0.07, 0.07, 0.08),
-		1.0,
-		0.0,
-	)
-	road.name = "CentreRoad"
-	road.position = Vector3(0.0, QUAY_DECK_TOP_LOCAL_Y + 0.08, 0.0)
-	terminal.add_child(road)
+	_stamp_access_lane(terminal, 0.0, road_w, length_m)
 
 	var base_station_id := str(station.get("id", "quay_twin"))
 	var sides: Array = station.get("sides", []) as Array
@@ -725,6 +703,7 @@ func _stamp_quay_pier_model(
 		0.0,
 	)
 	deck.name = "Deck"
+	deck.material_override = HarbourEnvironmentKit.paving()
 	deck.position = Vector3(0.0, deck_bottom + QUAY_DECK_SLAB_H * 0.5, 0.0)
 	deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(deck)
@@ -748,6 +727,50 @@ func _stamp_quay_pier_model(
 		Vector2(width_m, length_m),
 		deck_top,
 	)
+	HarbourEnvironmentKit.quay(terminal, length_m, width_m, deck_top)
+
+
+## Shared apron route inside the existing paved coast envelope.
+func _apron_access_points() -> PackedVector2Array:
+	var plan: Dictionary = _graph.initial_attributes.get("foundation", {})
+	var spine := _foundation_spine_polyline(plan.get("spine", []))
+	if spine.size() < 2: return PackedVector2Array()
+	var offset := maxf(0.0,float(plan.get("dock_reach_m",26.0))+float(plan.get("bay_lip_m",6.0))-10.0)
+	return PortCoastTracer.offset_spine_perpendicular(spine,offset,PortCoastTracer.PORT_LOCAL_INLAND_DIR,false)
+
+
+func _stamp_apron_access() -> void:
+	var points := _apron_access_points()
+	var y := _foundation_surface_y()+.012
+	var root := Node3D.new()
+	root.name = "ApronAccess"
+	add_child(root)
+	for i in range(points.size()-1):
+		HarbourEnvironmentKit.lane(root,Vector3(points[i].x,y,points[i].y),Vector3(points[i+1].x,y,points[i+1].y),7.0)
+
+
+func _stamp_access_lane(terminal: Node3D, x: float, width: float, length: float) -> void:
+	terminal.set_meta("review_walk_spawn",Vector3(x,QUAY_DECK_TOP_LOCAL_Y+.1,-length*.30))
+	var drains: Array[Transform3D] = []
+	var count := maxi(1,int(ceil(width/2.0)))
+	for i in count:
+		drains.append(Transform3D(Basis.IDENTITY.scaled(Vector3(width/count/2.0,1,1)),Vector3(x-width*.5+(i+.5)*width/count,QUAY_DECK_TOP_LOCAL_Y+.008,-length*.5+4)))
+	HarbourEnvironmentKit.repeated(terminal,"drain_2m",drains)
+	var y := QUAY_DECK_TOP_LOCAL_Y+.012
+	# Existing terminal convention is +Z seaward, -Z landward.
+	HarbourEnvironmentKit.lane(terminal,Vector3(x,y,length*.45),Vector3(x,y,-length*.5),width)
+	var a := terminal.transform * Vector3(x,y,-length*.5)
+	var point := Vector2(a.x,a.z)
+	var points := _apron_access_points()
+	var nearest := Vector2.INF
+	var distance := INF
+	for i in range(points.size()-1):
+		var candidate := Geometry2D.get_closest_point_to_segment(point,points[i],points[i+1])
+		if point.distance_squared_to(candidate) < distance:
+			distance = point.distance_squared_to(candidate)
+			nearest = candidate
+	if nearest != Vector2.INF:
+		HarbourEnvironmentKit.lane(self,a,Vector3(nearest.x,_foundation_surface_y()+.012,nearest.y),width)
 
 
 ## Pack cargo along the storage flank, split into commodity zones when shared.
@@ -1137,6 +1160,8 @@ func _stamp_apron_pad_placeholder(
 		size_z: float,
 		role_id: String,
 ) -> void:
+	if HarbourEnvironmentKit.warehouse(parent, size_x, size_z):
+		return
 	var pad_col := Color(0.22, 0.62, 0.88, 1.0)
 	if role_id.begins_with("fish") or role_id.begins_with("provisions"):
 		pad_col = Color(0.92, 0.48, 0.22, 1.0)
@@ -1691,33 +1716,9 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 	)
 	## Bollards on the seaward face — player/ship mooring interaction.
 	_stamp_asphalt_bollards(pad_root, slot, length, depth)
-	## Thin seam where the pad meets the harbour face (local −Z).
-	var junction_h := 0.08
-	var junction := MeshBuilder.box(
-		Vector3(length * 0.98, junction_h, 1.4),
-		FOUNDATION_PAVEMENT_COLOR.lightened(0.08),
-		1.0,
-		0.0,
-	)
-	junction.name = "ApronJunction"
-	junction.position = Vector3(
-		0.0,
-		ASPHALT_PAD_TOP_LOCAL_Y + junction_h * 0.5,
-		depth * 0.5 - 0.7,
-	)
-	pad_root.add_child(junction)
+	pad.material_override = HarbourEnvironmentKit.paving()
 	var road_w := clampf(length * 0.18, 6.0, 12.0)
-	var road_h := 0.08
-	var road := MeshBuilder.box(
-		Vector3(road_w, road_h, depth * 0.82),
-		Color(0.07, 0.07, 0.08),
-		1.0,
-		0.0,
-	)
-	road.name = "Road"
-	## Sit just above pad crown to avoid coplanar flicker.
-	road.position = Vector3(0.0, ASPHALT_PAD_TOP_LOCAL_Y + road_h * 0.5 + 0.01, 0.0)
-	pad_root.add_child(road)
+	_stamp_access_lane(pad_root,0.0,road_w,depth)
 	var kind := str(station.get("equipment_kind", ""))
 	if not kind.is_empty():
 		var gear_root := Node3D.new()

@@ -1,5 +1,52 @@
 # Imported 3D models
 
+## Harbour environment kit (6 October 2026)
+
+`_source/harbour_kit/build_harbour_kit.py` authors six independent Blender/GLB
+pairs: 2 m quay coping, hollow arch fender with flange anchors, quay ladder,
+7.5 m light pole, 2 m drain grate and 12 x 18 m industrial warehouse shell.
+Exports live in `parts/harbour_kit`. The source files remain editable; the
+warehouse is an exterior shell, not a modular building editor or usable interior.
+
+Kit coordinates: X along quay edge, Blender +Y towards water, Z=0 at pavement;
+exported Godot -Z faces water. Existing berth terminal nodes instead use +Z
+seaward. HarbourEnvironmentKit deliberately converts this convention: do not
+reverse pier-to-apron connections using the vessel bow convention. Coping is
+flush, with a 12 mm visual clearance over the supporting deck and 15 mm outward
+clearance to avoid overlapping pier faces. Small construction joints are
+intentional. Repeated coping, fenders and grates use MultiMesh batches.
+
+The visualizer preserves all berth records and equipment locations. It adds
+marked quay access lanes joined to a coastline-following apron lane, uses a
+lit world-scale asphalt material, and substitutes the imported shell only when
+an apron plot has no saved BuildingBlueprint and is large enough. It never
+scales door height to fit a plot. Named LoadingDoor/PersonnelDoor/Light sockets
+provide future attachment locations. Warehouse shell and poles have simple
+solid collision; ladders do not yet support climbing, doors do not yet open,
+fenders do not simulate compression, and poles do not yet emit runtime lights.
+Fine grate/coping details use the underlying continuous walking surface.
+
+Port Showcase now preserves the exported seed, starts at noon and collapses
+the data panel (H). T toggles the real player on a quay access lane and enables
+nearby terrain collision while walking. Direct F6 runs are isolated from captain
+saves through ShipyardPlaytestMode. R rebuilds, -/= selects another seed, and
+the existing size/region controls remain. The broader zoning/port-profile
+redesign is still pending; see `docs/harbour-rebuild-plan.txt`.
+
+Rendered regression: `tests/harbour_environment_test.tscn -- --shipyard-playtest
+--capture` checks the four imported shells, original three terminals, batched
+fenders, walk/fly switching, real-player travel across the quay/apron join and
+solid closed warehouse frontage. Captures are saved under Noah's machine
+screenshot archive. Foundation coverage remains covered by
+`tests/port_surface_collision_test.tscn`. This is not all-seed layout, maximum
+port performance, multiplayer, ladder interaction or full building acceptance.
+
+Primary design references (product descriptions, not engineering ratings):
+https://www.trelleborg.com/en/marine-and-infrastructure/products-solutions-and-services/marine/marine-fenders/fixed-fenders/arch-fenders
+https://www.trelleborg.com/en/marine-and-infrastructure/products-solutions-and-services/marine/marine-fenders/accessories/ladders
+The arch form, flange mounting and separate access hardware inform game
+geometry; no manufacturer performance or certification is implied.
+
 ## Mooring and fish landing kit (6 October 2026)
 
 `_source/port_kit/build_port_kit.py` produces seven individual Blender/GLB models:

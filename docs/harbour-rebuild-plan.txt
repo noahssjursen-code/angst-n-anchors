@@ -1,7 +1,9 @@
 HARBOUR REVIEW AND REBUILD PLAN - 6 October 2026
 
-Status: daylight review and foundation collision repair complete. The layout
-redesign and Blender kit below are proposed work, not finished assets.
+Status: daylight review and foundation collision repair complete. First environment
+batch implemented: six Blender assets, imported apron shells, quay edge fittings,
+lit asphalt, connected marked quay/apron lanes and reproducible walkable showcase.
+Full zoning, building interiors and varied harbour profiles remain unfinished.
 
 Observed baseline
 -----------------
@@ -98,9 +100,18 @@ uniform noise covering every surface. Review from sea and actual eye height.
 Delivery order and acceptance
 -----------------------------
 1. DONE: repair foundation floor and add regression coverage.
-2. Make Port Showcase reproducible: explicit seed, noon preset, collapsed data
-   panels and a real-player walk mode alongside free camera/collision overlay.
-3. Build one complete mixed working harbour with connected routes and the first
+2. DONE: exported seed preserved, noon preset, H details and T real-player walk
+   mode alongside free camera and existing debug packs. Nearby terrain collision
+   is enabled for walking. Direct standalone runs isolate captain saves.
+3. IN PROGRESS: six Blender models integrated in the actual generated harbour.
+   Four placeholder apron blocks replaced; original berth/equipment identities
+   retained. Real player crossed the quay/apron join (6.79 m) and stopped outside
+   the closed warehouse wall at local Z=9.35 m. Foundation regression still passes.
+   Daytime captures: Pictures/machinescreenshots/2026-10-06_harbour-rebuild.
+   Ladders, doors and lamp illumination remain visual-only. Fenders have no
+   compression simulation. Roads currently join quay arms to the apron spine;
+   land entrance connections and finished junction design remain to be built.
+   Build one complete mixed working harbour with connected routes and the first
    edge/building kit. Check docking, crane reach and player movement in context.
 4. Generalize into small fishing, mixed coastal and industrial port profiles.
    Changes to the layout recipe apply to new graphs; never silently regenerate
