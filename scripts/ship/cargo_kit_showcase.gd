@@ -12,7 +12,7 @@ func _ready() -> void:
 		for i in 8: await get_tree().process_frame
 		var parts := editor.get("_imported_parts_editor") as ImportedShipPartsEditor
 		parts.load_draft(DRAFT)
-		assert(parts.draft_path == DRAFT and parts.records.size() == 87)
+		assert(parts.draft_path == DRAFT and parts.records.size() == 93)
 		assert(parts.hull_id == "hull_24x8" and is_equal_approx(parts.floor_y(),3.6))
 		assert(editor._grid.half_loa == 12 and editor._grid.half_beam == 4)
 		for model in parts.parts_root.get_children():
@@ -27,7 +27,7 @@ func _ready() -> void:
 		parts.load_draft("res://resources/models/examples/coastal_trawler_draft.json")
 		assert(parts.hull_id == "trawler_hull_14m" and is_equal_approx(parts.floor_y(),2.92))
 		parts.load_draft(temporary)
-		assert(parts.hull_id == "hull_24x8" and parts.records.size() == 87)
+		assert(parts.hull_id == "hull_24x8" and parts.records.size() == 93)
 		assert(is_equal_approx(parts.floor_y(),6.0))
 		var before := parts._draft_state()
 		var invalid := parts._draft_data().duplicate(true)
@@ -38,16 +38,16 @@ func _ready() -> void:
 		assert(before == parts._draft_state(), "Invalid hull must preserve current draft")
 		DirAccess.remove_absolute(temporary)
 		parts.set_floor(0,0)
-		editor.call("_show_toast", "Cargo draft verified: 24 × 8 m · 87 editable parts")
+		editor.call("_show_toast", "Cargo draft verified: 24 × 8 m · 93 editable parts")
 		var capture_args := OS.get_cmdline_user_args()
 		var capture_index := capture_args.find("--capture")
 		if capture_index >= 0:
 			for i in 12: await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(capture_args[capture_index+1])
-		print("CARGO DRAFT PASS: two hulls, 87 records, floor datum, opening, save/load and invalid-load preservation")
+		print("CARGO DRAFT PASS: two hulls, 93 records, floor datum, opening, save/load and invalid-load preservation")
 		editor.queue_free()
-		for i in 3: await get_tree().process_frame
+		for i in 4: await get_tree().process_frame
 		get_tree().quit()
 		return
 	var env := WorldEnvironment.new()
@@ -69,7 +69,7 @@ func _ready() -> void:
 	boat.process_mode = Node.PROCESS_MODE_DISABLED
 	add_child(boat)
 	assert(boat.length_m == 24 and boat.beam_m == 8 and boat.depth_m == 3.6)
-	assert(boat.part_roots.size() == 87)
+	assert(boat.part_roots.size() == 93)
 	var drive := boat.get_node("HullVisual/DriveGear") as ShipDriveVisual
 	assert(drive.propeller.position.z > 12)
 	assert(drive.apply_snapshot({"throttle":.5,"steering":.7,"powered":true},1))
@@ -99,7 +99,7 @@ func _ready() -> void:
 	camera.look_at(Vector3(0,2,0));camera.make_current()
 	var canvas := CanvasLayer.new();add_child(canvas)
 	var label := Label.new();label.position=Vector2(24,70)
-	label.text="COASTAL CARGO / 24 x 8 m editable platform\n87 separate placements / lift-away covers / real hold opening\n1: whole vessel   2: open hold   Esc: close"
+	label.text="COASTAL CARGO / 24 x 8 m editable platform\n93 separate placements / lift-away covers / real hold opening\n1: whole vessel   2: open hold   Esc: close"
 	label.add_theme_font_size_override("font_size",20);canvas.add_child(label)
 	print("CARGO ASSEMBLY PASS: actual hull dimensions, separate covers, mounted propeller and rudder motion")
 	var args := OS.get_cmdline_user_args();var index := args.find("--capture")

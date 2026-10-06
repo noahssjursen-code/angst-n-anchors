@@ -15,13 +15,15 @@ func _ready() -> void:
 		var parts := editor.get("_imported_parts_editor") as ImportedShipPartsEditor
 		parts.load_draft(DRAFT)
 		assert(parts.draft_path == DRAFT, "Example must pass builder validation")
-		assert(parts.records.size() == 60)
+		assert(parts.records.size() == 66)
 		var temporary := OS.get_cache_dir().path_join("trawler-kit-%d.json" % OS.get_process_id())
 		parts.save_draft(temporary)
 		parts.load_draft(temporary)
-		assert(parts.records.size() == 60)
+		assert(parts.records.size() == 66)
 		DirAccess.remove_absolute(temporary)
-		print("TRAWLER DRAFT PASS: real builder validation and save/load, 60 placements")
+		print("TRAWLER DRAFT PASS: real builder validation and save/load, 66 placements")
+		editor.queue_free()
+		for i in 4: await get_tree().process_frame
 		get_tree().quit()
 		return
 	var env := WorldEnvironment.new()

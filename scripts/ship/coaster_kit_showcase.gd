@@ -12,7 +12,7 @@ func _ready() -> void:
 		for i in 8: await get_tree().process_frame
 		var parts := editor.get("_imported_parts_editor") as ImportedShipPartsEditor
 		parts.load_draft(DRAFT)
-		assert(parts.draft_path == DRAFT and parts.records.size() == 107)
+		assert(parts.draft_path == DRAFT and parts.records.size() == 113)
 		assert(parts.hull_id == "hull_32x10" and is_equal_approx(parts.floor_y(),4.5))
 		assert(editor._grid.half_loa == 16 and editor._grid.half_beam == 5)
 		for model in parts.parts_root.get_children():
@@ -33,7 +33,7 @@ func _ready() -> void:
 		parts.load_draft("res://resources/models/examples/coastal_trawler_draft.json")
 		assert(parts.hull_id == "trawler_hull_14m" and is_equal_approx(parts.floor_y(),2.92))
 		parts.load_draft(temporary)
-		assert(parts.hull_id == "hull_32x10" and parts.records.size() == 107)
+		assert(parts.hull_id == "hull_32x10" and parts.records.size() == 113)
 		assert(is_equal_approx(parts.floor_y(),6.9))
 		var before := parts._draft_state()
 		var invalid := parts._draft_data().duplicate(true)
@@ -44,16 +44,16 @@ func _ready() -> void:
 		assert(before == parts._draft_state(), "Invalid hull must preserve current draft")
 		DirAccess.remove_absolute(temporary)
 		parts.set_floor(0,0)
-		editor.call("_show_toast", "Coaster draft verified: 32 × 10 m · 107 editable parts")
+		editor.call("_show_toast", "Coaster draft verified: 32 × 10 m · 113 editable parts")
 		var capture_args := OS.get_cmdline_user_args()
 		var capture_index := capture_args.find("--capture")
 		if capture_index >= 0:
 			for i in 12: await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(capture_args[capture_index+1])
-		print("COASTER DRAFT PASS: cross-hull, 107 records, floor datum, opening, save/load and invalid-load preservation")
+		print("COASTER DRAFT PASS: cross-hull, 113 records, floor datum, opening, save/load and invalid-load preservation")
 		editor.queue_free()
-		for i in 3: await get_tree().process_frame
+		for i in 4: await get_tree().process_frame
 		get_tree().quit()
 		return
 	var env := WorldEnvironment.new()
@@ -75,7 +75,7 @@ func _ready() -> void:
 	boat.process_mode = Node.PROCESS_MODE_DISABLED
 	add_child(boat)
 	assert(boat.length_m == 32 and boat.beam_m == 10 and boat.depth_m == 4.5)
-	assert(boat.part_roots.size() == 107)
+	assert(boat.part_roots.size() == 113)
 	var covers: Array[Node3D] = []
 	for part in boat.part_roots:
 		if part.get_meta("asset_id")=="hatch_cover_6x3":covers.append(part)
@@ -115,7 +115,7 @@ func _ready() -> void:
 	camera.look_at(Vector3(0,2,0));camera.make_current()
 	var canvas := CanvasLayer.new();add_child(canvas)
 	var label := Label.new();label.position=Vector2(24,70)
-	label.text="COASTAL PLATFORM / 32 x 10 m editable platform\n107 separate placements / lift-away covers / real hold opening\n1: whole vessel   2: open hold   Esc: close"
+	label.text="COASTAL PLATFORM / 32 x 10 m editable platform\n113 separate placements / lift-away covers / real hold opening\n1: whole vessel   2: open hold   Esc: close"
 	label.add_theme_font_size_override("font_size",20);canvas.add_child(label)
 	print("COASTER ASSEMBLY PASS: actual hull dimensions, separate covers, mounted propeller and rudder motion")
 	var args := OS.get_cmdline_user_args();var index := args.find("--capture")

@@ -2029,6 +2029,8 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 
 func _brick_tooltip(brick_id: String) -> String:
 	if BrickCatalog.has_tag(brick_id, "imported"):
+		if BrickCatalog.get_entry(brick_id).get("kind", "") == "furniture":
+			return BrickCatalog.display_name(brick_id) + "\nClick to place on the active floor. R rotates; Esc stops placing."
 		return BrickCatalog.display_name(brick_id) + ("\nClick a start, then an endpoint. Angles fit automatically.\nEsc / right-click ends the run." if brick_id.begins_with("cabin_") else "\nClick the hull edge. Length and angle fit automatically.")
 	var fp := _part_footprint(brick_id)
 	var size := BrickCatalog.size_m(brick_id)
@@ -2049,6 +2051,9 @@ func _brick_tooltip(brick_id: String) -> String:
 	return "%s\n%s" % [BrickCatalog.display_name(brick_id), detail]
 
 func _bake_brick_thumbnail(brick_id: String, target: TextureRect) -> void:
+	# Headless checks never emit frame_post_draw. Avoid suspended thumbnail jobs.
+	if DisplayServer.get_name() == "headless":
+		return
 	## Off-tree SubViewport → ImageTexture. Avoids blank nested viewports in the item list.
 	var svp := SubViewport.new()
 	svp.size = Vector2i(THUMB_PX * 2, THUMB_PX * 2)

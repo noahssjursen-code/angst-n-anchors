@@ -7,10 +7,10 @@ through the session, not a succession of short token batches.
 Branch feature/3d-model-migration. Commit/push verified scopes; no main/reset/force.
 
 Ordered work list
-[ ] 1. Crane quality: bevel/trim cabin, structural pedestal/gussets, access and
+[x] 1. Crane quality: bevel/trim cabin, structural pedestal/gussets, access and
       guards, coherent visible hoist route, richer articulated grab mechanics.
       Preserve pivots, cutting lip, control ranges and gameplay contracts.
-[ ] 2. A distinct 32 x 10 m hull: 0.5 m outline lattice, exact 2:1 / 1:1 bow
+[x] 2. A distinct 32 x 10 m hull: 0.5 m outline lattice, exact 2:1 / 1:1 bow
       edges, authored underwater form, separate hatch/coaming components,
       builder palette/grid/perimeter, provisional handling and stern hardware.
       No stretching an existing entire boat or scaling metre-based accessories.
@@ -50,3 +50,11 @@ Rendered assembly/bow/hold/stern, real open-hold ray hits, and ocean interaction
 checks pass. Larger vessel steering observation scales with length; force logic
 unchanged. Handling/hardware still provisional. No bulk inventory for this hull.
 Next: useful editable lighting and vessel detail; remain active through 18:24.
+
+17:03 Lighting batch: five separate editable Blender fixtures, six placements on
+all four examples, normal L presets/independent ships/day dimming/lens-off checks.
+Visual review found excessive old fill energy and corrected imported near-field
+spill and flood energy. Actual night/close/off/coaster/day captures inspected.
+All four builder drafts save/reload; cleaning fixture shutdown before commit.
+Next refinement is the 32 m stern gear, which still uses the undersized prototype.
+Lighting validation complete: four draft checks clean. Headless thumbnail jobs now skip render waits (the source of 24 leaked environments). Night/day/close renders accepted for this pass; nav sector optics remain approximate.

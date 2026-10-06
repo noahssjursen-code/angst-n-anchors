@@ -33,6 +33,10 @@ enum LightType {
 @export var spot_range_m: float = 22.0
 @export var spot_energy: float = 55.0
 @export var spot_angle_deg: float = 48.0
+## Imported fixtures can keep a readable lens without washing nearby bulkheads.
+@export var omni_range_scale: float = 1.0
+@export var omni_energy_scale: float = 1.0
+@export var lens_energy_scale: float = 1.0
 
 var _light: Light3D
 var _bulb: OmniLight3D
@@ -87,7 +91,7 @@ func _apply_energies() -> void:
 		_bulb.light_energy = _base_bulb_energy * energy_mul
 	if _lens_mat != null:
 		_lens_mat.emission_energy_multiplier = (
-			_lens_on_energy() * energy_mul if _active else 0.0
+			_lens_on_energy() * lens_energy_scale * energy_mul if _active else 0.0
 		)
 
 
@@ -258,6 +262,9 @@ func _emissive_mat(color: Color) -> StandardMaterial3D:
 # --- Light helpers ---
 
 func _make_omni(color: Color, range_m: float, energy: float, vol_energy: float) -> OmniLight3D:
+	range_m *= omni_range_scale
+	energy *= omni_energy_scale
+	vol_energy *= omni_energy_scale
 	var light := OmniLight3D.new()
 	light.name = "Fill"
 	light.light_color = color
@@ -278,6 +285,8 @@ func _make_omni(color: Color, range_m: float, energy: float, vol_energy: float) 
 
 
 func _make_bulb(color: Color, range_m: float, energy: float) -> OmniLight3D:
+	range_m *= omni_range_scale
+	energy *= omni_energy_scale
 	## Tiny near-field glow for the lens glass only — keep range tiny to avoid wall rings.
 	var light := OmniLight3D.new()
 	light.name = "Bulb"

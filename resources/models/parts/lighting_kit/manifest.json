@@ -1,0 +1,95 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "deck_floodlight",
+      "kind": "furniture",
+      "style": "light",
+      "light_type": 4,
+      "model": "res://resources/models/parts/lighting_kit/deck_floodlight.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.4,
+        0.35
+      ],
+      "height_start_m": 2.64,
+      "height_end_m": 2.64,
+      "paintable": true
+    },
+    {
+      "id": "nav_port",
+      "kind": "furniture",
+      "style": "light",
+      "light_type": 0,
+      "model": "res://resources/models/parts/lighting_kit/nav_port.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.4,
+        0.35
+      ],
+      "height_start_m": 1.1,
+      "height_end_m": 1.1,
+      "paintable": true
+    },
+    {
+      "id": "nav_starboard",
+      "kind": "furniture",
+      "style": "light",
+      "light_type": 1,
+      "model": "res://resources/models/parts/lighting_kit/nav_starboard.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.4,
+        0.35
+      ],
+      "height_start_m": 1.1,
+      "height_end_m": 1.1,
+      "paintable": true
+    },
+    {
+      "id": "nav_stern",
+      "kind": "furniture",
+      "style": "light",
+      "light_type": 3,
+      "model": "res://resources/models/parts/lighting_kit/nav_stern.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.4,
+        0.35
+      ],
+      "height_start_m": 1.1,
+      "height_end_m": 1.1,
+      "paintable": true
+    },
+    {
+      "id": "mast_lantern",
+      "kind": "furniture",
+      "style": "light",
+      "light_type": 2,
+      "model": "res://resources/models/parts/lighting_kit/mast_lantern.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.4,
+        0.35
+      ],
+      "height_start_m": 3.02,
+      "height_end_m": 3.02,
+      "paintable": true
+    }
+  ]
+}

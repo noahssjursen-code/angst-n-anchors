@@ -104,7 +104,7 @@ applied to the game's pre-existing lattice-boom crane.
 ## Fishing equipment and editable trawler example (6 October 2026)
 
 Open `resources/models/examples/coastal_trawler_draft.json` through the builder's
-Drafts > Open. It is a normal version-1 draft containing 60 reusable placements:
+Drafts > Open. It is a normal version-1 draft containing 66 reusable placements:
 angled wheelhouse, crowned roof, consoles/helm, rising half-walls, stern working
 opening, winch and two compact insulated deck tanks. It is not a merged boat
 mesh or a commissioned fleet record. Tank spacing leaves a 0.9 m central route
@@ -691,10 +691,10 @@ parts to fit a different bow. build_perimeter.py loads only shared authoring
 primitives from build_rails.py and verifies the mathematical miter rings.
 
 Load resources/models/examples/coastal_cargo_draft.json through Drafts > Open.
-It has 87 separate placements, an aft bridge and two central covers. Review with
+It has 93 separate placements, an aft bridge and two central covers. Review with
 scenes/showcases/cargo_kit_showcase.tscn: 1 whole boat, 2 uncover hold (visual review
 only), --capture <png> captures both. --verify-draft checks cross-hull switching,
-87 records, floor/cell offsets, cover selection, invalid-load preservation and
+93 records, floor/cell offsets, cover selection, invalid-load preservation and
 save/load. The normal shipyard_playtest supports both installed hulls. Production
 fleet commissioning remains outside this draft sandbox.
 
@@ -705,7 +705,7 @@ the existing hull_24x8 opening and coaming at [0,3.6,0]; HoldForward/HoldAft soc
 place two 5 x 3.9 x 2.7 m inventory compartments. The upper lip is y=4.3 and the
 tank top y=1.6. Each has a provisional 40 t payload limit. The separate divider
 slot must coexist with the coaming at the same origin. Do not overwrite one with
-the other in builder selection or save keys. The bulk example has 87 records,
+the other in builder selection or save keys. The bulk example has 93 records,
 forward hatch removed for loading and aft cover installed.
 
 ImportedBulkHold extends the existing BulkHoldComponent inventory/transfer API.
@@ -749,7 +749,7 @@ palette families resolve the fitting size from ImportedHullCatalog. Floor
 visibility uses cargo_hatch style, not one older filename. Material paintability
 comes from the asset manifest as well as the existing structural families.
 
-`examples/coastal_32m_draft.json` is 107 editable placements with an aft bridge;
+`examples/coastal_32m_draft.json` is 113 editable placements with an aft bridge;
 all covers are independently selected, erased, painted and saved. It adds no
 operational inventory or powered hatch mechanism. Provisional handling is 420 t,
 2.6 m draft, 1100 kW and 4500 l fuel using the existing physics components.
@@ -759,7 +759,7 @@ Owned-fleet commissioning and multiplayer transport remain separate work.
 
 `coaster_kit_showcase.tscn` checks dimensions, actual tank-top/walkway ray hits,
 gear motion, per-instance cover paint and captures whole/bow/hold/stern views.
-`--verify-draft` checks 107 placements, hull switching, floor datum, fitting cover
+`--verify-draft` checks 113 placements, hull switching, floor datum, fitting cover
 seats, cover visibility/selectability, save/load and invalid-load preservation.
 The real ocean playtest passed helm/seats, doors, walking, normal HUD, drive,
 steering and reset. Its steering observation period now scales with hull length;
@@ -771,3 +771,34 @@ Primary visual reference inspected: Damen Combi Freighter 3850 sheet page 1,
 https://medialibrary.damen.com/m/4537b8913b7e976d/original/product-sheet-combi-freighter-3850.pdf
 Used for open-hold / coaming / separate-cover / aft-bridge arrangement only.
 Our much smaller hull is an original game platform, not a scaled manufacturer copy.
+
+
+### Removable marine lighting kit (6 October afternoon)
+
+Five separately authored Blender/GLB fixtures in lighting_kit: tilted/finned deck
+floodlight, red port, green starboard, white stern and white mast lantern. Each has
+its own bolted standard, Lens mesh and LightAim socket. LightAim supplies direction
+and location; no light or emission is baked into the asset. BrickCatalog attaches
+the existing ShipLight below that socket, with build_housing=false. ShipLighting
+owns presets, weather/day output and the usual helm L key. A per-fixture cloned
+lens material prevents one vessel changing another. Painted supports use the wall
+channel; fixed housing, hardware and lens retain their assigned material colors.
+
+Near-field range/energy and lens output are deliberately smaller than legacy
+fixtures; do not restore the oversized colored wash or all-round deck flood.
+Nav lens screens follow authored arcs, but the existing Light3D fill remains omni:
+this is game lighting, not a certified navigation-sector or COLREG implementation.
+Mast lantern is all-round white, not a regulated masthead-sector arrangement.
+
+Run _source/lighting_kit/fit_examples.py after regenerating the four example drafts.
+It adds six independent/removable placements to each and touches no user saves.
+Current totals: trawler 66, cargo 93, bulk 93, 32 m coaster 113. Palette uses the
+existing Lights category; source layouts and collision handling stay separate.
+marine_lighting_showcase.tscn dispatches real L key events through BoatController,
+checks OFF/NAV/WORK/ALL, lens off state, per-boat isolation, authored downward aim,
+and daylight dimming; --capture writes night/off/close/coaster/day Godot images.
+All four actual builder save/load fixtures verify these newly populated drafts.
+
+Primary visual reference: Hella Sea Hawk XLR mounting diagram, finned housing and
+U-yoke (original game geometry and stand, not manufacturer dimensions):
+https://www.hellamarine.com/wp-content/uploads/2024/01/980_740-001_980_740-011_980_740-201_980_740-211_Sea_Hawk-XLR_Diagram_Web.pdf

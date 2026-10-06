@@ -1413,6 +1413,7 @@ func tool_hint() -> String:
 			return "Click / drag over parts to erase · Ctrl+Z: undo"
 	if _structural_family():
 		return "Click next endpoint · Esc / right-click: end run" if structure_anchor != null else "Click a start point anywhere on the deck"
+	if _furniture_family():return "Click: place · R: rotate · Esc / right-click: cancel · RMB drag: orbit"
 	return "Click / drag along the hull edge · RMB drag: orbit · Wheel: zoom"
 
 

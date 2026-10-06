@@ -1196,6 +1196,102 @@
           0.47
         ]
       }
+    },
+    {
+      "asset_id": "nav_port",
+      "position": [
+        -4.7,
+        4.5,
+        -6.55
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.58,
+          0.63,
+          0.62
+        ]
+      }
+    },
+    {
+      "asset_id": "nav_starboard",
+      "position": [
+        4.7,
+        4.5,
+        -6.55
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.58,
+          0.63,
+          0.62
+        ]
+      }
+    },
+    {
+      "asset_id": "nav_stern",
+      "position": [
+        0.9,
+        4.5,
+        15.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.58,
+          0.63,
+          0.62
+        ]
+      }
+    },
+    {
+      "asset_id": "mast_lantern",
+      "position": [
+        1.85,
+        4.5,
+        13.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.58,
+          0.63,
+          0.62
+        ]
+      }
+    },
+    {
+      "asset_id": "deck_floodlight",
+      "position": [
+        -4.15,
+        4.5,
+        7
+      ],
+      "yaw_degrees": 325,
+      "colors": {
+        "wall": [
+          0.58,
+          0.63,
+          0.62
+        ]
+      }
+    },
+    {
+      "asset_id": "deck_floodlight",
+      "position": [
+        4.15,
+        4.5,
+        7
+      ],
+      "yaw_degrees": 35,
+      "colors": {
+        "wall": [
+          0.58,
+          0.63,
+          0.62
+        ]
+      }
     }
   ],
   "rising_bow": false,

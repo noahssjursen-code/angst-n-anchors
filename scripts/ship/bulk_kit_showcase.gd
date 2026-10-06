@@ -12,12 +12,12 @@ func _ready() -> void:
 		for i in 8: await get_tree().process_frame
 		var parts := editor._imported_parts_editor as ImportedShipPartsEditor
 		parts.load_draft(DRAFT)
-		assert(parts.draft_path==DRAFT and parts.records.size()==87, "Coaming and divider must coexist")
+		assert(parts.draft_path==DRAFT and parts.records.size()==93, "Coaming and divider must coexist")
 		var temporary:=OS.get_cache_dir().path_join("bulk-kit-%d.json"%OS.get_process_id())
 		parts.save_draft(temporary);parts.load_draft(temporary)
-		assert(parts.records.size()==87)
+		assert(parts.records.size()==93)
 		DirAccess.remove_absolute(temporary)
-		print("BULK DRAFT PASS: 87 placements, independent divider slot and save/load")
+		print("BULK DRAFT PASS: 93 placements, independent divider slot and save/load")
 		editor.queue_free()
 		for i in 3:await get_tree().process_frame
 		get_tree().quit();return
