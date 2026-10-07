@@ -74,7 +74,8 @@ Conventions:
 Current demos:
 - `scenes/showcases/material_library_showcase.tscn` — sourced finishes on ships, port assets, cargo and animated clothing; before/after and archived captures
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
-- `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
+- `scenes/showcases/starter_fleet_showcase.tscn` — current imported starter vessels
+- `scenes/showcases/character_customization_showcase.tscn` — imported character and wardrobe
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
 - `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction

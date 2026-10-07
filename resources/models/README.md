@@ -640,7 +640,7 @@ transport can feed the same snapshot method; no multiplayer transport or importe
 vessel commissioning is claimed here. Permission checks belong to the authority,
 not to imported meshes. Do not add networking code inside Blender assets.
 
-Run `scenes/showcases/interior_showcase.tscn -- --verify-interior` for actual GUI
+Run `scenes/showcases/bench_showcase.tscn -- --shipyard-playtest --verify-bench` for actual GUI
 placement under chamfered windows, all four imported console joints within 0.1 mm,
 separate pivots, local requests, remote request waiting, stale/invalid snapshots,
 local BoatController binding, animations and draft round-trip.

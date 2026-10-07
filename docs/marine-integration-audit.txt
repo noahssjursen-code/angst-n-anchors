@@ -1,6 +1,10 @@
 MARINE INTEGRATION AUDIT — 6 October 2026, first overnight batch
 
 Scope: inspection and implementation decisions, not completed vessel models.
+
+Archive note (7 October 2026): the prototype inspection scene described below
+was retired during showcase cleanup. Use scenes/showcases/stern_gear_showcase.tscn
+for current installed propulsion visuals. The original findings remain below.
 Primary references were accessed 6 October 2026 (Europe/Oslo). Sources describe
 real equipment; proposed game dimensions remain design choices, not engineering
 certification. No third-party meshes or textures are imported into the game.

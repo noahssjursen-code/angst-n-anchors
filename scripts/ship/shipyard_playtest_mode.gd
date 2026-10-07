@@ -2,7 +2,6 @@ class_name ShipyardPlaytestMode
 extends RefCounted
 
 const SCENE := "res://scenes/showcases/shipyard_playtest.tscn"
-const MARINE_AUDIT_SCENE := "scenes/showcases/marine_asset_audit_showcase.tscn"
 const FLAG := "--shipyard-playtest"
 static var child_pid := -1
 
@@ -30,8 +29,6 @@ static func active() -> bool:
 		if arg.replace("\\", "/").ends_with("scenes/showcases/crane_kit_showcase.tscn"):
 			return true
 		if arg.replace("\\", "/").ends_with("scenes/showcases/shipyard_playtest.tscn"):
-			return true
-		if arg.replace("\\", "/").ends_with(MARINE_AUDIT_SCENE):
 			return true
 		if arg.replace("\\", "/").ends_with("scenes/showcases/stern_gear_showcase.tscn"):
 			return true
