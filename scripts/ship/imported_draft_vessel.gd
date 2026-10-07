@@ -8,6 +8,7 @@ var moving_colliders: Array[Dictionary] = []
 var assembler := ImportedShipPartsEditor.new()
 var engine_visual: Node3D
 var engine_coupling: Node3D
+var gangway: ShipGangway
 
 func configure(snapshot: Dictionary) -> void:
 	draft = snapshot.duplicate(true)
@@ -53,6 +54,10 @@ func configure(snapshot: Dictionary) -> void:
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
 	_add_mooring_fittings(hull_id, float(ImportedHullCatalog.outline(hull_id).deck_y))
 	_assemble_parts()
+	gangway = ShipGangway.new()
+	gangway.name = "BoardingGangway"
+	gangway.boat = self
+	add_child(gangway)
 	var doors := preload("res://scripts/ship/imported_door_interaction.gd").new()
 	doors.name = "DoorInteraction"
 	add_child(doors)
@@ -125,6 +130,7 @@ func apply_brick_layout(layout: Dictionary) -> void:
 	_install_engine()
 	ModelPaint.apply(get_node("HullVisual"), draft.get("hull_colors", {}))
 	_assemble_parts()
+	if is_instance_valid(gangway): gangway.refresh_gates()
 	if is_inside_tree(): call_deferred("_ensure_walk_deck")
 
 func _assemble_parts() -> void:
@@ -366,7 +372,7 @@ func _ensure_walk_deck() -> void:
 		# Door leaf transforms follow their authored hinge, including the collision.
 		var parent := mesh.get_parent()
 		while parent != self:
-			if str(parent.name).begins_with("DoorLeafPivot"):
+			if str(parent.name).begins_with("DoorLeafPivot") or parent.has_meta("gangway_gate"):
 				moving_colliders.append({"mesh":mesh, "collision":collision})
 				break
 			parent = parent.get_parent()
