@@ -1,39 +1,35 @@
 shader_type spatial;
-render_mode cull_back, diffuse_burley, specular_disabled;
-#include "terrain_canopy.gdshaderinc"
-
-// Coarsest terrain ring. Vertex colour already contains the coast/inland
-// palette, so distant land needs only one low-frequency canopy lookup instead
-// of the near shader's twelve triplanar texture reads plus detail maps.
-
-uniform sampler2D forest_map : filter_linear_mipmap, repeat_disable;
-uniform float forest_world_half_extent_m = 20000.0;
-
-varying vec3 world_pos;
-varying vec3 world_normal;
-varying vec4 terrain_tint;
-
+render_mode cull_back, diffuse_burley;
+#include "terrain_surfaces.gdshaderinc"
 void vertex() {
-	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-	terrain_tint = COLOR;
+    world_pos=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;
+    world_normal=normalize(MODEL_NORMAL_MATRIX*NORMAL);
+    coast_w=clamp(COLOR.a,0.0,1.0);
 }
-
 void fragment() {
-	vec3 n = normalize(world_normal);
-	float slope = 1.0 - clamp(n.y, 0.0, 1.0);
-	float coast_w = clamp(terrain_tint.a, 0.0, 1.0);
-	vec3 albedo = terrain_tint.rgb;
+    vec3 n=normalize(world_normal);
+    vec3 w=terrain_weights(n);
+    vec3 macro=texture(macro_map,world_pos.xz*.0016).rgb;
+    vec2 forest_uv=world_pos.xz/(forest_world_half_extent_m*2.0)+vec2(.5);
+    float forest=texture(forest_map,clamp(forest_uv,vec2(0),vec2(1))).r;
+    vec3 habitat=terrain_habitat(world_pos,n,coast_w,forest,macro);
+    // Metre-scale source tiles, identical UVs in every LOD.
+    vec3 rock=terrain_tri(stone_color,world_pos*.25,w);
+    vec3 heath=texture(heath_color,world_pos.xz/2.1).rgb*vec3(.45,.62,.55);
+    vec3 soil=texture(soil_color,world_pos.xz/1.4).rgb;
+    float moss_patches=smoothstep(.35,.66,texture(macro_map,world_pos.xz*.035+vec2(.31,.73)).g);
+    soil=mix(soil,heath,.12+moss_patches*.22);
+    vec3 albedo=rock*habitat.x+soil*habitat.y+heath*habitat.z;
+    albedo*=mix(.78,1.12,macro.g);
+    float wet=coast_w*(1.0-smoothstep(.2,2.8,world_pos.y));
+    albedo*=mix(1.0,.48,wet);
+    float snow=smoothstep(850.0,1250.0,world_pos.y)*smoothstep(.7,.95,n.y);
+    albedo=mix(albedo,vec3(.65,.69,.72),snow);
+    // Canopy is only a distant coverage substitute; near trees sit on soil.
+    float canopy=smoothstep(600.0,1300.0,length(VERTEX))*habitat.y;
+    albedo=mix(albedo,canopy_colour(world_pos.xz),canopy);
+    ALBEDO=albedo;
+    SPECULAR=.25;
+    ROUGHNESS=mix(.92,.48,wet);
 
-	vec2 forest_uv = world_pos.xz / max(forest_world_half_extent_m * 2.0, 1.0) + vec2(0.5);
-	float forest_w = texture(forest_map, clamp(forest_uv, vec2(0.0), vec2(1.0))).r;
-	forest_w *= (1.0 - slope * 0.85) * (1.0 - coast_w * 0.7);
-	albedo = mix(albedo, canopy_colour(world_pos.xz), clamp(forest_w * 1.45, 0.0, 1.0));
-
-	float snow_w = smoothstep(850.0, 1250.0, world_pos.y) * smoothstep(0.72, 0.94, n.y);
-	albedo = mix(albedo, vec3(0.62, 0.66, 0.69), snow_w);
-	albedo *= mix(1.0, 0.72, slope * 0.75);
-
-	ALBEDO = clamp(albedo, vec3(0.003), vec3(0.72));
-	ROUGHNESS = 0.94;
 }

@@ -53,6 +53,16 @@ func review() -> void:
 	world.add_child(camera)
 	camera.global_transform=player.get_node("Camera3D").global_transform
 	camera.current=true
+	if OS.get_cmdline_user_args().has("--terrain-review"):
+		WorldClock.set_process(false)
+		weather(.5, .2)
+		var port := world.get_node("HomePort") as Node3D
+		camera.global_position = port.to_global(Vector3(0,12,-500))
+		camera.look_at(port.to_global(Vector3(0,60,700)))
+		await get_tree().create_timer(35.0).timeout
+		await capture("terrain-from-harbour-water")
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--solar-performance"):
 		await solar_performance()
 		get_tree().quit()

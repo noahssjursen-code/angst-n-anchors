@@ -1,0 +1,23 @@
+Terrain sourced surface pass - 7 October 2026
+
+Replaces generated surface-colour noise with original ambientCG Rock030,
+Ground037 and Ground048 maps. Sources and SHA256 are in the shared manifest.
+Near/far LODs share coordinates and habitat weights. Removed unused generated
+surface textures; only coverage masks are generated. Geography is unchanged.
+
+Verified: terrain_surface_maps_test (non-null near/far bindings, shared maps,
+periodic macro seams, deterministic seed isolation); material_library --verify;
+eight Godot surface views; actual generated forest geometry/root review with
+7,836 instances and maximum root mismatch 0.000321 m; full world boot 9.879 s.
+No shader errors in final rendered runs. No before/after GPU timing claim.
+
+Captures in C:/Users/noahs/Pictures/machinescreenshots:
+terrain-material-1791395521-104 (eight final surface views)
+forest-root-1791395018-988 (generated terrain with trees)
+live-lighting-1791395378-733 (harbour after 35 seconds streaming)
+
+Remaining visual gaps: tree branch cards and large bare ground expanses still
+need physical undergrowth/ground clutter. Texture detail alone does not make
+this a finished forest. Harbour camera shows raised rectangular land pads and
+missing expected surrounding terrain even after settling; investigate world
+geometry/port foundations separately, preserving saved world identity.

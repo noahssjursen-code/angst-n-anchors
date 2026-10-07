@@ -10,8 +10,11 @@ func review() -> void:
 	add_child(terrain)
 	terrain.set_process(false)
 	var data_by_chunk:Dictionary={}
-	var ground_mat:=StandardMaterial3D.new()
-	ground_mat.albedo_color=Color(.2,.24,.13);ground_mat.roughness=1
+	var ground_mat:=ShaderMaterial.new()
+	ground_mat.shader=preload("res://resources/shaders/terrain.gdshader")
+	TerrainSurfaceMaps.bind_to_material(ground_mat,424242)
+	ground_mat.set_shader_parameter("forest_map",ForestField.coverage_texture())
+	ground_mat.set_shader_parameter("forest_world_half_extent_m",ForestField.world_half_extent_m())
 	for z in range(-1,1):
 		for x in range(9,12):
 			var coord:=Vector2i(x,z)

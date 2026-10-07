@@ -81,3 +81,14 @@ Do not claim every world object is finished from a mapped-name count.
 
 Official sources: https://ambientcg.com/ and https://docs.ambientcg.com/license/ .
 Exact individual asset URLs/checksums are in `sources.json`.
+
+## Terrain surfaces
+
+TerrainSurfaceMaps shares original Rock030, Ground037 and Ground048 colour,
+OpenGL normal and roughness maps between terrain LODs. Rock uses triplanar
+4 m tiles; moss/woodland ground uses 2.1 m tiles and soil 1.4 m tiles.
+Procedural macro and forest maps control coverage only. Near detail normals
+fade between 80 and 200 m; distant land retains matching colour texture
+coordinates. No terrain heights, collisions or saved world identity change.
+Review with tests/terrain_material_review.tscn and tests/forest_root_review.tscn
+using --shipyard-playtest. Source URLs and original file hashes are in sources.json.

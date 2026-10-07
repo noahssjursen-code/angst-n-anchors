@@ -483,6 +483,7 @@ func _terrain_material(lod: int) -> ShaderMaterial:
 		if _far_material == null:
 			_far_material = ShaderMaterial.new()
 			_far_material.shader = TERRAIN_FAR_SHADER
+			TERRAIN_SURFACE_MAPS.bind_to_material(_far_material, int(_layout.get("seed")) if _layout != null else 90210)
 			_bind_forest_coverage(_far_material)
 		return _far_material
 	if _near_material == null:
