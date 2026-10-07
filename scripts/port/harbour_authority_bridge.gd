@@ -320,6 +320,8 @@ func _submit_mooring(context: Dictionary, claim_accepted: bool = false) -> void:
 		return # Never claim a berth merely to report no lines there.
 	var request_id := WorldGateway.next_request_id("vessel-mooring")
 	var pending := context.duplicate(true)
+	pending["request_id"] = request_id
+	_pending_mooring_by_vessel[vessel_id] = pending
 	if needs_claim and not claim_accepted:
 		pending["kind"] = "mooring_claim"
 		_pending[request_id] = pending
@@ -480,6 +482,12 @@ func _on_command_completed(request_id: String, result: Dictionary) -> void:
 				str(pending.get("vessel_id", "")),
 			)
 		return
+	# An earlier rejected toggle must not clear the newer pending intent and
+	# then repaint cached ropes over it while that newer command is in flight.
+	if str(pending.get("kind", "")) == "mooring":
+		var latest: Dictionary = _pending_mooring_by_vessel.get(str(pending.get("vessel_id", "")), {})
+		if str(latest.get("request_id", "")) != request_id:
+			return
 	var operation_id := str(pending.get("operation_id", ""))
 	_finishing_operations.erase(operation_id)
 	var vessel_id := str(pending.get("vessel_id", ""))

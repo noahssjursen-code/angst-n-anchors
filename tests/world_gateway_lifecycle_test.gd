@@ -25,11 +25,14 @@ func _ready() -> void:
 	call_deferred("_run")
 
 
+func create_backend() -> LocalWorldBackend:
+	return LocalWorldBackend.new()
+
 func _run() -> void:
 	assert(ShipyardPlaytestMode.active(), "Run isolated from captain saves")
 	# The isolation flag suppresses normal sessions. Wire a real local authority
 	# in this test process only, using the same signals as begin_session().
-	var backend := LocalWorldBackend.new()
+	var backend := create_backend()
 	WorldGateway.add_child(backend)
 	WorldGateway._backend = backend
 	backend.session_started.connect(WorldGateway._on_session_started)
