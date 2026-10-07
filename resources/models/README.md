@@ -1324,3 +1324,22 @@ zenith and moving-camera frames and rejects black-sky shader failures. Compare
 GPU runs with identical final camera/weather; storm and broken sky differ in cost.
 References: https://docs.godotengine.org/en/4.6/tutorials/shaders/shader_reference/sky_shader.html
 https://www.guerrilla-games.com/read/the-real-time-volumetric-cloudscapes-of-horizon-zero-dawn
+
+
+### Ocean ring finish and editor preview materials
+
+Near, mid and far ocean rings use the same weather foam gain, coverage, bubble
+average, colour mix and roughness mask. Whitecaps continue through the384m
+mid/far boundary and fade smoothly from800 to1400m, before the1536m horizon
+boundary. Do not scale foam separately per material or omit it at a visible ring
+edge. The far ring retains cheaper geometry/wave sampling; no physics change.
+The world review scene tests real generated shore context and quantised camera
+movement; its elevated cameras are diagnostic, not player traversal acceptance.
+Realtime sky radiance is256, as required internally by Godot's realtime mode.
+
+Imported builder ghosts use a uniform translucent material override. Call
+create_part(record, false) for these previews: allocating per-instance paint
+under that override is wasted work and triggered renderer material dependency
+errors when previews were replaced before the next frame. Placed parts keep
+create_part(record)'s default paint path and independent colour regions. Verify
+both the ghost and placed model with imported_parts_paint_test.

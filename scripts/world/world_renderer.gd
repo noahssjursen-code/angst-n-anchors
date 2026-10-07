@@ -392,7 +392,7 @@ func _build_sky() -> void:
 
 	var sky := Sky.new()
 	sky.sky_material  = sky_sm
-	sky.radiance_size = Sky.RADIANCE_SIZE_128
+	sky.radiance_size = Sky.RADIANCE_SIZE_256 # Required by realtime sky filtering.
 	sky.process_mode = Sky.PROCESS_MODE_REALTIME
 
 	var environ := Environment.new()
@@ -511,9 +511,9 @@ func _build_ocean() -> void:
 
 	var sm := _make_ocean_material(OCEAN_SHADER, 1.0)
 	_ocean_shader_material = sm
-	var sm_mid := _make_ocean_material(OCEAN_MID_SHADER, 0.72)
+	var sm_mid := _make_ocean_material(OCEAN_MID_SHADER, 1.0)
 	_ocean_mid_material = sm_mid
-	var sm_far := _make_ocean_material(OCEAN_FAR_SHADER, 0.0)
+	var sm_far := _make_ocean_material(OCEAN_FAR_SHADER, 1.0)
 	_ocean_far_material = sm_far
 	var sm_horizon := _make_horizon_material()
 	_ocean_horizon_material = sm_horizon
@@ -943,7 +943,7 @@ func _apply_ocean_shader(
 		_ocean_mid_material.set_shader_parameter("sun_direction",      sun_dir)
 		_ocean_mid_material.set_shader_parameter("sun_color",          Vector3(sun_col.r, sun_col.g, sun_col.b))
 		_ocean_mid_material.set_shader_parameter("fresnel_sky_mix", fres_blend)
-		_ocean_mid_material.set_shader_parameter("foam_strength",    lerpf(0.55, 1.05, foam_driver) * 0.72)
+		_ocean_mid_material.set_shader_parameter("foam_strength",    lerpf(0.55, 1.05, foam_driver))
 		_ocean_mid_material.set_shader_parameter("foam_steep_start", lerpf(0.26, 0.14, steep_driver))
 		_ocean_mid_material.set_shader_parameter("foam_steep_end",   lerpf(0.70, 0.45, steep_driver))
 		_ocean_mid_material.set_shader_parameter("near_color_lift", near_lift)
@@ -951,6 +951,7 @@ func _apply_ocean_shader(
 		_ocean_mid_material.set_shader_parameter("glint_strength", glint)
 
 	if _ocean_far_material != null:
+		_ocean_far_material.set_shader_parameter("foam_strength", lerpf(0.55, 1.05, foam_driver))
 		_ocean_far_material.set_shader_parameter("shallow_albedo",     Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
 		_ocean_far_material.set_shader_parameter("deep_albedo",        Vector3(deep.r, deep.g, deep.b))
 		_ocean_far_material.set_shader_parameter("sky_top_color",      Vector3(top_col.r, top_col.g, top_col.b))

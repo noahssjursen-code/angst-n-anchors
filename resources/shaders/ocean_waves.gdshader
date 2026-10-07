@@ -269,7 +269,7 @@ void fragment() {
 	mat2 ROT_B = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
 	vec2 xz_a = ROT_A * xz;
 	vec2 xz_b = ROT_B * xz;
-	float foam_shape = ocean_foam_coverage(xz, wt, jac_foam, steep);
+	float foam_shape = ocean_foam_coverage(xz, wt, jac_foam, pow(1.0 - clamp(nm.y, 0.0, 1.0), 1.15));
 
 	float foam = foam_shape * foam_strength;
 	// Wake foam laces into Jacobian foam — readable near the stern, not a
@@ -281,7 +281,7 @@ void fragment() {
 	float wake_churn = smoothstep(0.03, 0.45, wake_sample.y) * wake_visual_strength;
 	foam = max(foam, wake_foam);
 	foam = clamp(foam, 0.0, 1.0);
-	foam *= 1.0 - smoothstep(300.0, 1600.0, dist_to_cam) * 0.55;
+	foam *= ocean_foam_distance_fade(dist_to_cam);
 
 	col = mix(col, vec3(0.06, 0.14, 0.13), wake_churn * 0.22);
 

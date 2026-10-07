@@ -123,3 +123,8 @@ float ocean_foam_bubbles(vec2 xz, float wt, float footprint) {
 	float resolved = 1.0 - smoothstep(0.018, 0.06, footprint);
 	return mix(0.78, mix(0.25, 1.0, holes), resolved);
 }
+
+// Fade before the 1536 m horizon boundary; never use a different gain per ring.
+float ocean_foam_distance_fade(float distance_to_camera) {
+	return 1.0 - smoothstep(800.0, 1400.0, distance_to_camera);
+}

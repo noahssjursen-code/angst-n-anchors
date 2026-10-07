@@ -165,17 +165,23 @@ void fragment() {
 		vec3(v_world_pos.xz / length_scales.y, 1.0),
 		0.0
 	).w * 0.45;
-	float foam = ocean_foam_coverage(v_world_pos.xz, wave_time, clamp(jacobian, 0.0, 1.0), v_wave_steep) * foam_strength * 0.78;
+	float foam = ocean_foam_coverage(v_world_pos.xz, wave_time, clamp(jacobian, 0.0, 1.0), pow(1.0 - clamp(normal_world.y, 0.0, 1.0), 1.15)) * foam_strength;
 #if OCEAN_WAKE
 	float wake_lace = ocean_foam_coverage(v_world_pos.xz, wave_time, min(pow(max(wake_sample.x, 0.0), 0.45) * 1.15, 0.92), 0.0);
-	float wake_foam = wake_lace * wake_visual_strength * 0.61;
+	float wake_foam = wake_lace * wake_visual_strength * 0.78;
 	float wake_churn = smoothstep(0.03, 0.45, wake_sample.y) * wake_visual_strength;
 	foam = max(foam, wake_foam);
 	color = mix(color, vec3(0.06, 0.14, 0.13), wake_churn * 0.22);
 #endif
-	foam = clamp(foam, 0.0, 1.0);
+	foam = clamp(foam, 0.0, 1.0) * ocean_foam_distance_fade(distance_to_camera);
+	float footprint = max(length(dFdx(v_world_pos.xz)), length(dFdy(v_world_pos.xz)));
+	float bubble_detail = 0.78;
+	if (foam > 0.01 && footprint < 0.09) {
+		bubble_detail = ocean_foam_bubbles(v_world_pos.xz, wave_time, footprint);
+	}
+	foam *= bubble_detail;
 	vec3 foam_color = mix(vec3(0.75, 0.84, 0.88), vec3(0.97, 0.98, 1.0), foam);
-	color = mix(color, foam_color, foam * 0.7);
+	color = mix(color, foam_color, foam * 0.78);
 #if OCEAN_WAKE
 	ROUGHNESS = mix(mix(water_roughness, 0.38, wake_churn), 0.85, foam);
 #else
