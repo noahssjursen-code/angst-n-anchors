@@ -5,13 +5,23 @@ extends RefCounted
 
 const IMPOSTOR_CACHE := preload("res://scripts/core/impostor_cache.gd")
 const IMPOSTOR_WARMUP := preload("res://scripts/core/impostor_warmup.gd")
+const CRANE_PROXIES := {
+	"crane:provision": "res://resources/models/scenery/port_distance/provision_distance.glb",
+	"crane:bulk": "res://resources/models/scenery/port_distance/bulk_distance.glb",
+}
 
 
 static func has_key(key: String) -> bool:
+	if CRANE_PROXIES.has(key): return ResourceLoader.exists(CRANE_PROXIES[key])
 	return IMPOSTOR_CACHE.has_key(key)
 
 
 static func stamp(key: String, show_ghost: bool = false) -> Node3D:
+	if CRANE_PROXIES.has(key):
+		var proxy := (load(CRANE_PROXIES[key]) as PackedScene).instantiate() as Node3D
+		for mesh: MeshInstance3D in proxy.find_children("*","MeshInstance3D",true,false):
+			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		return proxy
 	return IMPOSTOR_CACHE.instance(key, show_ghost) as Node3D
 
 

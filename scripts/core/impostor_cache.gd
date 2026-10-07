@@ -116,6 +116,7 @@ static func bake_from_node(
 			continue
 		img.convert(Image.FORMAT_RGBA8)
 		img.flip_x()
+		img.generate_mipmaps()
 		textures[str(face["key"])] = ImageTexture.create_from_image(img)
 
 	vp.queue_free()

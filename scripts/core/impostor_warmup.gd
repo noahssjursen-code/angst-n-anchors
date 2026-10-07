@@ -69,6 +69,10 @@ static func warm_land_houses(host: Node, status_cb: Callable = Callable()) -> vo
 
 
 static func warm_cranes(host: Node, status_cb: Callable = Callable()) -> void:
+	# Offline Blender proxies carry real silhouette/depth and live lighting.
+	# No six-view crane viewport baking on game startup.
+	if ResourceLoader.exists("res://resources/models/scenery/port_distance/provision_distance.glb") and ResourceLoader.exists("res://resources/models/scenery/port_distance/bulk_distance.glb"):
+		return
 	var kinds := ["provision", "bulk"]
 	var i := 0
 	for kind in kinds:

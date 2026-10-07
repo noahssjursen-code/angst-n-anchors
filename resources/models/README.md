@@ -1472,3 +1472,25 @@ and mipmapped. Actual close-up and port views plus tangent, phase, end-limit and
 real-container regression checks are in provision_hoist_review/port_material_review.
 The retained legacy build-then-replace assembly and live model_scale rebuild
 lifecycle still merit a separate pass. These changes do not add crane walk-up use.
+
+### Distant cranes (7 October)
+
+Distant provision/bulk cranes use offline Blender three-dimensional proxies in
+scenery/port_distance. They are lit by the current environment, not six unlit
+screenshot faces. The provision proxy has 13074 triangles; bulk has 3174, three
+shared material surfaces each. These are static presentation only. Existing
+PortStructureLod owns detailed crane creation, teardown and gameplay registration.
+No remote cargo, animation, occupancy or authority is derived from these meshes.
+
+Rebuild: run tests/export_crane_sources.tscn with --shipyard-playtest in a real
+rendered Godot process, then Blender --background --python
+resources/models/_source/port_distance/build_distance.py. Headless dummy rendering
+returned stacked MultiMesh transforms during export; the exporter now rejects it.
+Source GLBs are reproducible intermediate files; editable final .blend files are
+tracked. Runtime-generated bulk hoist cable has a static six-sided proxy connector.
+Tiny equipment and live hoist poses are intentionally absent from this distance model.
+
+Run tests/port_distance_review.tscn -- --shipyard-playtest for day/night geometry
+review and mesh/material/bounds checks. Existing building/house screenshot
+impostors now generate mipmaps, but their full lighting/transition replacement
+remains separate work. Do not describe all port-distance presentation as complete.
