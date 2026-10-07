@@ -2,8 +2,9 @@ extends CharacterBody3D
 
 # ── Movement ──────────────────────────────────────────────────────────────────
 @export_group("Movement")
-@export var walk_speed:          float = 4.5
-@export var sprint_speed:        float = 8.5
+@export var walk_speed:          float = 1.8
+@export var sprint_speed:        float = 3.8
+@export var precision_speed: float = 0.75
 @export var ground_acceleration: float = 20.0
 @export var ground_friction:     float = 24.0
 @export var air_acceleration:    float = 10.0
@@ -21,7 +22,7 @@ extends CharacterBody3D
 
 # ── Jump ──────────────────────────────────────────────────────────────────────
 @export_group("Jump")
-@export var jump_peak_height:           float = 0.9
+@export var jump_peak_height:           float = 0.55
 @export var fall_gravity_multiplier:    float = 1.4
 @export var jump_cut_gravity_multiplier: float = 3.0
 
@@ -56,6 +57,14 @@ var _stepped_last_frame: bool = false
 var _last_safe_position: Vector3 = Vector3.ZERO
 var _water_submerge_time: float = 0.0
 var _vehicle_occupied: bool = false
+var _safe_support: WeakRef
+var _safe_local_position := Vector3.ZERO
+var _jump_buffer := 0.0
+var _coyote_time := 0.0
+var _landing_speed := 0.0
+var _air_deck: WeakRef
+var _air_deck_transform := Transform3D.IDENTITY
+var _air_deck_time := 0.0
 
 
 func _ready() -> void:
@@ -70,6 +79,8 @@ func _ready() -> void:
 	# Snap to floor when descending small steps so we don't go briefly airborne.
 	floor_snap_length = floor_snap_distance
 	floor_stop_on_slope = true
+	platform_floor_layers = 1
+	platform_on_leave = CharacterBody3D.PLATFORM_ON_LEAVE_DO_NOTHING
 	floor_max_angle = deg_to_rad(48.0)
 
 	_player_camera = PlayerCamera.new()
@@ -86,7 +97,7 @@ func _ready() -> void:
 	_free_cam.bind(self, camera, _player_camera, _body_npc)
 	# Match boat camera: default Godot far (4000 m) black-clips the mainland.
 	camera.far = 40000.0
-	camera.near = 0.15
+	camera.near = 0.08
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -110,12 +121,15 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		return
 
+	_update_deck_frame(delta)
 	var on_floor := is_on_floor()
+	if not on_floor:
+		_landing_speed = velocity.y
 
 	# Landing — dip the camera slightly on impact, recover smoothly
 	if on_floor and not _was_on_floor:
 		if _player_camera != null:
-			_player_camera.notify_landing(velocity.y)
+			_player_camera.notify_landing(_landing_speed)
 	_was_on_floor = on_floor
 
 	# Gravity — variable scale depending on jump state. Always applied so the
@@ -134,8 +148,16 @@ func _physics_process(delta: float) -> void:
 	var inputs_active := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 	# Jump impulse derived from desired peak height
-	if inputs_active and Input.is_action_just_pressed("jump") and on_floor:
+	_coyote_time = 0.10 if on_floor else maxf(0.0, _coyote_time - delta)
+	_jump_buffer = maxf(0.0, _jump_buffer - delta)
+	if inputs_active and Input.is_action_just_pressed("jump"):
+		_jump_buffer = 0.12
+	if not inputs_active:
+		_jump_buffer = 0.0
+	if _jump_buffer > 0.0 and _coyote_time > 0.0:
 		velocity.y = sqrt(2.0 * BASE_GRAVITY * jump_peak_height)
+		_jump_buffer = 0.0
+		_coyote_time = 0.0
 
 	# Smooth raw input on the forward axis — strafe stays immediate
 	var raw := Input.get_vector("move_left", "move_right", "move_forward", "move_back") if inputs_active else Vector2.ZERO
@@ -158,8 +180,9 @@ func _physics_process(delta: float) -> void:
 	var friction := ground_friction    if on_floor else air_friction
 
 	# Speed ramps up/down smoothly so shift feels like breaking into a run
-	# KEY_SHIFT checked directly — Shift as an input action is unreliable in Godot 4
-	var target_speed := sprint_speed if (inputs_active and Input.is_key_pressed(KEY_SHIFT)) else walk_speed
+	var target_speed := sprint_speed if (inputs_active and Input.is_action_pressed("player_jog")) else walk_speed
+	if inputs_active and Input.is_action_pressed("player_precision"):
+		target_speed = precision_speed
 	_current_speed = lerpf(_current_speed, target_speed, 1.0 - exp(-speed_blend_sharpness * delta))
 	var speed := _current_speed
 
@@ -202,8 +225,8 @@ func _physics_process(delta: float) -> void:
 					velocity.x = pre_velocity.x
 					velocity.z = pre_velocity.z
 
-	var waterline := water_surface_y
-	if global_position.y < waterline:
+	var waterline := WaveSurface.get_buoyancy_surface_height_at(global_position.x, global_position.z) if is_instance_valid(WaveSurface.fft_system) else water_surface_y
+	if global_position.y < waterline and not is_on_floor():
 		# In water: heavy drag and limited sink speed (not walkable, no surface clamp).
 		var drag := clampf(1.0 - water_horizontal_drag * delta, 0.0, 1.0)
 		velocity.x *= drag
@@ -215,22 +238,20 @@ func _physics_process(delta: float) -> void:
 		else:
 			_water_submerge_time = 0.0
 		if _water_submerge_time >= water_rescue_delay_s:
-			global_position = _last_safe_position
-			velocity = Vector3.ZERO
+			recover_to_safety()
 			_water_submerge_time = 0.0
 			return
 	else:
 		_water_submerge_time = 0.0
 
 	if global_position.y < abyss_reset_y:
-		global_position = _last_safe_position
-		velocity = Vector3.ZERO
+		recover_to_safety()
 		return
 
 	if is_on_floor() and velocity.y < 0.0:
 		velocity.y = 0.0
 	if is_on_floor() and global_position.y > waterline + 0.1:
-		_last_safe_position = global_position
+		_remember_safe_footing()
 
 	_update_walk_animation(delta)
 
@@ -318,7 +339,10 @@ func _try_step_up(horizontal_motion: Vector3) -> bool:
 		if surface.is_empty() or surface.normal.dot(Vector3.UP) < cos(floor_max_angle):
 			return false
 
+	var old_y := global_position.y
 	global_position = raised_fwd.origin + down_result.get_travel()
+	if _player_camera != null:
+		_player_camera.notify_step(global_position.y - old_y)
 	return true
 
 
@@ -392,3 +416,92 @@ func _sync_deck_capsule() -> void:
 		Basis.looking_at(forward, deck_up),
 		global_position + deck_up * (collision.shape.height * .5)
 	)
+
+
+## Remember a deck-local point, so recovery follows a moving vessel.
+func _remember_safe_footing() -> void:
+	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * .15,
+		global_position - Vector3.UP * .6, collision_mask, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty() and hit.collider is Node3D and hit.normal.dot(Vector3.UP) > cos(floor_max_angle):
+		_last_safe_position = global_position
+		_safe_support = weakref(hit.collider)
+		_safe_local_position = hit.collider.to_local(global_position)
+
+
+func recover_to_safety() -> void:
+	var target := _last_safe_position
+	if _safe_support != null:
+		var support := _safe_support.get_ref() as Node3D
+		if is_instance_valid(support):
+			target = support.to_global(_safe_local_position)
+	global_position = target + Vector3.UP * .08
+	_air_deck = null
+	velocity = Vector3.ZERO
+	_smoothed_input = Vector2.ZERO
+	_water_submerge_time = 0.0
+	reset_physics_interpolation()
+
+
+## Resolve a standing position around a station with floor and full-body clearance.
+## Leave the player seated if every candidate is blocked.
+func try_leave_station(station: Node3D, preferred: Vector3) -> bool:
+	var shape_node := get_node("CollisionShape3D") as CollisionShape3D
+	for offset: Vector3 in [preferred, Vector3(-1, .15, .6), Vector3(1, .15, .6), Vector3(0, .15, 1.8)]:
+		var point := station.to_global(offset)
+		var ray := PhysicsRayQueryParameters3D.create(point + Vector3.UP * .6,
+			point - Vector3.UP * 1.2, collision_mask, [get_rid()])
+		var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+		if hit.is_empty() or hit.normal.dot(Vector3.UP) < cos(floor_max_angle):
+			continue
+		var feet: Vector3 = hit.position + Vector3.UP * .04
+		var query := PhysicsShapeQueryParameters3D.new()
+		query.shape = shape_node.shape
+		query.transform = Transform3D(shape_node.global_basis, feet + shape_node.global_basis.y * (shape_node.shape.height * .5))
+		query.collision_mask = collision_mask
+		query.exclude = [get_rid()]
+		if not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
+			continue
+		global_position = feet
+		velocity = Vector3.ZERO
+		_smoothed_input = Vector2.ZERO
+		_remember_safe_footing()
+		reset_physics_interpolation()
+		return true
+	return false
+
+
+## Follow imported decks on foot and during short jumps. Their colliders are
+## explicitly synchronized transforms, so keep one frame delta rather than also
+## relying on inferred platform velocity. Carry is swept against world collision.
+func _update_deck_frame(delta: float) -> void:
+	if _air_deck != null:
+		var deck := _air_deck.get_ref() as Node3D
+		_air_deck_time = 0.0 if is_on_floor() else _air_deck_time + delta
+		if is_instance_valid(deck) and _air_deck_time < 1.5:
+			var frame_delta := deck.global_transform * _air_deck_transform.affine_inverse()
+			var carry := frame_delta * global_position - global_position
+			if carry.length() < 3.0:
+				move_and_collide(carry)
+				var yaw := frame_delta.basis.get_euler().y
+				rotation.y += yaw
+				if _player_camera != null:
+					_player_camera._orbit_yaw += yaw
+				velocity = Basis(Vector3.UP, yaw) * velocity
+				_air_deck_transform = deck.global_transform
+			else:
+				_air_deck = null
+		else:
+			_air_deck = null
+	if not is_on_floor():
+		return
+	# Probe after carrying: slide contacts may be absent while standing still.
+	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * .2,
+		global_position - Vector3.UP * .6, collision_mask, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty() and hit.collider.has_meta("_boat_owner"):
+		_air_deck = weakref(hit.collider)
+		_air_deck_transform = hit.collider.global_transform
+		_air_deck_time = 0.0
+	else:
+		_air_deck = null

@@ -10,6 +10,7 @@ var animation_player: AnimationPlayer
 var _model: Node3D
 var _meshes: Array[MeshInstance3D] = []
 var _decorated := true
+var _local_first_person := false
 var _anchors: Dictionary = {}
 
 func _ready() -> void:
@@ -83,6 +84,15 @@ func apply_appearance(value: CharacterAppearance) -> void:
 			var material := item.get_surface_override_material(surface) as StandardMaterial3D
 			if material != null and colors.has(material.resource_name):
 				material.albedo_color = colors[material.resource_name]
+
+	set_local_first_person(_local_first_person)
+
+func set_local_first_person(enabled: bool) -> void:
+	_local_first_person = enabled
+	for item in _meshes:
+		if str(item.name) in ["Head", "Neck", "Face", "Hair_Crop", "Headwear_Cap", "Headwear_Hardhat", "Eyewear_Glasses", "FacialHair_Moustache", "Accessory_Pipe"]:
+			# Shadows retain the complete head; only this camera hides its geometry.
+			item.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if enabled else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
 func set_decorated(value: bool) -> void:
 	_decorated = value

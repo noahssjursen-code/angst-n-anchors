@@ -17,7 +17,7 @@ func _board() -> void:
 
 func _exit() -> void:
 	super._exit()
-	if state_driver != null:
+	if not _occupied and state_driver != null:
 		state_driver.request("occupied", false)
 
 func _process(delta: float) -> void:

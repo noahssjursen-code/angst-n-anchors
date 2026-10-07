@@ -125,11 +125,15 @@ func _board() -> void:
 
 
 func _exit() -> void:
+	if is_instance_valid(_player) and _player.has_method("try_leave_station"):
+		if not _player.call("try_leave_station", self, Vector3(exit_deck_offset.x, exit_height_offset, exit_deck_offset.y)):
+			return
 	_occupied = false
 	if _boat_cam is BoatCamera:
 		(_boat_cam as BoatCamera).end_helm()
 	if _player != null:
-		_place_player_on_deck(_player)
+		if not _player.has_method("try_leave_station"):
+			_place_player_on_deck(_player)
 		if _player.has_method("set_vehicle_occupied"):
 			_player.call("set_vehicle_occupied", false)
 		_player.set_physics_process(true)
