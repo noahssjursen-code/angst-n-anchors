@@ -1017,7 +1017,7 @@ static func build_chunk_mesh_data(
 				colors,
 				indices,
 				clip_distances,
-				a, b, c, d,
+				a, b, c, d, layout, flatten_zones,
 			)
 
 	var surface_vertex_count := vertices.size()
@@ -1055,6 +1055,8 @@ static func _append_cell_land(
 		b: int,
 		c: int,
 		d: int,
+	layout: Object,
+	flatten_zones: Array,
 ) -> void:
 	var da := signed_distances[a]
 	var db := signed_distances[b]
@@ -1068,10 +1070,10 @@ static func _append_cell_land(
 		indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
 		return
 
-	var edge_ab := _shore_edge_vertex(vertices, colors, a, b, da, db)
-	var edge_bd := _shore_edge_vertex(vertices, colors, b, d, db, dd)
-	var edge_dc := _shore_edge_vertex(vertices, colors, d, c, dd, dc)
-	var edge_ca := _shore_edge_vertex(vertices, colors, c, a, dc, da)
+	var edge_ab := _shore_edge_vertex(vertices, colors, a, b, da, db, layout, flatten_zones)
+	var edge_bd := _shore_edge_vertex(vertices, colors, b, d, db, dd, layout, flatten_zones)
+	var edge_dc := _shore_edge_vertex(vertices, colors, d, c, dd, dc, layout, flatten_zones)
+	var edge_ca := _shore_edge_vertex(vertices, colors, c, a, dc, da, layout, flatten_zones)
 	var poly := PackedInt32Array()
 	match mask:
 		1: poly = PackedInt32Array([a, edge_ab, edge_ca])
@@ -1114,15 +1116,34 @@ static func _shore_edge_vertex(
 		ib: int,
 		da: float,
 		db: float,
+		layout: Object,
+		flatten_zones: Array,
 ) -> int:
-	var denominator := da - db
-	var t := 0.5 if absf(denominator) < 0.000001 else clampf(da / denominator, 0.0, 1.0)
-	var pa := vertices[ia]
-	var pb := vertices[ib]
-	var point := pa.lerp(pb, t)
-	vertices.append(point)
-	colors.append(terrain_color(point.y, SUBMERGED_SHELF_EXTENT_M))
-	return vertices.size() - 1
+	# Non-crossing edges are not used by the marching-square polygon.
+	if (da<0.0)==(db<0.0): return ia
+	var a:=Vector2(vertices[ia].x,vertices[ia].z)
+	var b:=Vector2(vertices[ib].x,vertices[ib].z)
+	# Canonical direction gives shared edges identical root samples even when
+	# neighbouring cells traverse the edge in opposite winding directions.
+	if a.x>b.x or (a.x==b.x and a.y>b.y):
+		var swap:=a;a=b;b=swap
+		var distance_swap:=da;da=db;db=distance_swap
+	for iteration in 12:
+		var middle:=(a+b)*.5
+		var distance:=sample_effective_signed_distance(layout,middle,flatten_zones)-SUBMERGED_SHELF_EXTENT_M
+		if (distance<0.0)==(da<0.0):
+			a=middle;da=distance
+		else:
+			b=middle;db=distance
+	var t:=clampf(da/(da-db),0.0,1.0) if absf(da-db)>.000001 else .5
+	var xz:=a.lerp(b,t)
+	# Height is nonlinear near the shore. Interpolating a hill/seabed pair can
+	# otherwise lift the submerged cut edge above the sea as a triangular wall.
+	var height:=sample_render_terrain_height(layout,xz,flatten_zones)
+	vertices.append(Vector3(xz.x,height,xz.y))
+	colors.append(terrain_color(height,SUBMERGED_SHELF_EXTENT_M,xz,flatten_zones))
+	return vertices.size()-1
+
 
 
 ## Pure ordered border samples, excluding skirts. These are useful for seam tests.
