@@ -143,6 +143,14 @@ func _refresh_requests(stream_position: Vector3) -> void:
 		if (loaded.is_empty() or int(loaded.get("tier", -1)) != int(request["tier"])) \
 				and not _queued.has(key):
 			_enqueue(request)
+	# A moving boat can otherwise leave newly nearby patches behind all of the
+	# old far requests. Keep partial work, but always service the closest land.
+	_jobs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_min := Vector2(a.coord) * CHUNK_SIZE_M
+		var b_min := Vector2(b.coord) * CHUNK_SIZE_M
+		return stream_xz.distance_squared_to(stream_xz.clamp(a_min, a_min + Vector2.ONE * CHUNK_SIZE_M)) \
+			< stream_xz.distance_squared_to(stream_xz.clamp(b_min, b_min + Vector2.ONE * CHUNK_SIZE_M))
+	)
 
 
 func _should_refresh_requests(stream_xz: Vector2) -> bool:

@@ -398,28 +398,50 @@ func flatten_zone_records(
 			"carve": carve,
 			"facility_id": "%s:%s" % [port_id, instance_id],
 		})
-	## Town trapezoid clears forest only — does not flatten hinterland hills.
-	var town_clear := forest_clear_polygon(world_position, rotation_y)
-	if town_clear.size() >= 3:
+	# A buildable area is permission for future construction, not cleared land.
+	# Only the actual paved apron and legacy occupied plots exclude vegetation.
+	var pavement := forest_clear_polygon(world_position, rotation_y)
+	if pavement.size() >= 3:
 		records.append({
 			"forest_clear_only": true,
-			"polygon": town_clear,
-			"facility_id": "%s:town_forest_clear" % port_id,
+			"polygon": pavement,
+			"facility_id": "%s:pavement_forest_clear" % port_id,
 		})
+	var land: Dictionary = initial_attributes.get("land_plan", {})
+	if not land.has("facility_plan"):
+		for plot in land.get("terrain_grid", {}).get("points", []):
+			var local: Array = plot.get("local", [])
+			if local.size() < 2: continue
+			var center := world_position + port_basis * Vector3(local[0], 0, local[1])
+			var radius := float(plot.get("radius_m", PortLandPlan.HOUSE_RADIUS_M)) + 6.0
+			records.append({"forest_clear_only": true, "center": Vector2(center.x, center.z),
+				"yaw": rotation_y, "half_size": Vector2.ONE * radius, "falloff": 0.0})
 	return records
 
 
-## World-space buildable land polygon (apron + hinterland), padded for tree clear.
+## World-space pavement footprint with room for crown overhang. Forest-only:
+## changing this mask must never flatten terrain or revise saved port geography.
 func forest_clear_polygon(
 		world_position: Vector3,
 		rotation_y: float,
-		pad_m: float = PortLandPlan.FOREST_CLEAR_PAD_M,
+		pad_m: float = 6.0,
 ) -> PackedVector2Array:
-	var land: Dictionary = initial_attributes.get("land_plan", {}) as Dictionary
-	var zone: Dictionary = land.get("buildable_zone", {}) as Dictionary
-	if zone.is_empty():
-		return PackedVector2Array()
-	return PortLandPlan.world_buildable_polygon(zone, world_position, rotation_y, pad_m)
+	var foundation: Dictionary = initial_attributes.get("foundation", {})
+	var spine := PortFacilityPlan.points(foundation.get("spine", []))
+	if spine.size() < 2: return PackedVector2Array()
+	var inland := float(foundation.get("town_inland_m", PortCoastTracer.FOUNDATION_TOWN_INLAND_M))
+	var seaward := float(foundation.get("dock_reach_m", PortCoastTracer.FOUNDATION_DOCK_REACH_M)) \
+		+ float(foundation.get("bay_lip_m", PortCoastTracer.FOUNDATION_BAY_LIP_M))
+	var polygon := PortCoastTracer.offset_spine_perpendicular(spine, seaward, Vector2.DOWN, false)
+	var rear := PortCoastTracer.offset_spine_perpendicular(spine, inland, Vector2.DOWN, true)
+	for i in range(rear.size() - 1, -1, -1): polygon.append(rear[i])
+	var expanded := Geometry2D.offset_polygon(polygon, pad_m, Geometry2D.JOIN_ROUND)
+	if not expanded.is_empty(): polygon = expanded[0]
+	var world := PackedVector2Array()
+	for point in polygon:
+		var wp := world_position + Basis(Vector3.UP, rotation_y) * Vector3(point.x, 0, point.y)
+		world.append(Vector2(wp.x, wp.z))
+	return world
 
 
 func local_footprints() -> Array[Dictionary]:

@@ -7,9 +7,9 @@ extends RefCounted
 const PATCH_SCALE_M := 2800.0
 const DETAIL_SCALE_M := 520.0
 ## Keep a thin bare rock strip at the shore, then let canopy start close inland.
-const MIN_INLAND_M := 22.0
-const FULL_INLAND_M := 95.0
-const MAX_SLOPE := 0.58
+const MIN_INLAND_M := 10.0
+const FULL_INLAND_M := 55.0
+const MAX_SLOPE := 0.80
 const MAX_HEIGHT_M := 900.0
 const COVERAGE_MAP_SIZE := 256
 
@@ -82,13 +82,14 @@ static func sample(world_xz: Vector2) -> float:
 		return 0.0
 
 	var inland_w := smoothstep(MIN_INLAND_M, FULL_INLAND_M, inland)
-	var slope_w := 1.0 - smoothstep(0.28, MAX_SLOPE, slope)
+	var slope_w := 1.0 - smoothstep(0.35, MAX_SLOPE, slope)
 	var height_w := 1.0 - smoothstep(520.0, MAX_HEIGHT_M, height)
 
 	var patch := _noise_01(_patch_noise, world_xz, PATCH_SCALE_M)
 	var detail := _noise_01(_detail_noise, world_xz, DETAIL_SCALE_M)
-	# Broad coastal belts with gaps — still patchy, not a lawn.
-	var cover := smoothstep(0.22, 0.58, patch) * lerpf(0.55, 1.0, detail)
+	# Closed stands with broad clearings, rather than thinning every hillside
+	# into isolated dots. Slope, exposure and altitude still shape their edges.
+	var cover := smoothstep(0.30, 0.44, patch) * lerpf(0.85, 1.0, detail)
 	return clampf(cover * inland_w * slope_w * height_w, 0.0, 1.0)
 
 

@@ -28,7 +28,7 @@ func _run() -> void:
 				var data:PackedFloat32Array=a.batches[key][species]
 				var position:=Vector3(data[index],data[index+1],data[index+2])
 				count+=1
-				assert(position.x>22.0,"Canopy crosses bare shoreline")
+				assert(position.x>ForestField.MIN_INLAND_M,"Canopy crosses bare shoreline")
 				assert(not ForestField.inside_flatten_zones(Vector2(position.x,position.z),[zone]),"Canopy enters cleared port")
 	assert(count>200,"Distant forest unexpectedly sparse")
 	a.free();b.free()

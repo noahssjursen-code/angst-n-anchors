@@ -1731,3 +1731,44 @@ and https://docs.godotengine.org/en/4.6/tutorials/3d/mesh_lod.html . Visibility
 ranges choose authored variants; automatic mesh LOD reduces triangle density
 inside each. Full-port proxies beyond port streaming radius remain separate,
 unfinished work. Do not claim this patch makes unloaded ports persist.
+
+## Forest visibility and harbour vegetation (7 October 2026)
+
+Keep the near / middle / persistent-world forest representations complementary.
+Never use a shader function argument named like a material uniform. In Godot
+4.6.1 D3D12, `forest_hidden_pixel(bool distant, ...)` shadowed the foliage
+`distant` uniform and erased every streamed middle-distance crown. Renaming the
+argument fixed the actual render; CPU instance counts had falsely looked healthy.
+Use `tests/forest_lod_render_test.tscn -- --shipyard-playtest` for pixel-based
+acceptance of all four species at220/750/1800m and the60–200m near handover.
+The review-only `--reproduce-shadowed-name` restores that fault and must exit1.
+
+The140–200m handover selects whole crowns with a deterministic world-position
+threshold distributed through the stand. Bark and foliage make the same choice.
+Do not restore screen-pixel stippling to this transition; it made crowns look
+transparent and speckled. Persistent world canopy still continues beyond the
+streamed patches. Camera movement reprioritizes queued nearby patches while
+retaining partial placement work and the existing frame budget.
+
+ForestField creates denser interiors with broad natural clearings. Shore setback
+is10m, with full shore weighting at55m, and steeper wooded slopes are allowed.
+DistantForest shares the minimum setback; placement cache version2 invalidates
+old visual records. Trees remain instanced Blender geometry/cutouts, with no
+per-tree physics or gameplay objects. Seed424242 now has2,927,710 world crowns
+(about134MiB of GPU transforms plus resources,44.7MiB compact placement data).
+This is a visual cache, never a captain save or geographic generation revision.
+
+Port vegetation clearing follows the actual extruded pavement ribbon plus6m
+crown clearance, and individually occupied legacy plots. The420m+ future
+buildable hinterland is NOT a cleared forest zone. Preserve roads, parcels and
+yard access; do not change natural terrain heights or saved layout records.
+`forest_port_clearance_test.tscn` checks rotated road/parcel clearance, retained
+hinterland, legacy plots, unchanged terrain and graph data, and queue priority.
+
+`forest_handover_review.tscn` runs the real40km world, captures offshore approach,
+near woodland, aerial forest and harbour edges, then measures visible/hidden
+forest in the same views. Always use `--shipyard-playtest`; every capture goes
+to Pictures/machinescreenshots. Final1440x810 RTX5070 D3D12 measurements: boat
+view2.845ms total vs2.140ms hidden; near woodland4.096vs1.883ms. These are GPU
+fixture measurements, not universal FPS guarantees. Ground textures and accepted
+water remain outside this change. Noah accepted the resulting forest appearance.

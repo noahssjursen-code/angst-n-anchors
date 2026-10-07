@@ -122,7 +122,7 @@ func build_cell(cell:Vector2i) -> void:
 			var p:=origin+Vector2(x+.2+random*.6,y+.2+WorldForestStreamer._hash01(cell.y,cell.x,y,x)*.6)*spacing
 			if random>density_at(p): continue
 			var inland:float=-layout.sample_signed_distance(p)
-			if inland<22.0: continue
+			if inland<ForestField.MIN_INLAND_M: continue
 			if ForestField.inside_flatten_zones(p,local_zones): continue
 			var natural_height:float=layout.sample_height(p)
 			var height:=natural_height-WorldTerrainStreamer.TERRAIN_SINK_M
