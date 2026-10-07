@@ -73,8 +73,9 @@ The Forward+ project reserves 262144 vec4 entries (4 MiB GPU storage, 3 MiB over
 default) so modular ships and streamed ports fit. This is not a geometry or
 texture budget increase, nor a guarantee for an unlimited number of vessels.
 
-Source audit counts are not visual acceptance. Older anonymous `Material` slots
-in experimental coastal assets still need deliberate authoring; procedural
+Source audit counts are not visual acceptance. The 11 anonymous `Material` slots
+are default `Cube` nodes in parked coastal prototypes with no current gameplay
+references found in scripts, scenes or catalogs. Before reuse they need deliberate authoring; procedural
 village buildings and Noah's queued terrain overhaul remain outside this pass.
 Do not claim every world object is finished from a mapped-name count.
 

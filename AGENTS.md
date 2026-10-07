@@ -72,6 +72,7 @@ Conventions:
 - Name it `<feature>_showcase.tscn` or `<feature>_visual_demo.tscn`
 
 Current demos:
+- `scenes/showcases/material_library_showcase.tscn` — sourced finishes on ships, port assets, cargo and animated clothing; before/after and archived captures
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
 - `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
