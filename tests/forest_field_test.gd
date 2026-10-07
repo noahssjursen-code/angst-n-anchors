@@ -87,6 +87,13 @@ func _test_bounded_distribution() -> void:
 			var mesh := TREE_MESH.species_mesh(species,near)
 			_check(mesh.get_surface_count()<=2,"at most bark and foliage surfaces")
 			_check(mesh.get_faces().size()/3<=2100,"vegetation geometry budget")
+			if near:
+				var textured_bark := false
+				for surface in mesh.get_surface_count():
+					var mat := mesh.surface_get_material(surface) as ShaderMaterial
+					if mat != null:
+						textured_bark = textured_bark or (mat.get_shader_parameter("bark_colour") != null and mat.get_shader_parameter("bark_normal") != null)
+				_check(textured_bark, "near bark retains opaque colour and normal maps")
 			if not near:
 				_check(mesh.get_faces().size()/3 == 2, "distant tree is one cutout card")
 				_check(mesh.custom_aabb.size.z >= mesh.get_aabb().size.x, "billboard bounds cover all camera angles")

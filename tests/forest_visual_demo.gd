@@ -32,7 +32,31 @@ func review() -> void:
 		mmi.multimesh=mm;add_child(mmi);trees.append(mmi)
 	label=Label.new();label.position=Vector2(16,80);add_child(label)
 	set_view(0);update_label()
+	if OS.get_cmdline_user_args().has("--capture-lod"):
+		for tree in trees: tree.free()
+		trees.clear()
+		camera.fov=20
+		for species in 3:
+			for detail in [true,false]:
+				var specimen:=MeshInstance3D.new()
+				specimen.mesh=ForestTreeMesh.species_mesh(species,detail)
+				specimen.position.x=(species-1)*12
+				specimen.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				add_child(specimen)
+				specimen.set_instance_shader_parameter("forest_lod_enabled",1.0)
+		for distance in [120,140,150,170,190,200,220]:
+			label.text="Per-tree geometry handover: "+str(distance)+"m"
+			await shot("transition-"+str(distance),Vector3(0,6,distance),Vector3(0,6,0))
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--capture-forest"):
+		for species in 4:
+			var specimen := MeshInstance3D.new()
+			specimen.mesh = ForestTreeMesh.species_mesh(species, true)
+			specimen.position = Vector3(0,0,120)
+			add_child(specimen)
+			await shot("bark-"+ForestTreeMesh.SPECIES[species],Vector3(1.2,1.8,122.3),Vector3(0,1.7,120))
+			specimen.free()
 		for detail in [true,false]:
 			set_detail(detail)
 			for v in 3:

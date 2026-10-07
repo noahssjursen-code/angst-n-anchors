@@ -231,7 +231,20 @@ func _build_chunk(coord: Vector2i, tier: int, prepared: Dictionary = {}) -> void
 		mmi.multimesh = mm
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(mmi)
+		mmi.set_instance_shader_parameter("forest_lod_enabled", 1.0)
 		if near:
+			# The near patch contains both representations. Their shared shader
+			# hands over per tree at140-200m, before CPU patch LOD can unload it.
+			var far := MultiMeshInstance3D.new()
+			var far_mm := MultiMesh.new()
+			far_mm.transform_format = MultiMesh.TRANSFORM_3D
+			far_mm.mesh = TREE_MESH.species_mesh(species, false)
+			far_mm.instance_count = selected.size()
+			for i in selected.size(): far_mm.set_instance_transform(i, selected[i])
+			far.multimesh = far_mm
+			far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(far)
+			far.set_instance_shader_parameter("forest_lod_enabled", 1.0)
 			# Shadow the dense canopy with the matching two-triangle silhouette,
 			# rather than rendering every twig into every sun cascade.
 			var shadow := MultiMeshInstance3D.new()

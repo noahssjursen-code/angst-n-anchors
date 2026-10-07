@@ -2,11 +2,14 @@
 All texture pixels originate from rendering authored leaf/needle geometry.
 Run with Blender --background --python this_file.py. Metres, Blender Z up.
 """
-import bpy, math, random
+import bpy, math, random, sys
 from pathlib import Path
 from mathutils import Vector
 S=Path(__file__).resolve().parent
 O=S.parents[1]/'scenery/coastal_vegetation';O.mkdir(parents=True,exist_ok=True)
+sys.path.insert(0,str(S))
+import bark_materials
+bark_materials.generate(O)
 scene=bpy.context.scene
 scene.render.engine='CYCLES';scene.cycles.samples=8
 scene.render.film_transparent=True
@@ -31,8 +34,20 @@ def geometry(name,v,f,material,uv=None):
     return ob
 def tube(a,b,r,mat):
     a,b=Vector(a),Vector(b);d=b-a
-    bpy.ops.mesh.primitive_cone_add(vertices=5,radius1=r,radius2=r*.5,depth=d.length,location=(a+b)*.5)
+    bpy.ops.mesh.primitive_cone_add(vertices=8 if r>.05 else 5,radius1=r,radius2=r*.5,depth=d.length,location=(a+b)*.5)
     ob=bpy.context.object;ob.rotation_euler=d.to_track_quat('Z','Y').to_euler();ob.data.materials.append(mat)
+    if 'Bark' in mat.name:
+        for face in ob.data.polygons:
+            face.use_smooth=len(face.vertices)==4
+            # Primitive cone UVs are packed islands, not a cylindrical metre
+            # unwrap. Explicit angular/height coordinates keep bark grain and
+            # birch lenticels in the right orientation at every branch length.
+            angles=[math.atan2(ob.data.vertices[ob.data.loops[li].vertex_index].co.y,ob.data.vertices[ob.data.loops[li].vertex_index].co.x)/math.tau+.5 for li in face.loop_indices]
+            crossing=max(angles)-min(angles)>.5
+            for li,u in zip(face.loop_indices,angles):
+                co=ob.data.vertices[ob.data.loops[li].vertex_index].co
+                if crossing and u<.5:u+=1
+                ob.data.uv_layers.active.data[li].uv=(u*max(1,round(math.tau*r/.55)),(co.z/d.length+.5)*max(.2,d.length/1.8))
     return ob
 def bake(path,center,size,angle=0,res=512):
     cam_data=bpy.data.cameras.new('BakeCamera');cam=bpy.data.objects.new('BakeCamera',cam_data);scene.collection.objects.link(cam)
@@ -88,7 +103,7 @@ for broad in [False,True]:
 for species in ['pine','birch','spruce','juniper']:
     clear();random.seed(400+['pine','birch','spruce','juniper'].index(species))
     leaf=textured(species+' Foliage',O/('birch_spray.png' if species=='birch' else 'needle_spray.png'))
-    bark=plain(species+' Bark',(.48,.46,.39) if species=='birch' else (.16,.095,.045))
+    bark=bark_materials.material(species,O)
     height={'pine':11,'birch':10,'spruce':14,'juniper':2.6}[species]
     tube((0,0,0),(.18,0,height*.86),.17 if species!='juniper' else .055,bark)
     v=[];f=[]

@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_burley, specular_disabled;
+#include "forest_lod.gdshaderinc"
 
 uniform sampler2D foliage_texture : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float canopy_height = 7.0;
@@ -9,6 +10,7 @@ varying vec3 canopy_normal_world;
 varying vec3 tree_position;
 
 void vertex() {
+	forest_lod_mix = forest_distance_mix(MODEL_MATRIX[3].xyz, MAIN_CAM_INV_VIEW_MATRIX[3].xyz);
 	if (distant) {
 		vec3 up = vec3(0.0, 1.0, 0.0);
 		vec3 delta = vec3(INV_VIEW_MATRIX[3].x - MODEL_MATRIX[3].x, 0.0, INV_VIEW_MATRIX[3].z - MODEL_MATRIX[3].z);
@@ -28,9 +30,11 @@ void vertex() {
 	canopy_normal_world = normalize(MODEL_NORMAL_MATRIX * normalize(crown));
 	}
 	tree_position = VERTEX;
+	if (forest_lod_enabled > 0.5 && ((distant && forest_lod_mix <= 0.0) || (!distant && forest_lod_mix >= 1.0))) VERTEX = vec3(0.0);
 }
 
 void fragment() {
+	if (forest_lod_enabled > 0.5 && forest_hidden_pixel(distant, forest_lod_mix, FRAGCOORD.xy)) discard;
 	vec4 foliage = texture(foliage_texture, UV);
 	// The branch bake is diffuse colour. Crown depth supplies the occlusion
 	// absent from overlapping cutout cards, without adding emissive fill.

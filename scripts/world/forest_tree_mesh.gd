@@ -6,6 +6,7 @@ const SPECIES := ["pine", "birch", "spruce", "juniper"]
 const CANOPY_HEIGHT := [7.0, 6.0, 8.0, 1.5]
 const TREE_HEIGHT := [11.0, 10.0, 14.0, 2.6]
 const FOLIAGE := preload("res://scripts/world/forest_foliage.gdshader")
+const BARK := preload("res://scripts/world/forest_bark.gdshader")
 static var _meshes: Dictionary = {}
 static var _requested := false
 static func request_assets() -> void:
@@ -63,7 +64,7 @@ static func species_mesh(species: int, near: bool) -> ArrayMesh:
 				Vector3(radius * 2.0, bounds.size.y, radius * 2.0))
 		for surface in asset.get_surface_count():
 			var mat := asset.surface_get_material(surface) as StandardMaterial3D
-			if mat != null and mat.albedo_texture != null:
+			if mat != null and mat.albedo_texture != null and (not near or "Foliage" in mat.resource_name):
 				var foliage := ShaderMaterial.new()
 				foliage.shader = FOLIAGE
 				foliage.set_shader_parameter("foliage_texture", mat.albedo_texture)
@@ -71,6 +72,12 @@ static func species_mesh(species: int, near: bool) -> ArrayMesh:
 				foliage.set_shader_parameter("tree_height", TREE_HEIGHT[species])
 				foliage.set_shader_parameter("distant", not near)
 				asset.surface_set_material(surface, foliage)
+			elif mat != null and mat.albedo_texture != null and mat.normal_texture != null:
+				var bark := ShaderMaterial.new()
+				bark.shader = BARK
+				bark.set_shader_parameter("bark_colour", mat.albedo_texture)
+				bark.set_shader_parameter("bark_normal", mat.normal_texture)
+				asset.surface_set_material(surface, bark)
 		_meshes[key] = asset
 		root.free()
 	return _meshes[key] as ArrayMesh
