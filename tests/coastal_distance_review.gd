@@ -29,6 +29,12 @@ func review() -> void:
 		weather(.08,.25)
 		await get_tree().create_timer(2).timeout
 		await capture("night-"+str(int(distance)))
+	if OS.get_cmdline_user_args().has("--ports-only"):
+		world.queue_free()
+		for frame in 5: await get_tree().process_frame
+		print("PORT DISTANCE COMPLETE ",output)
+		get_tree().quit()
+		return
 	weather(.5,.35)
 	var layout := world.get_world_layout() as WorldLayout
 	var wooded := Vector2.ZERO

@@ -50,6 +50,8 @@ static func bake_from_node(
 	vp.transparent_bg = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	vp.disable_3d = false
+	# Bake albedo only; the runtime proxy receives current sun/ambient light.
+	vp.debug_draw = Viewport.DEBUG_DRAW_UNSHADED
 	vp.size = Vector2i(resolution, resolution)
 	host.add_child(vp)
 
@@ -115,7 +117,6 @@ static func bake_from_node(
 		if img == null:
 			continue
 		img.convert(Image.FORMAT_RGBA8)
-		img.flip_x()
 		img.generate_mipmaps()
 		textures[str(face["key"])] = ImageTexture.create_from_image(img)
 

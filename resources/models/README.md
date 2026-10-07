@@ -1558,3 +1558,15 @@ nearby terrain AND forest jobs, with a45s bound per view; inspect reported
 pending counts before making convergence claims. --coverage-debug is an
 unshaded diagnostic only. Terrain material review key4 shows the canopy
 surface. All runs still require --shipyard-playtest.
+
+Building/house impostor lighting (7 October): runtime captures now use the
+unshaded albedo debug pass, with mipmaps, and the six faces receive live
+per-pixel lighting. Do not bake a fixed sun into these colour maps or render
+the resulting faces unshaded. X faces point outward and captures are not
+horizontally mirrored. Footprint debug ghosts remain intentionally unshaded.
+This repairs lighting/orientation, not the AABB silhouette limitation: gabled
+roofs still look box-like at oblique angles. True simplified building geometry
+and eliminating startup building captures remain future work.
+Run tests/building_light_review.tscn with --shipyard-playtest for source/proxy
+day, opposite sun and night comparisons plus albedo/mipmap/source-material and
+rendered brightness regressions. Actual-world port review can use --ports-only.

@@ -4,6 +4,9 @@ const IMPOSTOR_CACHE := preload("res://scripts/core/impostor_cache.gd")
 
 
 func _initialize() -> void:
+	for face in ImpostorInstance.aabb_faces(Vector3(2,4,6)):
+		var normal := Basis.from_euler(face.rotation) * Vector3.BACK
+		assert(normal.is_equal_approx(face.normal), "Proxy face normal points inward")
 	IMPOSTOR_CACHE.clear()
 	assert(not IMPOSTOR_CACHE.has_key("missing"), "empty cache should miss")
 	var root := Node3D.new()
