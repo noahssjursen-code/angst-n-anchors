@@ -239,10 +239,12 @@ static func _bilinear_query_layer(
 	u: float,
 	v: float,
 ) -> Vector4:
-	var px: float = u * float(resolution)
-	var py: float = v * float(resolution)
-	var x0 := int(floor(px)) % resolution
-	var y0 := int(floor(py)) % resolution
+	# GPU linear sampling addresses texel centres at (i + .5) / resolution.
+	# The box-reduced query samples use the same centres, not texel corners.
+	var px: float = fposmod(u, 1.0) * float(resolution) - 0.5
+	var py: float = fposmod(v, 1.0) * float(resolution) - 0.5
+	var x0 := posmod(int(floor(px)), resolution)
+	var y0 := posmod(int(floor(py)), resolution)
 	var x1 := (x0 + 1) % resolution
 	var y1 := (y0 + 1) % resolution
 	var fx: float = px - floor(px)

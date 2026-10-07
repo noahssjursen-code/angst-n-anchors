@@ -162,6 +162,13 @@ void main() {
 				spectrum += jonswap(omega, spectrums.data[i * 2u + 1u]) * direction_spectrum(kAngle, omega, spectrums.data[i * 2u + 1u]) * short_waves_fade(kLength, spectrums.data[i * 2u + 1u]);
 			}
 			
+			// The macro patch carries swell; waves shorter than the next patch
+			// belong to its denser field. This also keeps the 128-square CPU
+			// query from aliasing short ripples when the swell domain is large.
+			if (i == 0u) {
+				float boundary = 2.0 * PI / lengthScales[1];
+				spectrum *= 1.0 - smoothstep(boundary * 0.75, boundary, kLength);
+			}
 			vec2 h0 = vec2(gauss2.x, gauss1.y) * sqrt(2.0 * spectrum * abs(dOmegadk) / max(kLength, 0.0001) * deltaK * deltaK);
 			imageStore(target_spectrum_textures, ivec3(id.xy, i), vec4(h0, 0.0, 0.0));
 		} else {

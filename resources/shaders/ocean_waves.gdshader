@@ -12,7 +12,7 @@ uniform vec3 absorption_per_metre = vec3(0.65, 0.27, 0.19);
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
 uniform sampler2DArray slope_map : filter_linear_mipmap_anisotropic, repeat_enable;
-uniform vec4 length_scales = vec4(256.0, 64.0, 16.0, 4.0);
+uniform vec4 length_scales = vec4(1024.0, 64.0, 16.0, 4.0);
 uniform vec4 cascade_fade_end = vec4(5500.0, 1536.0, 384.0, 96.0);
 uniform float geomorph_strength : hint_range(0.0, 1.0) = 1.0;
 

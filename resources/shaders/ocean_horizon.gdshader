@@ -8,7 +8,7 @@ render_mode diffuse_burley, cull_disabled;
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
 uniform sampler2DArray slope_map        : filter_linear_mipmap_anisotropic, repeat_enable;
-uniform float length_scale_0 = 256.0;
+uniform float length_scale_0 = 1024.0;
 
 uniform float wave_time = 0.0;
 uniform float wave_intensity = 1.0;

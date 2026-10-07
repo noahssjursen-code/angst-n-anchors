@@ -61,7 +61,9 @@ var time: float = 0.0
 var _last_wind := -1.0
 var _last_storm := -1.0
 var _last_short_wave := -1.0
-@export var length_scales := Vector4(256.0, 64.0, 16.0, 4.0)
+## A 256 m swell patch undersamples the rough-weather spectral peak, allowing
+## one lattice mode to dominate. Keep the three detail patches unchanged.
+@export var length_scales := Vector4(1024.0, 64.0, 16.0, 4.0)
 @export var depth: float = 100.0
 @export var repeat_time: float = 200.0
 @export var low_cutoff: float = 0.0001
