@@ -11,7 +11,7 @@ const MIN_INLAND_M := 22.0
 const FULL_INLAND_M := 95.0
 const MAX_SLOPE := 0.58
 const MAX_HEIGHT_M := 900.0
-const COVERAGE_MAP_SIZE := 128
+const COVERAGE_MAP_SIZE := 256
 
 
 static var world_seed: int = 0
@@ -98,11 +98,11 @@ static func bake_coverage_map() -> ImageTexture:
 		image.generate_mipmaps()
 		return ImageTexture.create_from_image(image)
 	var half := _world_half_extent_m
-	var denom := float(COVERAGE_MAP_SIZE - 1)
+	var denom := float(COVERAGE_MAP_SIZE)
 	for y in range(COVERAGE_MAP_SIZE):
-		var world_z := lerpf(-half, half, float(y) / denom)
+		var world_z := lerpf(-half, half, (float(y) + 0.5) / denom)
 		for x in range(COVERAGE_MAP_SIZE):
-			var world_x := lerpf(-half, half, float(x) / denom)
+			var world_x := lerpf(-half, half, (float(x) + 0.5) / denom)
 			var density := sample(Vector2(world_x, world_z))
 			image.set_pixel(x, y, Color(density, density, density))
 	image.generate_mipmaps()

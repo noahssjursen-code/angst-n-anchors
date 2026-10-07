@@ -1,6 +1,6 @@
 extends "res://tests/provision_hoist_review.gd"
-## F6 with --shipyard-playtest. 1/2/3: rock/heath/woodland, V: overview.
-## --capture-terrain saves all six views to the machine screenshot archive.
+## F6 with --shipyard-playtest. 1/2/3/4: rock/heath/woodland/distant canopy, V: overview.
+## --capture-terrain saves all eight views to the machine screenshot archive.
 var ground: MeshInstance3D
 var kind := 0
 var wide := false
@@ -41,17 +41,17 @@ func review() -> void:
 	if not OS.get_cmdline_user_args().has("--capture-terrain"):
 		show_surface()
 		return
-	for variant in 3:
+	for variant in 4:
 		kind = variant
 		show_surface()
-		await shot(["rock","heath","forest-floor"][kind]+"-close",eye(false),target())
-		await shot(["rock","heath","forest-floor"][kind]+"-wide",eye(true),target())
+		await shot(["rock","heath","forest-floor","canopy"][kind]+"-close",eye(false),target())
+		await shot(["rock","heath","forest-floor","canopy"][kind]+"-wide",eye(true),target())
 	print("TERRAIN MATERIAL REVIEW COMPLETE ",output)
 	get_tree().quit()
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event.is_pressed() or event.is_echo(): return
-	if event.keycode >= KEY_1 and event.keycode <= KEY_3:
+	if event.keycode >= KEY_1 and event.keycode <= KEY_4:
 		kind = event.keycode - KEY_1
 		show_surface()
 	elif event.keycode == KEY_V:
@@ -63,19 +63,20 @@ func target() -> Vector3:
 	return Vector3(0,1.5 if kind == 0 else 30.0,0)
 
 func eye(overview: bool) -> Vector3:
+	if kind == 3: return target() + (Vector3(0,900,2300) if overview else Vector3(0,200,1800))
 	return target() + (Vector3(0,18,26) if overview else Vector3(2,1.7,5))
 
 func show_surface() -> void:
 	if is_instance_valid(ground): ground.free()
 	var image := Image.create(4,4,false,Image.FORMAT_R8)
-	image.fill(Color.WHITE if kind == 2 else Color.BLACK)
+	image.fill(Color.WHITE if kind >= 2 else Color.BLACK)
 	material.set_shader_parameter("forest_map",ImageTexture.create_from_image(image))
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for z in 65:
 		for x in 65:
 			surface.set_color(Color(1,1,1,1 if kind == 0 else 0))
-			surface.add_vertex(Vector3(x-32,target().y+.3*sin(x*.22)*cos(z*.17),z-32))
+			surface.add_vertex(Vector3((x-32)*(20 if kind == 3 else 1),target().y+.3*sin(x*.22)*cos(z*.17),(z-32)*(20 if kind == 3 else 1)))
 	for z in 64:
 		for x in 64:
 			var a := z*65+x
@@ -87,4 +88,4 @@ func show_surface() -> void:
 	add_child(ground)
 	camera.position = eye(wide)
 	camera.look_at(target())
-	label.text = "1 Rock    2 Heath    3 Woodland soil    V Close / overview\n" + ["Wet coastal bedrock","Heath","Forest floor"][kind]
+	label.text = "1 Rock    2 Heath    3 Woodland soil    4 Distant canopy    V Close / overview\n" + ["Wet coastal bedrock","Heath","Forest floor","Distant canopy surface"][kind]

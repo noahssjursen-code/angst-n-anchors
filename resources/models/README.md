@@ -1541,3 +1541,20 @@ dither pattern can still be visible within the transition, particularly without 
 This is a dense coastal-forest foundation. Understory/rock integration, richer
 branch/foliage variation and canopy beyond 2.2km remain work.
 Single-view silhouettes are intended for distant viewing, not walking among them.
+
+Distant canopy handover (7 October): individual silhouettes screen-door fade
+between1950 and2180m, before their256m patches can be culled at2200m. The
+terrain carries the remaining woodland mass; this does not add distant trees
+or a three-dimensional treeline. Both terrain shaders share world-aligned,
+derivative-filtered crown colour breakup and a palette closer to lit foliage.
+Coverage is a256px R8 mipmapped map (about85KiB including mipmaps), sampled at
+texel centres in the same world coordinate convention as the shaders. It is
+still a broad156m coverage approximation at40km world size, not an exact mask
+for small forest clearings. Preserve exact ForestField exclusions for geometry.
+
+Use coastal_distance_review --forest-only --far-forest for1700-3500m views;
+--sea-level adds8m viewpoints and a night view. The capture loop waits for
+nearby terrain AND forest jobs, with a45s bound per view; inspect reported
+pending counts before making convergence claims. --coverage-debug is an
+unshaded diagnostic only. Terrain material review key4 shows the canopy
+surface. All runs still require --shipyard-playtest.

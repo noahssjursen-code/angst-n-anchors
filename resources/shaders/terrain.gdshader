@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley;
+#include "terrain_canopy.gdshaderinc"
 
 // Mainland surface. Detail comes from runtime-baked maps (TerrainSurfaceMaps),
 // blended by height, slope, and coastal weight (COLOR.a).
@@ -116,18 +117,18 @@ void fragment() {
 	float forest_w = texture(forest_map, clamp(forest_uv, vec2(0.0), vec2(1.0))).r;
 	forest_w *= (1.0 - cliff * 0.85) * (1.0 - coast_w * 0.7)
 		* (1.0 - snow_w);
-	vec3 canopy = vec3(0.022, 0.048, 0.026);
+	vec3 canopy = canopy_colour(world_pos.xz);
 	float far_canopy = smoothstep(600.0, 1300.0, view_distance);
 	vec3 litter = mix(vec3(0.045,0.032,0.019), vec3(0.115,0.086,0.042), organic_micro.g);
 	litter = mix(litter, moss * mix(0.75,1.15,organic_micro.r), smoothstep(0.4,0.7,moss_s.r) * moisture);
 	albedo = mix(albedo, litter, clamp(forest_w * soil * (1.0-far_canopy),0.0,0.88));
-	albedo = mix(albedo, canopy, clamp(forest_w * 0.88 * far_canopy, 0.0, 0.86));
+	albedo = mix(albedo, canopy, clamp(forest_w * 1.45 * far_canopy, 0.0, 1.0));
 
 	albedo = mix(albedo, snow, clamp(snow_w, 0.0, 1.0));
 
 	// Fine contrast so mid-range mountains are not chalk-white.
 	albedo *= mix(0.82, 1.04, rock_s.b * 0.45 + macro_s.b * 0.55);
-	albedo = clamp(albedo, vec3(0.015), vec3(0.78));
+	albedo = clamp(albedo, vec3(0.003), vec3(0.78));
 
 	ALBEDO = albedo;
 	ROUGHNESS = mix(0.94, 0.36, wet_edge) + (rock_micro.b - 0.5) * 0.08;

@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_disabled;
+#include "terrain_canopy.gdshaderinc"
 
 // Coarsest terrain ring. Vertex colour already contains the coast/inland
 // palette, so distant land needs only one low-frequency canopy lookup instead
@@ -27,12 +28,12 @@ void fragment() {
 	vec2 forest_uv = world_pos.xz / max(forest_world_half_extent_m * 2.0, 1.0) + vec2(0.5);
 	float forest_w = texture(forest_map, clamp(forest_uv, vec2(0.0), vec2(1.0))).r;
 	forest_w *= (1.0 - slope * 0.85) * (1.0 - coast_w * 0.7);
-	albedo = mix(albedo, vec3(0.022, 0.048, 0.026), clamp(forest_w * 0.82, 0.0, 0.78));
+	albedo = mix(albedo, canopy_colour(world_pos.xz), clamp(forest_w * 1.45, 0.0, 1.0));
 
 	float snow_w = smoothstep(850.0, 1250.0, world_pos.y) * smoothstep(0.72, 0.94, n.y);
 	albedo = mix(albedo, vec3(0.62, 0.66, 0.69), snow_w);
 	albedo *= mix(1.0, 0.72, slope * 0.75);
 
-	ALBEDO = clamp(albedo, vec3(0.015), vec3(0.72));
+	ALBEDO = clamp(albedo, vec3(0.003), vec3(0.72));
 	ROUGHNESS = 0.94;
 }

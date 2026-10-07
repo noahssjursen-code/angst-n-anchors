@@ -107,6 +107,11 @@ func _test_density(layout: WorldLayout) -> void:
 	_check(is_equal_approx(a, b), "forest density is deterministic")
 	var tex := ForestField.coverage_texture()
 	_check(tex != null and tex.get_width() == ForestField.COVERAGE_MAP_SIZE, "coverage map bakes")
+	var image := tex.get_image()
+	for x in range(9,256,23):
+		for y in range(7,256,29):
+			var point := (Vector2(x+.5,y+.5)/float(ForestField.COVERAGE_MAP_SIZE)-Vector2(.5,.5))*ForestField.world_half_extent_m()*2.0
+			_check(absf(image.get_pixel(x,y).r-ForestField.sample(point))<1.0/255.0, "coverage texel centers match world density")
 	var shore := layout.coastline_contours[0] if not layout.coastline_contours.is_empty() else PackedVector2Array()
 	if shore.size() >= 2:
 		var mid: Vector2 = shore[0].lerp(shore[1], 0.5)

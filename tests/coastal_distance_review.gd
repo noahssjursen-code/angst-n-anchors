@@ -43,16 +43,36 @@ func review() -> void:
 	var target := Vector3(wooded.x,layout.sample_height(wooded),wooded.y)
 	player.global_position = target + Vector3.UP * 2
 	print("WOODLAND TARGET ",target," density ",best)
-	for height in [3.0,35.0,130.0]:
+	var coverage := ForestField.coverage_texture().get_image()
+	var uv := wooded / (ForestField.world_half_extent_m()*2.0) + Vector2(.5,.5)
+	print("COVERAGE TARGET ",coverage.get_pixel(int(uv.x*coverage.get_width()),int(uv.y*coverage.get_height())), " BIND ",world.get_node("WorldTerrainStreamer")._near_material.get_shader_parameter("forest_map"))
+	var views := [3.0,35.0,130.0]
+	if OS.get_cmdline_user_args().has("--far-forest"): views = [1700.0,2100.0,2500.0,3500.0]
+	if OS.get_cmdline_user_args().has("--coverage-debug"):
+		views = [2500.0]
+		var mat: ShaderMaterial = world.get_node("WorldTerrainStreamer")._near_material
+		var debug := Shader.new()
+		debug.code = mat.shader.code.replace("diffuse_burley;", "unshaded;").replace('"terrain_canopy.gdshaderinc"', '"res://resources/shaders/terrain_canopy.gdshaderinc"')
+		debug.code = debug.code.insert(debug.code.rfind("}"), "ALBEDO=vec3(forest_w);\n")
+		mat.shader = debug
+	if OS.get_cmdline_user_args().has("--sea-level"): views = [2100.0,2500.0,3500.0]
+	for height in views:
 		camera.position=target+(Vector3(20,height,30) if height == 3 else Vector3(120,height,180))
+		if OS.get_cmdline_user_args().has("--far-forest"):
+			camera.position = target + Vector3(height,120,height*.25)
+		if OS.get_cmdline_user_args().has("--sea-level"): camera.position.y = 8.0
 		camera.look_at(target+Vector3(0,5,0))
 		await get_tree().create_timer(8).timeout
 		var terrain := world.get_node("WorldTerrainStreamer")
-		for attempt in 120:
-			if terrain.pending_near(camera.global_position, 1800) == 0: break
+		for attempt in 180:
+			if terrain.pending_near(camera.global_position, 1800) == 0 and int(world.get_node("WorldForestStreamer").get_debug_stats().pending) == 0: break
 			await get_tree().create_timer(.25).timeout
 		print("TERRAIN STATS ", terrain.get_debug_stats())
 		await capture("woodland-"+str(int(height)))
+	if OS.get_cmdline_user_args().has("--sea-level"):
+		weather(.08,.35)
+		await get_tree().create_timer(3).timeout
+		await capture("sea-night")
 	print("FOREST STATS ",world.get_node("WorldForestStreamer").get_debug_stats())
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(),true)
 	var timings:Array[float]=[]
