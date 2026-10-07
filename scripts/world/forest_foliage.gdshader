@@ -22,8 +22,10 @@ void vertex() {
 		mat4 facing = mat4(vec4(right * length(MODEL_MATRIX[0].xyz), 0.0), vec4(up * length(MODEL_MATRIX[1].xyz), 0.0), vec4(toward_camera * length(MODEL_MATRIX[2].xyz), 0.0), MODEL_MATRIX[3]);
 		MODELVIEW_MATRIX = VIEW_MATRIX * facing;
 		// Shade the silhouette as a rounded crown, independent of the flat
-		// supporting plane. Sun and ambient still come from the live scene.
-		vec3 crown = right * (UV.x - 0.5) * 1.4 + up * (0.65 - UV.y) * 0.45 + toward_camera * 0.4;
+		// supporting plane. A distant crown represents upper foliage, so its
+		// averaged normal stays in the upper hemisphere even below UV centre.
+		// Sun and ambient still come from the live scene.
+		vec3 crown = right * (UV.x - 0.5) * 1.4 + up * (0.65 + (0.5 - UV.y) * 0.7) + toward_camera * 0.4;
 		canopy_normal_world = normalize(crown);
 	} else {
 	// Light the foliage volume, not the arbitrary rectangle supporting a spray.

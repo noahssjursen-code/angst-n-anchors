@@ -1623,3 +1623,13 @@ For validation against an existing playtest cache, add --verify-forest-cache to
 coastal_distance_review with --whole-forest: this deliberately rebuilds and checks
 all placements for exact equality. Use after optimization, not after intentional
 placement-rule changes (which require a cache version bump).
+
+Distant foliage lighting review (2026-10-07): the billboard represents visible
+upper crown foliage. Keep its averaged shading normal in the upper hemisphere;
+do not shade the lower half of its texture as downward-facing leaves. The live
+sun/ambient still light it (no emission). Shared terrain canopy tint must retain
+readable green/brown values rather than approach black and hide slope form.
+Use forest_visual_demo --capture-lighting for15/45/80degree sun elevations from
+both directions, and coastal_distance_review --forest-only --far-forest
+--whole-forest (also --sea-level) for actual daytime/night distance context.
+These changes must not alter ForestField placement, collision or captain worlds.

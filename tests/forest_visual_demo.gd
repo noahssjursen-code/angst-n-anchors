@@ -32,6 +32,16 @@ func review() -> void:
 		mmi.multimesh=mm;add_child(mmi);trees.append(mmi)
 	label=Label.new();label.position=Vector2(16,80);add_child(label)
 	set_view(0);update_label()
+	if OS.get_cmdline_user_args().has("--capture-lighting"):
+		set_view(1)
+		for elevation in [15.0, 45.0, 80.0]:
+			for azimuth in [-30.0, 150.0]:
+				sun.rotation_degrees=Vector3(-elevation,azimuth,0)
+				for detail in [true,false]:
+					set_detail(detail)
+					await shot("light-%d-%d-%s" % [elevation,azimuth,"near" if detail else "far"],camera.position,Vector3(-35,6,-35))
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--capture-lod"):
 		for tree in trees: tree.free()
 		trees.clear()

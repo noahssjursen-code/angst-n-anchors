@@ -22,5 +22,5 @@ vec3 canopy_colour(vec2 world_xz) {
     float resolved = 1.0-smoothstep(0.35,1.1,length(fwidth(p)));
     float crown = mix(0.55,1.15,1.0-smoothstep(0.03,0.5,nearest));
     crown = mix(0.88,crown,resolved);
-    return mix(vec3(0.006,0.014,0.006),vec3(0.012,0.022,0.008),variation*resolved)*crown;
+    return mix(vec3(0.022,0.036,0.014),vec3(0.040,0.057,0.022),variation*resolved)*crown;
 }
