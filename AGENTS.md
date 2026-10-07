@@ -218,6 +218,27 @@ exclusive manoeuvre-lane leases. Player passage autopilot carries a three-minute
 
 ## Visual Rules — Procedural and Imported Assets
 
+### Materials are part of every physical asset
+
+- Every new physical item MUST reuse a suitable approved material or introduce a
+  suitable new material. This applies to ships, fittings, interiors, cargo, port
+  buildings/equipment, scenery and characters, including procedural geometry.
+  Flat placeholder colours are not finished artwork.
+- Choose the actual surface: painted metal, exposed steel, rubber, timber,
+  fabric, glass, concrete, etc. Use appropriate colour, normal and roughness
+  textures and metallic/occlusion maps where they add useful information. Glass,
+  light lenses and displays need deliberate optical/emissive materials; do not
+  cover them with an unrelated texture merely to satisfy a map count.
+- Search the project's material library first. If it does not fit, find a new
+  source (ambientCG is approved) or author one. Record asset URL, license and
+  usage. Keep texture scale believable in metres and preserve named paint regions,
+  per-instance colour controls and independently animated parts.
+- Inspect new materials close up AND on the assembled object in Godot lighting.
+  Check tiling, seams, normal direction, highlights and distant mip behaviour.
+  Share texture resources, use mipmaps and VRAM compression, and budget texture
+  resolution for the size/frequency of the object on screen. Follow the detailed
+  material contract in `resources/models/README.md`.
+
 ### Mandatory rules for new ship models
 
 - Author individual reusable assets in Blender. Do not revive deleted procedural brick meshes or substitute a complete boat for construction parts. The current model contract and acceptance checks are documented in `resources/models/README.md` under "Ship model authoring contract".

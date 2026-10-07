@@ -1,5 +1,32 @@
 # Imported 3D models
 
+## Mandatory material acceptance for every physical item
+
+Noah's standing rule (7 October 2026): every new physical item must reuse an
+appropriate existing material or introduce a new one. A flat placeholder colour
+does not satisfy asset acceptance. This applies to procedural and imported
+models, ships, interiors, equipment, cargo, ports, scenery and characters.
+
+Choose materials by what the surface is made of and how it is used. Paint is
+dielectric; bare steel/bronze is metallic; rubber, timber and upholstery have
+different grain, roughness and scale. Glass, emissive lenses and screens require
+deliberate optical materials instead of arbitrary diffuse textures. Preserve
+separate named surfaces and independently recolourable parts.
+
+Reuse shared source maps/material profiles before downloading duplicates.
+ambientCG is an approved source (https://ambientcg.com/); its assets are CC0
+(https://docs.ambientcg.com/license/). Record source IDs, URLs, licenses and
+intended usage with new maps. Albedo uses sRGB; normal/roughness/metallic maps
+are data. Use OpenGL normals, mipmaps, VRAM compression and appropriate texture
+resolution. Mapping must have a deliberate metre scale, remain attached to
+moving parts and avoid stretched faces or visible tile boundaries.
+
+Review close-up and assembled Godot renders under useful daylight and artificial
+lighting; verify paint isolation, reflections, normal direction, tiling and
+distant mip behaviour. Do not call an asset finished based only on the presence
+of texture files or a passing geometry test. Archive all captures under
+`C:\Users\noahs\Pictures\machinescreenshots` with unique names.
+
 ## Harbour environment kit (6 October 2026)
 
 `_source/harbour_kit/build_harbour_kit.py` authors six independent Blender/GLB
