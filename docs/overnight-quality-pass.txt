@@ -353,3 +353,15 @@ Batch 41 — Noah's 30-minute authored 3D port LOD session (started13:07UTC)
 - Actual final40km world boot9680ms, clean exit, day/night350/900/1800 archived in coastal-distance-1791379740-127; day350/night900 inspected. Pre-final-brace facility world boot9576ms,1791379169-996. LOD range/hysteresis/repeated swap/cleanup and legacy-image rejection regression passed. Facility plan test passed deterministic9families/constraints/roundtrip. Harbour environment passed4facilities/3terminals/cargo-on-asphalt, player moved6.79m across quay join, office collision localZ7.351m and pedestrian footway. Captures2026-10-06_harbour-rebuild/1791379533...1791379541. One plan invocation had a mistyped scene filename; corrected _test.tscn run passed.
 - Editor import scans emitted existing tool-mode gateway placeholder/shutdown callback errors. Actual rendered review/gameplay runs above were clean; do not count editor import exit as a clean regression. Logs in work: facility-lod-build/review/bench-final, lod-crane-verified-build, lod-final-crane-compare/budget, lod-final-facility/world, port-lod-collision-regression. Source geometry and helper preserve captain saves/geography/water; no subagents used.
 - Remaining: whole-port appearance beyond port unload radius, far crane motion/state, thin-member temporal shimmer and finer art/material detail. Existing forest repetition, coastal height discontinuity/save-compatibility decision, hard night shadows and real remote two-client door/mooring verification remain unfinished. This is an authored mesh LOD implementation, not an all-world graphics completion claim. Prior2f9122e22d1d125ce01061610abbf3341048f5e9 pushed/verified. Keep unrelated hull texture imports, parked spreader work and other generated UIDs out of commits.
+
+SESSION HANDOFF — 7 October 2026, 15:34 Oslo
+Noah's requested30-minute port-model LOD session is complete. Implementation
+commit327adaa9dd3d6287295b4c902f72e67b2e06c3bc pushed and remote SHA verified.
+Existing overnight-marine-models-and-integration automation is PAUSED via app
+tool, preventing another broad unattended batch after this session. Capture,
+validation, performance limits and remaining work are recorded in Batch41.
+Actual test/game processes exited; only Noah's pre-existing Godot process remains.
+Water/geography/captain saves unchanged. No main operations. Remaining working
+tree changes are unrelated hull imports, parked spreader files and generated
+UID sidecars outside this change. Do not treat the broader graphics or remote
+multiplayer verification backlog as complete.
