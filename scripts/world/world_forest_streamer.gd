@@ -2,7 +2,7 @@ class_name WorldForestStreamer
 extends Node3D
 
 ## Streams decorative forest Multimeshes keyed to the independent 256 m patches over
-## terrain. Geometry stops at WorldPropLod ranges; far canopy is shader-only.
+## terrain. DistantForest retains whole-world silhouettes beyond these patches.
 
 const WorldReferenceScript := preload("res://scripts/world/world_reference.gd")
 const PROP_LOD := preload("res://scripts/world/world_prop_lod.gd")
@@ -365,7 +365,7 @@ static func create_placement_job(coord: Vector2i, step_m: float, max_instances: 
 		var j := rng.randi_range(0,i)
 		var value := order[i]; order[i] = order[j]; order[j] = value
 	return {"coord": coord, "step": step_m, "cap": max_instances, "cells": cells,
-		"order": order, "cursor": 0, "transforms": [], "groups": [[], [], [], []], "done": false}
+		"order": order, "cursor": 0, "transforms": [], "groups": [[], [], [], []], "terrain_samples": {}, "done": false}
 
 
 static func advance_placement_job(layout: Object, job: Dictionary, flatten_zones: Array,
@@ -399,7 +399,7 @@ static func advance_placement_job(layout: Object, job: Dictionary, flatten_zones
 		# Flatten pads already zero ForestField; keep a hard reject for safety.
 		if _in_flatten(world_xz, local_zones):
 			continue
-		var height := STREAMER.sample_terrain_height(layout, world_xz, local_zones)
+		var height := sample_root_height(layout, world_xz, local_zones, job.terrain_samples)
 		if height < 1.2:
 			continue
 		var yaw := _hash01(x, z, coord.y, coord.x + 117) * TAU
@@ -410,6 +410,27 @@ static func advance_placement_job(layout: Object, job: Dictionary, flatten_zones
 		if group_species:
 			job.groups[coastal_species(layout, world_xz)].append(xf)
 	job.done = int(job.cursor) >= job.order.size() or transforms.size() >= int(job.cap)
+
+
+## Nearby terrain uses 25m triangles, not the continuous noise field. Sample
+## the same diagonal so trunks meet the visible/collision surface. Cache grid
+## samples per placement job; adjacent trees share most of their vertices.
+static func sample_root_height(layout:Object, point:Vector2, zones:Array, cache:Dictionary) -> float:
+	var step:float=STREAMER.DEFAULT_LOD_STEPS[0]
+	var cell:=Vector2i(floori(point.x/step),floori(point.y/step))
+	var f:=point/step-Vector2(cell)
+	var b:=root_grid_height(layout,cell+Vector2i(1,0),step,zones,cache)
+	var c:=root_grid_height(layout,cell+Vector2i(0,1),step,zones,cache)
+	if f.x+f.y<=1.0:
+		var a:=root_grid_height(layout,cell,step,zones,cache)
+		return a*(1.0-f.x-f.y)+b*f.x+c*f.y
+	var d:=root_grid_height(layout,cell+Vector2i.ONE,step,zones,cache)
+	return b*(1.0-f.y)+c*(1.0-f.x)+d*(f.x+f.y-1.0)
+
+static func root_grid_height(layout:Object, cell:Vector2i, step:float, zones:Array, cache:Dictionary) -> float:
+	if not cache.has(cell):
+		cache[cell]=STREAMER.sample_render_terrain_height(layout,Vector2(cell)*step,zones)
+	return float(cache[cell])
 
 
 static func coastal_species(layout: Object, point: Vector2) -> int:

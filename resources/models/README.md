@@ -1633,3 +1633,16 @@ Use forest_visual_demo --capture-lighting for15/45/80degree sun elevations from
 both directions, and coastal_distance_review --forest-only --far-forest
 --whole-forest (also --sea-level) for actual daytime/night distance context.
 These changes must not alter ForestField placement, collision or captain worlds.
+
+Nearby forest roots (2026-10-07): decorative trees must sit on the visible
+finest terrain triangles, not directly on continuous sample_height noise.
+WorldForestStreamer.sample_root_height follows the b-c diagonal of the default
+25m ground grid and caches shared corner samples per placement job. Do not
+replace it with bilinear interpolation (which differs inside either triangle).
+If the finest terrain spacing changes, keep the root sampler in sync. This
+fixes the nearby forest; persistent distant trees still need alignment with
+changing coarse terrain LODs. World height generation and collision are unchanged.
+Run tests/forest_root_review.tscn with --shipyard-playtest; --baseline-roots
+shows the original continuous-height placements on the same actual terrain.
+The fixture checks every tree against actual mesh vertex heights and archives
+close, context and isolated worst-root captures.
