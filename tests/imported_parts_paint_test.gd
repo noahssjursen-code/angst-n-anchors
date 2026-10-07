@@ -105,8 +105,15 @@ func _ready() -> void:
 	parts.selection.clear()
 	_mouse(editor, camera.unproject_position(midpoint), true)
 	_motion(editor, camera.unproject_position(midpoint) + Vector2(20, 20))
+	assert(is_instance_valid(parts.ghost), "Place drag must show the imported model ghost")
+	for mesh in parts.ghost.find_children("*", "MeshInstance3D", true, false):
+		assert(mesh.material_override is StandardMaterial3D)
+		assert(mesh.material_override.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA)
+		for surface in mesh.mesh.get_surface_count():
+			assert(mesh.get_surface_override_material(surface) == null, "Ghost tint must not allocate unused paint overrides")
 	assert(not parts.selection_box_visible())
 	assert(parts.selection.is_empty())
+	await _capture("parts-library-ghost")
 	_mouse(editor, camera.unproject_position(midpoint) + Vector2(20, 20), false)
 	parts.load_draft("user://imported_parts_paint_test.json")
 	editor.call("_set_tool", ShipyardBrickEditor.Tool.MARK)
@@ -219,12 +226,7 @@ func _ready() -> void:
 	print("PASS: click, box drag both directions, additive selection, Shift toggle, group paint, Delete, undo/redo, visible-surface erase")
 	for i in range(12):
 		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-	var capture_dir := "C:/Users/noahs/Pictures/machinescreenshots"
-	DirAccess.make_dir_recursive_absolute(capture_dir)
-	var capture_path := capture_dir.path_join("parts-library-paint-" + str(Time.get_unix_time_from_system()).replace(".", "-") + ".png")
-	assert(get_viewport().get_texture().get_image().save_png(capture_path) == OK)
-	print("CAPTURE ", capture_path)
+	await _capture("parts-library-paint")
 	print("PASS: two families resolve all 148 perimeter choices; library placement, independent wall/cap and hull paint, erase, and draft round-trip")
 	editor.queue_free()
 	for i in range(4):
@@ -257,3 +259,12 @@ func _key(parts: ImportedShipPartsEditor, code: Key, ctrl := false) -> void:
 	event.pressed = true
 	event.ctrl_pressed = ctrl
 	assert(parts.key_input(event))
+
+
+func _capture(tag: String) -> void:
+	await RenderingServer.frame_post_draw
+	var capture_dir := "C:/Users/noahs/Pictures/machinescreenshots"
+	DirAccess.make_dir_recursive_absolute(capture_dir)
+	var capture_path := capture_dir.path_join(tag + "-" + str(Time.get_unix_time_from_system()).replace(".", "-") + ".png")
+	assert(get_viewport().get_texture().get_image().save_png(capture_path) == OK)
+	print("CAPTURE ", capture_path)

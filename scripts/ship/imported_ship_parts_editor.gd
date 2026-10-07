@@ -472,7 +472,7 @@ func hover(screen: Vector2) -> void:
 	if key == _ghost_key:
 		return
 	clear_ghost()
-	ghost = create_part(candidate)
+	ghost = create_part(candidate, false)
 	editor.get("_world").add_child(ghost)
 	editor.call("_tint_ghost", ghost, true)
 	_ghost_key = key
@@ -485,14 +485,16 @@ func clear_ghost() -> void:
 	_ghost_key = ""
 
 
-func create_part(record: Dictionary) -> Node3D:
+func create_part(record: Dictionary, paint_instance := true) -> Node3D:
+	# Ghosts use a uniform translucent override. Avoid creating hidden paint
+	# materials that can be freed before the renderer processes their dependency.
 	var root := ShipSurfaceKit.create(record) if ShipSurfaceKit.is_surface(record["asset_id"]) else BrickCatalog.create_visual(record["asset_id"])
 	root.position = _position(record)
 	root.rotation_degrees.y = float(record["yaw_degrees"])
 	_fit_wall_ends(root, record)
-	if _paintable(str(record["asset_id"])):
+	if paint_instance and _paintable(str(record["asset_id"])):
 		ModelPaint.apply(root, record.get("colors", {"wall": ModelPaint.encode(wall_color)}))
-	if ShipSurfaceKit.is_surface(record["asset_id"]):
+	if paint_instance and ShipSurfaceKit.is_surface(record["asset_id"]):
 		ModelPaint.apply(root, record.get("colors", surface_colors))
 	if BrickCatalog.get_entry(record["asset_id"]).get("style","") in ["door","wheel","throttle","helm_chair","passenger_seat","display"]:
 		var driver:=ShipPartState.new()
@@ -1621,7 +1623,7 @@ func _hover_surface(screen: Vector2) -> void:
 	clear_ghost()
 	_ghost_key=key
 	if not _surface_fits(points): return
-	ghost=create_part(record)
+	ghost=create_part(record, false)
 	editor.get("_world").add_child(ghost)
 	editor.call("_tint_ghost",ghost,true)
 
