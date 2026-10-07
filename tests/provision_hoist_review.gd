@@ -51,9 +51,24 @@ func review() -> void:
 	await shot("jib-joint",crane.get_boom().global_position+Vector3(4,3,-7),crane.get_boom().global_position+Vector3(0,0,-10))
 	await shot("hook",hook+Vector3(2.4,1.7,3.4),hook+Vector3(0,.5,0))
 	await shot("trolley",crane.get_talje_global()+Vector3(3,-1,4),crane.get_talje_global())
+	await shot("winch",crane.get_boom().to_global(Vector3(2.5,-.4,13)),crane.get_boom().to_global(Vector3(-.3,-1.8,10)))
+	var wheel_pose:=crane._running_wheels[0].basis
+	var lower_pose:=crane._lower_sheave.basis
+	var drum_pose:=crane._hoist_drum.basis
+	var fixed_head_pose:=crane._head_sheaves[1].basis
 	var start:=crane.get_hook_global();crane.hoist_length_m=18
+	assert(not crane._lower_sheave.basis.is_equal_approx(lower_pose))
+	assert(not crane._hoist_drum.basis.is_equal_approx(drum_pose))
+	assert(crane._head_sheaves[1].basis.is_equal_approx(fixed_head_pose),"Tip-side pulley must not spin with only hoist motion")
+	assert(crane._running_wheels[0].basis.is_equal_approx(wheel_pose),"Stationary trolley wheels spun")
+	await shot("trolley-hoisted",crane.get_talje_global()+Vector3(3,-1,4),crane.get_talje_global())
+	crane.hoist_length_m=10
+	assert(crane._lower_sheave.basis.is_equal_approx(lower_pose),"Reverse motion did not restore phase")
+	crane.hoist_length_m=18
 	assert(crane.get_hook_global().is_equal_approx(start+Vector3(0,-8,0)))
 	crane.trolley_z_m=-30;crane.slew_degrees=35
+	assert(not crane._running_wheels[0].basis.is_equal_approx(wheel_pose))
+	await shot("trolley-travelled",crane.get_talje_global()+Vector3(3,-1,4),crane.get_talje_global())
 	await shot("moved",Vector3(55,48,50),Vector3(0,22,-15))
 	print("PROVISION HOIST MOTION PASS")
 	# Endpoints must meet the authored pulley tangents at every sampled pose.
@@ -71,6 +86,13 @@ func review() -> void:
 		var foundation:=test_crane.get_node("Model").find_child("tower_foundation",true,false)
 		var seat:=foundation.find_child("MastSeat",true,false) as Node3D
 		assert(seat.global_position.distance_to(test_crane.get_girder().global_position)<.0001,"Tower is not seated on the foundation")
+		for request in [-10000.0,10000.0]:
+			test_crane.trolley_z_m=request
+			var local_travel:float=test_crane.trolley_z_m/size
+			assert(local_travel>=-54.0 and local_travel<=-1.0)
+			for wheel in test_crane._running_wheels:
+				var point:Vector3=test_crane._waist_rails.to_local(wheel.global_position)/size
+				assert(point.z>=-54.501 and point.z<=-.499,"Wheel beyond rail endpoint")
 		var station:=test_crane.get_engine().get_node("machinery_station") as Node3D
 		var pivot:=station.find_child("JibPivot",true,false) as Node3D
 		assert(pivot.global_position.distance_to(test_crane.get_boom().global_position)<.0001,"Station support misses boom pivot")
@@ -85,7 +107,12 @@ func review() -> void:
 		for length in [2.0,10.0,32.0]:
 			test_crane.hoist_length_m=length
 			test_crane.slew_degrees=length*3
-			test_crane.trolley_z_m=-length
+			test_crane.trolley_z_m=-length*size
+			for side in 2:
+				var rope:=test_crane._feed_ropes[side]
+				var endpoint:=rope.to_global(Vector3(0,0,-1))
+				var tangent:=test_crane._talje.to_global(Vector3(-.3 if side==0 else .3,-.88,.17 if side==0 else -.17)*size)
+				assert(endpoint.distance_to(tangent)<.0001,"Feed rope misses upper pulley")
 			for x in [-.30,.30]:
 				var end:=test_crane._wire_mesh.to_global(Vector3(x,-10,0))
 				var tangent:=test_crane.get_hook().to_global(Vector3(x,.85,0)*size)
@@ -93,6 +120,19 @@ func review() -> void:
 			assert(test_crane.get_hook().scale==Vector3.ONE,"Hoist stretched the hook")
 		test_crane.queue_free()
 		await get_tree().process_frame
+	# Sliding the trolley exchanges the two horizontal spans without reeling rope.
+	crane.hoist_length_m=10
+	var drum_at_rest:=crane._hoist_drum.basis
+	var span_total:=-1.0
+	for outreach in [-1.0,-27.0,-54.0]:
+		crane.trolley_z_m=outreach
+		var total:=0.0
+		for rope in crane._feed_ropes:
+			total+=rope.transform.basis.z.length()
+		if span_total<0:span_total=total
+		assert(is_equal_approx(span_total,total),"Trolley travel changed total feed-rope length")
+		assert(crane._hoist_drum.basis.is_equal_approx(drum_at_rest),"Trolley travel turned hoist drum")
+	await shot("tip-limit",crane.get_talje_global()+Vector3(3,-.3,4),crane.get_talje_global())
 	var container:=ContainerNode.new();add_child(container)
 	container.setup(ContainerUnit.create("hoist-review","provisions",3200,"20ft"))
 	assert(crane.attach_container(container))

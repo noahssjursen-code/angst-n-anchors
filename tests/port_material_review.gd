@@ -32,6 +32,7 @@ func review_materials() -> void:
 	if OS.get_cmdline_user_args().has("--provision-review"):
 		var hook := crane.to_local(crane.get_hook_global())
 		views = [
+			["provision-winch", crane.to_local(crane.get_boom().to_global(Vector3(2.5,-.4,13))), crane.to_local(crane.get_boom().to_global(Vector3(-.3,-1.8,10)))],
 			["provision-cab", Vector3(5,34,-6), Vector3(0,32.5,0)],
 			["provision-station", Vector3(-7,36,9), Vector3(-.5,32.5,0)],
 			["provision-quay", Vector3(55,48,50), Vector3(0,22,-15)],

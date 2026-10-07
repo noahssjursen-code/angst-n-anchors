@@ -1435,3 +1435,40 @@ All captures remain archived in Pictures/machinescreenshots.
 Still unfinished: winch/feed-rope routing, rotating sheaves/wheels, and replacing
 the build-then-discard legacy visual assembly with a direct imported rig. Do not
 call the complete crane mechanically finished or the entire art pass accepted.
+
+### Provision hoist reeving and moving parts (7 October follow-up)
+
+The hook block, trolley and new winch retain independent named rotating mesh nodes:
+LowerSheave, HeadSheave_L/R, RunningWheel_LF/LB/RF/RB and HoistDrum. Do not join
+these into the static chassis or bake their rotation into a whole-crane animation.
+The two upper pulleys now lie in the fore/aft vertical plane; the previous
+sideways discs could not redirect the longitudinal feed ropes into the falls.
+
+The main hoist is a two-fall presentation: counter-jib winch -> left upper pulley
+-> hook block -> right upper pulley -> fixed jib-end anchor. Two instances of an
+authored 1m rope scale in length only. Radius stays12mm. Straight segments meet
+quarter-turn wraps at the upper pulleys and the lower half-wrap at the block.
+The new winch includes an independent drum with wound cable, motor/reduction unit
+and mounting bracket. Its winding is a fixed layer; there is no fleet-angle or
+multi-layer spooling simulation. No trolley drive cable or rope-sag physics yet.
+
+Animation is derived from current trolley/hoist positions, not input or an idle
+clock. Wheel phase follows travel/radius; drum payout is twice hook travel. The
+tip-side head sheave stays still during pure hoisting. Trolley movement exchanges
+the horizontal spans without turning the hoist drum. Reversing positions exactly
+restores phases, including direct pose assignments. This adds no network state.
+
+Rail coverage is now0.5-54.5m for wheel axles0.5m either side of the1-54m trolley
+centre limits. Use ten5m pairs and one4m end pair; the old3m asset remains available
+but is not assembled by the default crane. Default-model travel limits scale with
+model_scale, preventing small cranes from rolling beyond their shorter tracks.
+Full-size reach is unchanged; custom JSON models keep their prior limit handling.
+Structure generator accepts --asset=<name> for a scoped part rebake.
+
+All six hoist GLBs total15212triangles/21surfaces, including4608triangles in the
+close-up cable winding. Moving steel uses vertex-colour witness marks to avoid a
+second material draw for each wheel. Twelve512px baked maps remain compressed
+and mipmapped. Actual close-up and port views plus tangent, phase, end-limit and
+real-container regression checks are in provision_hoist_review/port_material_review.
+The retained legacy build-then-replace assembly and live model_scale rebuild
+lifecycle still merit a separate pass. These changes do not add crane walk-up use.

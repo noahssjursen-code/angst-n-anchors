@@ -53,6 +53,8 @@ def plate(n,outline,thickness,m=paint):
 def socket(n,p):
     o=bpy.data.objects.new(n,None);bpy.context.collection.objects.link(o);o.location=p;return o
 def export(n):
+    selected=[a.split("=",1)[1] for a in sys.argv if a.startswith("--asset=")]
+    if selected and n not in selected: return
     # One origin-centred mesh per GLB; cable length scales about its upper endpoint.
     meshes=[o for o in bpy.context.scene.objects if o.type=='MESH']
     for o in meshes:
@@ -124,12 +126,12 @@ clear()
 rod('End lower tie',(-.6,0,-.55),(.6,0,-.55),.055,paint,10)
 for x in [-.6,.6]:rod('End triangle',(x,0,-.55),(0,0,1.1),.055,paint,10)
 export('jib_end_frame')
-for length in [5,3]:
+for length in [5,3,4]:
     clear()
     for x in [-.42,.42]:
         o=box('Continuous trolley rail',(x,length/2,-.78),(.10,length,.12),steel)
         o.modifiers.clear() # mating faces must remain flat, without end bevel gaps
-    for y in ([.5,3.0] if length==5 else [.5]):
+    for y in ([.5,3.0] if length>=4 else [.5]):
         box('Rail cross bearer',(0,y,-.56),(1.2,.08,.10),steel)
         for x in [-.42,.42]:box('Rail hanger',(x,y,-.665),(.08,.08,.23),steel)
     for o in bpy.context.scene.objects:

@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://78sje2mvfv37"
-path.s3tc="res://.godot/imported/provision_hook_block_provision_hook_block_roughness.png-4a70ef1285954a6ee4ee8ebacad4fa4e.s3tc.ctex"
+uid="uid://ba1jp7gir0gxn"
+path.s3tc="res://.godot/imported/provision_hoist_winch_provision_hoist_winch_normal.png-72bccdc9214614a0231a19a204afec26.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "c0006bf27c2c1fe6279f1f0a1f6c9df3"
+"md5": "7f2b65840f37aca1f53a1ef5eb2dc50c"
 }
 
 [deps]
 
-source_file="res://resources/models/parts/provision_hoist/provision_hook_block_provision_hook_block_roughness.png"
-dest_files=["res://.godot/imported/provision_hook_block_provision_hook_block_roughness.png-4a70ef1285954a6ee4ee8ebacad4fa4e.s3tc.ctex"]
+source_file="res://resources/models/parts/provision_hoist/provision_hoist_winch_provision_hoist_winch_normal.png"
+dest_files=["res://.godot/imported/provision_hoist_winch_provision_hoist_winch_normal.png-72bccdc9214614a0231a19a204afec26.s3tc.ctex"]
 
 [params]
 
@@ -25,7 +25,7 @@ compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=0
+compress/normal_map=1
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1

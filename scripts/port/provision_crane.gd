@@ -66,6 +66,11 @@ var _wire_mesh_base_scale := Vector3.ONE
 var _hook: Node3D
 var _wire_rest_length := WIRE_REST_LENGTH_M
 var _imported_hoist := false
+var _running_wheels: Array[Node3D] = []
+var _head_sheaves: Array[Node3D] = []
+var _lower_sheave: Node3D
+var _hoist_drum: Node3D
+var _feed_ropes: Array[Node3D] = []
 const HOIST_MODELS := "res://resources/models/parts/provision_hoist/"
 const LOWER_SHEAVE_HEIGHT_M := 0.85
 var _talje_rail_y := -0.78
@@ -81,6 +86,11 @@ func _ready() -> void:
 
 func reload_model() -> void:
 	_imported_hoist = false
+	_running_wheels.clear()
+	_head_sheaves.clear()
+	_feed_ropes.clear()
+	_lower_sheave = null
+	_hoist_drum = null
 	_pad = null
 	_girder = null
 	_cabin = null
@@ -127,6 +137,7 @@ func _bind_rig() -> void:
 		_install_imported_hoist()
 		_install_imported_structure()
 		_install_imported_station()
+		_install_hoist_motion()
 	_apply_slew()
 	_apply_trolley()
 	_apply_hoist()
@@ -135,8 +146,9 @@ func _bind_rig() -> void:
 
 func _load_meta() -> void:
 	var meta := _model_meta()
-	trolley_min_z_m = float(meta.get("rail_z_min_m", trolley_min_z_m))
-	trolley_max_z_m = float(meta.get("rail_z_max_m", trolley_max_z_m))
+	var reach_scale := model_scale if model_path == DEFAULT_MODEL else 1.0
+	trolley_min_z_m = float(meta.get("rail_z_min_m", -54.0 if model_path == DEFAULT_MODEL else trolley_min_z_m))*reach_scale
+	trolley_max_z_m = float(meta.get("rail_z_max_m", -1.0 if model_path == DEFAULT_MODEL else trolley_max_z_m))*reach_scale
 	_wire_rest_length = float(meta.get("wire_rest_length_m", WIRE_REST_LENGTH_M))
 	if _talje != null and is_instance_valid(_talje):
 		_talje_rail_y = _talje.position.y
@@ -211,6 +223,50 @@ func _install_imported_hoist() -> void:
 	_imported_hoist = true
 
 
+func _install_hoist_motion() -> void:
+	for side in ["L", "R"]:
+		for end in ["F", "B"]:
+			_running_wheels.append(_talje.find_child("RunningWheel_"+side+end,true,false) as Node3D)
+		_head_sheaves.append(_talje.find_child("HeadSheave_"+side,true,false) as Node3D)
+	_lower_sheave = _hook.find_child("LowerSheave",true,false) as Node3D
+	for entry in [["provision_hoist_winch", Vector3(-.3,-1.96,10)], ["provision_rope_anchor", Vector3(.3,-1.66,-54.8)]]:
+		var scene := load(HOIST_MODELS+entry[0]+".glb") as PackedScene
+		var visual := scene.instantiate() as Node3D
+		visual.position = entry[1]*model_scale
+		visual.scale = Vector3.ONE*model_scale
+		_boom.add_child(visual)
+		if entry[0] == "provision_hoist_winch":
+			_hoist_drum = visual.find_child("HoistDrum",true,false) as Node3D
+	var rope_scene := load(HOIST_MODELS+"provision_feed_rope_1m.glb") as PackedScene
+	for side in 2:
+		var rope := rope_scene.instantiate() as Node3D
+		rope.name = "FeedRope"+str(side)
+		_boom.add_child(rope)
+		_feed_ropes.append(rope)
+
+
+func _update_hoist_motion() -> void:
+	if _running_wheels.is_empty():
+		return
+	# Position-derived phases also respond to replicated poses and reverse exactly.
+	# The right fall is anchored at the tip; the drum pays out twice the hook travel.
+	var travel := trolley_z_m/model_scale
+	var drop := hoist_length_m/model_scale
+	for wheel in _running_wheels:
+		wheel.rotation.x = fposmod(travel/.18,TAU)
+	_head_sheaves[0].rotation.x = fposmod(-(2.0*drop+travel)/.17,TAU)
+	_head_sheaves[1].rotation.x = fposmod(-travel/.17,TAU)
+	_lower_sheave.rotation.z = fposmod((drop+travel)/.30,TAU)
+	_hoist_drum.rotation.x = fposmod(-2.0*drop/.30,TAU)
+	for side in 2:
+		var fixed := Vector3(-.3,-1.66,10) if side==0 else Vector3(.3,-1.66,-54.8)
+		var moving := _talje.position + Vector3(-.3 if side==0 else .3,-.88,.17 if side==0 else -.17)*model_scale
+		var start := fixed*model_scale
+		var direction := moving-start
+		var basis := Basis.looking_at(direction.normalized(),Vector3.UP)
+		_feed_ropes[side].transform = Transform3D(basis.scaled(Vector3(model_scale,model_scale,direction.length())),start)
+
+
 func _install_imported_station() -> void:
 	# Preserve the nested authority/pose roles and their conservative colliders.
 	_clear_station_meshes(_cabin, _engine)
@@ -263,9 +319,9 @@ func _install_imported_structure() -> void:
 	_structure_modules(_boom,"jib_end_frame",[Vector3(0,0,-55)])
 	var rail_offsets: Array[Vector3] = []
 	for section in 10:
-		rail_offsets.append(Vector3(0,0,-1-section*5))
+		rail_offsets.append(Vector3(0,0,-.5-section*5))
 	_structure_modules(_waist_rails,"trolley_rails_5m",rail_offsets)
-	_structure_modules(_waist_rails,"trolley_rails_3m",[Vector3(0,0,-51)])
+	_structure_modules(_waist_rails,"trolley_rails_4m",[Vector3(0,0,-50.5)])
 	# Match the raised upper chord; retain the original lower-jib collider.
 	var body := StaticBody3D.new()
 	body.collision_layer = 1
@@ -318,6 +374,7 @@ func _apply_trolley() -> void:
 	if _talje == null or not is_instance_valid(_talje):
 		return
 	_talje.position = Vector3(0.0, _talje_rail_y, trolley_z_m)
+	_update_hoist_motion()
 	trolley_changed.emit(trolley_z_m)
 
 
@@ -342,6 +399,7 @@ func _apply_hoist() -> void:
 	if _hook != null and is_instance_valid(_hook):
 		_hook.position = _hoist_attachment_on_talje()
 		_hook.rotation = _wire.rotation
+	_update_hoist_motion()
 	hoist_changed.emit(hoist_length_m)
 
 
