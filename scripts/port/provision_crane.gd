@@ -126,6 +126,7 @@ func _bind_rig() -> void:
 	if model_path == DEFAULT_MODEL:
 		_install_imported_hoist()
 		_install_imported_structure()
+		_install_imported_station()
 	_apply_slew()
 	_apply_trolley()
 	_apply_hoist()
@@ -208,6 +209,46 @@ func _install_imported_hoist() -> void:
 	_wire_mesh = _find_wire_mesh(_wire)
 	_wire_mesh_base_scale = _wire_mesh.scale
 	_imported_hoist = true
+
+
+func _install_imported_station() -> void:
+	# Preserve the nested authority/pose roles and their conservative colliders.
+	_clear_station_meshes(_cabin, _engine)
+	_clear_station_meshes(_engine, _boom)
+	_clear_station_meshes(_pad, _girder)
+	var counterweight := _part("counterweight")
+	_clear_station_meshes(counterweight, null)
+	for entry in [[_cabin, "operator_cab"], [_cabin, "slew_platform"], [_engine, "machinery_station"], [_pad, "tower_foundation"], [counterweight, "counterweight_rack"]]:
+		var scene := load("res://resources/models/parts/provision_station/" + entry[1] + ".glb") as PackedScene
+		assert(scene != null)
+		var visual := scene.instantiate() as Node3D
+		visual.name = entry[1]
+		visual.scale = Vector3.ONE * model_scale
+		entry[0].add_child(visual)
+	# New deck and raised cab roof extend beyond the old opaque-body collision.
+	for entry in [[Vector3(-.55,.35,1.105), Vector3(5.20,.10,5.19)], [Vector3(0,2.55,-.04), Vector3(2.36,.14,2.64)]]:
+		var body := StaticBody3D.new()
+		body.collision_layer = 1
+		body.collision_mask = 0
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = entry[1]
+		shape.shape = box
+		shape.position = entry[0]
+		body.add_child(shape)
+		body.scale = Vector3.ONE * model_scale
+		_cabin.add_child(body)
+
+
+func _clear_station_meshes(node: Node, stop: Node) -> void:
+	for child in node.get_children():
+		if child == stop:
+			continue
+		if child is MeshInstance3D:
+			node.remove_child(child)
+			child.queue_free()
+		else:
+			_clear_station_meshes(child, stop)
 
 
 func _install_imported_structure() -> void:

@@ -1402,3 +1402,36 @@ Manufacturer tower-joint/ladder/landing visual reference (original game dimensio
 https://www.liebherr.com/en-gb/tower-cranes/technologies/tower-systems-5222681
 provision_hoist_review checks module seams at three scales, physical ray hits,
 hoist/load contracts and optional --baseline-structure comparisons.
+
+### Provision crane cab, station and ballast (7 October)
+
+The remaining default T-crane visual bodies now use five separate Blender assets
+in parts/provision_station: operator_cab, machinery_station, slew_platform,
+tower_foundation and counterweight_rack. The generator and five standalone blends
+are under _source/provision_station. Total 5820 triangles / 11 material surfaces;
+fifteen 512px baked maps have mipmaps and verified VRAM compression. Enamel,
+ochre paint, dark steel, glazing and non-metallic cast concrete stay distinct.
+
+The existing ModelAssembler roles still own slew/trolley/hoist/cargo. Only their
+visual meshes are replaced; custom JSON model paths retain their old presentation.
+MastSeat is exactly (0,1,0) in Godot; machinery JibPivot is (-1.75,3.7,-.25).
+The wider 5.20 x 5.19m service deck has its own moving collision, as does the
+raised cab roof. Other old conservative collision envelopes are retained.
+Railings, cab furniture/door and service access are visual details, not new
+climbable routes or player interaction. Preserve that distinction in UI/docs.
+
+The original cab geometry takes cues from large forward/downward glazing and
+side controls described by the manufacturer, not an exact product replica:
+https://www.liebherr.com/en-ca/tower-cranes/technologies/crane-cabin-4020326
+The bearing, anchors and retained ballast dimensions are game presentation;
+no certified structural calculations or crane load rating is implied.
+
+provision_hoist_review now captures the cab/foundation/ballast and checks station
+pivot, mast mounting and roof/platform collision at three scales. Optional
+--baseline-station restores only the previous station visuals for comparison.
+port_material_review --provision-review includes front/rear station views.
+All captures remain archived in Pictures/machinescreenshots.
+
+Still unfinished: winch/feed-rope routing, rotating sheaves/wheels, and replacing
+the build-then-discard legacy visual assembly with a direct imported rig. Do not
+call the complete crane mechanically finished or the entire art pass accepted.

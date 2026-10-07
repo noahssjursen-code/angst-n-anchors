@@ -20,9 +20,10 @@ func review() -> void:
 	world.environment.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR;world.environment.ambient_light_color=Color(.72,.8,.9);world.environment.ambient_light_energy=.65
 	add_child(world)
 	var sun:=DirectionalLight3D.new();sun.rotation_degrees=Vector3(-45,-30,0);sun.light_energy=1.4;sun.shadow_enabled=true;add_child(sun)
-	if OS.get_cmdline_user_args().has("--baseline-structure"):
+	if OS.get_cmdline_user_args().has("--baseline-structure") or OS.get_cmdline_user_args().has("--baseline-station"):
 		var baseline:=GDScript.new()
-		baseline.source_code="extends ProvisionCrane\nfunc _install_imported_structure() -> void:\n\tpass\n"
+		var method := "_install_imported_station" if OS.get_cmdline_user_args().has("--baseline-station") else "_install_imported_structure"
+		baseline.source_code="extends ProvisionCrane\nfunc "+method+"() -> void:\n\tpass\n"
 		assert(baseline.reload()==OK)
 		crane=baseline.new()
 	else:
@@ -41,6 +42,11 @@ func review() -> void:
 	var hook:=crane.get_hook_global()
 	print("HOOK ",hook," TROLLEY ",crane.get_talje_global())
 	await shot("whole",Vector3(55,48,50),Vector3(0,22,-15))
+	await shot("cab-front",crane.get_cabin().global_position+Vector3(7,4,-9),crane.get_cabin().global_position+Vector3(0,1.5,0))
+	await shot("cab-detail",crane.get_cabin().global_position+Vector3(3,2,-4),crane.get_cabin().global_position+Vector3(0,1.5,0))
+	await shot("cab-rear",crane.get_cabin().global_position+Vector3(-7,5,9),crane.get_cabin().global_position+Vector3(0,1.5,0))
+	await shot("foundation",Vector3(6,4,7),Vector3(0,.65,0))
+	await shot("counterweight",crane.get_boom().to_global(Vector3(4,-1,21)),crane.get_boom().to_global(Vector3(0,-1.7,16.5)))
 	await shot("mast-joint",Vector3(5,13,6),Vector3(0,11,0))
 	await shot("jib-joint",crane.get_boom().global_position+Vector3(4,3,-7),crane.get_boom().global_position+Vector3(0,0,-10))
 	await shot("hook",hook+Vector3(2.4,1.7,3.4),hook+Vector3(0,.5,0))
@@ -52,8 +58,23 @@ func review() -> void:
 	print("PROVISION HOIST MOTION PASS")
 	# Endpoints must meet the authored pulley tangents at every sampled pose.
 	for size in [.5,1.0,1.4]:
-		var test_crane:=ProvisionCrane.new();test_crane.model_scale=size;add_child(test_crane)
+		var test_crane:=ProvisionCrane.new();test_crane.model_scale=size;test_crane.position.x=200*size;add_child(test_crane)
 		for frame in 4:await get_tree().process_frame
+		await get_tree().physics_frame
+		var cab:=test_crane.get_cabin()
+		for x in [0.0,1.8]:
+			var start_ray:=cab.to_global(Vector3(x,4,0)*size)
+			var end_ray:=cab.to_global(Vector3(x,0,0)*size)
+			var hit:=space.intersect_ray(PhysicsRayQueryParameters3D.create(start_ray,end_ray,1))
+			assert(not hit.is_empty(),"Cab roof or service platform collision missing")
+			assert(cab.is_ancestor_of(hit.collider),"Ray hit another test crane")
+		var foundation:=test_crane.get_node("Model").find_child("tower_foundation",true,false)
+		var seat:=foundation.find_child("MastSeat",true,false) as Node3D
+		assert(seat.global_position.distance_to(test_crane.get_girder().global_position)<.0001,"Tower is not seated on the foundation")
+		var station:=test_crane.get_engine().get_node("machinery_station") as Node3D
+		var pivot:=station.find_child("JibPivot",true,false) as Node3D
+		assert(pivot.global_position.distance_to(test_crane.get_boom().global_position)<.0001,"Station support misses boom pivot")
+		assert(test_crane.get_cabin().get_node("operator_cab").scale.is_equal_approx(Vector3.ONE*size))
 		var mast:=test_crane.get_girder().get_node("mast_section_5m") as MultiMeshInstance3D
 		var jib:=test_crane.get_boom().get_node("jib_section_5m") as MultiMeshInstance3D
 		assert(mast.multimesh.instance_count==6 and jib.multimesh.instance_count==15)
