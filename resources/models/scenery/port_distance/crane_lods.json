@@ -41,6 +41,12 @@
     "res://resources/models/parts/provision_structure/trolley_rails_5m.glb": "698b037d5e1960798aabf5a2c5d045c0bd3dfbd7074ce551c059a5c37166dfab",
     "res://scripts/core/impostor_warmup.gd": "dff400e64ca3edb83466c8d2fbcc063ee9c9aa6b80669addd76b045128a91b89",
     "res://scripts/port/bulk_crane.gd": "72e99ed52fe8a1bb054d10323884ad88353ff745a9ad550b0b7f61596767f03e",
-    "res://scripts/port/provision_crane.gd": "446697c3b6aa69c28381674a9f1c96e1a6aebf6f8b955bd934c4c2304307dc2f"
+    "res://scripts/port/provision_crane.gd": "a256667ad6b7bb4fac68546b9c7b8ca70dccd94793f1c7644123833d221a3479"
+  },
+  "material_only_revision": {
+    "file": "res://scripts/port/provision_crane.gd",
+    "previous_sha256": "446697c3b6aa69c28381674a9f1c96e1a6aebf6f8b955bd934c4c2304307dc2f",
+    "current_sha256": "a256667ad6b7bb4fac68546b9c7b8ca70dccd94793f1c7644123833d221a3479",
+    "reason": "Shared surface finish and finished MultiMesh resource only; no geometry, transforms, pivots or animation changes. Runtime LOD finishes use the same library."
   }
 }

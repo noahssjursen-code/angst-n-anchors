@@ -1,12 +1,12 @@
 extends Node
 
 
-func _material(root: Node, prefix: String) -> StandardMaterial3D:
+func _material(root: Node, prefix: String) -> Material:
 	for node in root.find_children("*", "MeshInstance3D", true, false):
 		for index in range(node.mesh.get_surface_count()):
 			var base: Material = node.mesh.surface_get_material(index)
 			if base.resource_name.begins_with(prefix):
-				return node.get_active_material(index) as StandardMaterial3D
+				return node.get_active_material(index)
 	return null
 
 
@@ -69,21 +69,21 @@ func _ready() -> void:
 	var painted_wall := _material(painted,"Warm white painted steel")
 	var other_wall := _material(untouched,"Warm white painted steel")
 	assert(painted_wall != null and other_wall != null)
-	assert(painted_wall.albedo_color.is_equal_approx(Color(0.85,0.12,0.08)))
-	assert(not other_wall.albedo_color.is_equal_approx(painted_wall.albedo_color), "Paint must not leak to another instance")
+	assert(SurfaceMaterialLibrary.colour_of(painted_wall).is_equal_approx(Color(0.85,0.12,0.08)))
+	assert(not SurfaceMaterialLibrary.colour_of(other_wall).is_equal_approx(SurfaceMaterialLibrary.colour_of(painted_wall)), "Paint must not leak to another instance")
 	var cap := _material(painted,"Dark gunwale cap")
-	var cap_before := cap.albedo_color
+	var cap_before := SurfaceMaterialLibrary.colour_of(cap)
 	ModelPaint.apply(painted,{"wall":Color.BLUE})
-	assert(_material(painted,"Dark gunwale cap").albedo_color.is_equal_approx(cap_before))
+	assert(SurfaceMaterialLibrary.colour_of(_material(painted,"Dark gunwale cap")).is_equal_approx(cap_before))
 	parts.hull_pickers["upper"].color_changed.emit(Color(0.2,0.45,0.7))
 	parts.hull_pickers["lower"].color_changed.emit(Color(0.5,0.12,0.05))
 	parts.hull_pickers["deck"].color_changed.emit(Color(0.7,0.65,0.45))
 	var hull: Node = editor.get("_imported_hull_preview")
-	assert(_material(hull,"Paint_HullUpper").albedo_color.is_equal_approx(Color(0.2,0.45,0.7)))
-	assert(_material(hull,"Paint_HullLower").albedo_color.is_equal_approx(Color(0.5,0.12,0.05)))
-	assert(_material(hull,"Paint_Deck").albedo_color.is_equal_approx(Color(0.7,0.65,0.45)))
+	assert(SurfaceMaterialLibrary.colour_of(_material(hull,"Paint_HullUpper")).is_equal_approx(Color(0.2,0.45,0.7)))
+	assert(SurfaceMaterialLibrary.colour_of(_material(hull,"Paint_HullLower")).is_equal_approx(Color(0.5,0.12,0.05)))
+	assert(SurfaceMaterialLibrary.colour_of(_material(hull,"Paint_Deck")).is_equal_approx(Color(0.7,0.65,0.45)))
 	var stripe := _material(hull,"Fixed_BootStripe")
-	assert(stripe.albedo_texture == null and stripe.albedo_color.r < 0.3, "Boot stripe stays dark and fixed")
+	assert(stripe.get_meta("marine_profile") == "dark_enamel" and SurfaceMaterialLibrary.colour_of(stripe).r < 0.3, "Boot stripe stays dark and fixed")
 	var snapshot := JSON.stringify(parts.records)
 	var colors := JSON.stringify(parts.hull_colors)
 	parts.save_draft("user://imported_parts_paint_test.json")

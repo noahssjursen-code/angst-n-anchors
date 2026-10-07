@@ -95,7 +95,7 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 				all_detail = all_detail and material != null and entry.get("walk_exclude_materials",[]).has(material.resource_name)
 			if all_detail:mesh.set_meta("walk_detail_visual",true)
 		for component in entry.get("components",[]):
-			var part := create_visual(component["id"])
+			var part := create_visual(component["id"], {"skip_finish":opts.get("skip_finish", false)})
 			if component.has("pivot"):
 				var pivots:=model.find_children(component["pivot"]+"*","Node3D",true,false)
 				if not pivots.is_empty(): pivots[0].add_child(part)
@@ -116,6 +116,7 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			light.lens_energy_scale=.35
 			light.spot_angle_deg=48
 			aim.add_child(light)
+		if not opts.get("skip_finish", false): SurfaceMaterialLibrary.apply(root)
 		if bool(opts.get("preview_mesh", false)):
 			model.position -= visual_bounds(root).get_center()
 		if (entry["style"] == "halfwall" or entry.get("paintable", false)) and opts.has("color"):

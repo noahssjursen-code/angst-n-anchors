@@ -30,6 +30,7 @@ func review() -> void:
 			var state := GLTFState.new()
 			assert(document.append_from_file("res://resources/models/_source/port_distance/"+kind+"_source.glb", state)==OK)
 			var full := document.generate_scene(state) as Node3D
+			SurfaceMaterialLibrary.apply(full)
 			var low := ImpostorService.stamp("crane:"+kind)
 			add_child(full);add_child(low)
 			var bounds := ImpostorCache.compute_local_aabb(full)

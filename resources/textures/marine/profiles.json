@@ -1,0 +1,616 @@
+{
+  "hull_painted_plate": {
+    "asset": "MetalPlates001",
+    "metres": [
+      3.2,
+      3.2
+    ],
+    "source_mean": 0.235,
+    "roughness_low": 0.28,
+    "roughness_high": 0.68,
+    "relief": 0.22,
+    "metal_amount": 0,
+    "colour_contrast": 0.38,
+    "source_colour": 0,
+    "use_metal_map": false,
+    "corrosion": 0.34,
+    "corrosion_metres": 3.7
+  },
+  "antifouling": {
+    "asset": "Paint004",
+    "metres": [
+      1.1,
+      1.1
+    ],
+    "source_mean": 0.723,
+    "roughness_low": 0.68,
+    "roughness_high": 0.92,
+    "relief": 0.12,
+    "metal_amount": 0,
+    "colour_contrast": 0.38,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "cabin_enamel": {
+    "asset": "Paint004",
+    "metres": [
+      0.8,
+      0.8
+    ],
+    "source_mean": 0.723,
+    "roughness_low": 0.24,
+    "roughness_high": 0.58,
+    "relief": 0.07,
+    "metal_amount": 0,
+    "colour_contrast": 0.25,
+    "source_colour": 0,
+    "use_metal_map": false,
+    "corrosion": 0.18,
+    "corrosion_metres": 1.7,
+    "corrosion_base_band": 0.28
+  },
+  "roof_enamel": {
+    "asset": "Paint004",
+    "metres": [
+      0.9,
+      0.9
+    ],
+    "source_mean": 0.723,
+    "roughness_low": 0.4,
+    "roughness_high": 0.78,
+    "relief": 0.12,
+    "metal_amount": 0,
+    "colour_contrast": 0.48,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "machinery_enamel": {
+    "asset": "Paint004",
+    "metres": [
+      0.48,
+      0.48
+    ],
+    "source_mean": 0.723,
+    "roughness_low": 0.24,
+    "roughness_high": 0.55,
+    "relief": 0.1,
+    "metal_amount": 0,
+    "colour_contrast": 0.35,
+    "source_colour": 0,
+    "use_metal_map": false,
+    "corrosion": 0.4,
+    "corrosion_metres": 1.1,
+    "corrosion_base_band": 0.42
+  },
+  "dark_enamel": {
+    "asset": "Paint004",
+    "metres": [
+      0.65,
+      0.65
+    ],
+    "source_mean": 0.723,
+    "roughness_low": 0.3,
+    "roughness_high": 0.66,
+    "relief": 0.08,
+    "metal_amount": 0,
+    "colour_contrast": 0.4,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "deck_grip": {
+    "asset": "Rubber004",
+    "metres": [
+      1.2,
+      1.2
+    ],
+    "source_mean": 0.025,
+    "roughness_low": 0.72,
+    "roughness_high": 0.96,
+    "relief": 0.55,
+    "metal_amount": 0,
+    "colour_contrast": 0.42,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "seat_vinyl": {
+    "asset": "Leather026",
+    "metres": [
+      0.6,
+      0.6
+    ],
+    "source_mean": 0.01,
+    "roughness_low": 0.3,
+    "roughness_high": 0.72,
+    "relief": 0.6,
+    "metal_amount": 0,
+    "colour_contrast": 0.5,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "console_laminate": {
+    "asset": "Rubber004",
+    "metres": [
+      0.42,
+      0.42
+    ],
+    "source_mean": 0.025,
+    "roughness_low": 0.36,
+    "roughness_high": 0.65,
+    "relief": 0.18,
+    "metal_amount": 0,
+    "colour_contrast": 0.15,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "galvanized": {
+    "asset": "Metal063",
+    "metres": [
+      0.8,
+      0.8
+    ],
+    "source_mean": 0.154,
+    "roughness_low": 0.42,
+    "roughness_high": 0.8,
+    "relief": 0.35,
+    "metal_amount": 0.85,
+    "colour_contrast": 0.7,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "brushed_steel": {
+    "asset": "Metal032",
+    "metres": [
+      0.6,
+      0.6
+    ],
+    "source_mean": 0.242,
+    "roughness_low": 0.2,
+    "roughness_high": 0.56,
+    "relief": 0.28,
+    "metal_amount": 0.95,
+    "colour_contrast": 0.35,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "anodized": {
+    "asset": "Metal032",
+    "metres": [
+      0.5,
+      0.5
+    ],
+    "source_mean": 0.242,
+    "roughness_low": 0.3,
+    "roughness_high": 0.62,
+    "relief": 0.18,
+    "metal_amount": 0.8,
+    "colour_contrast": 0.3,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "bronze": {
+    "asset": "Metal063",
+    "metres": [
+      0.7,
+      0.7
+    ],
+    "source_mean": 0.154,
+    "roughness_low": 0.24,
+    "roughness_high": 0.6,
+    "relief": 0.23,
+    "metal_amount": 0.88,
+    "colour_contrast": 0.48,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "rubber": {
+    "asset": "Rubber004",
+    "metres": [
+      0.4,
+      0.4
+    ],
+    "source_mean": 0.025,
+    "roughness_low": 0.62,
+    "roughness_high": 0.94,
+    "relief": 0.45,
+    "metal_amount": 0,
+    "colour_contrast": 0.3,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "working_steel": {
+    "asset": "Metal063",
+    "metres": [
+      0.6,
+      0.6
+    ],
+    "source_mean": 0.154,
+    "roughness_low": 0.42,
+    "roughness_high": 0.8,
+    "relief": 0.45,
+    "metal_amount": 0.75,
+    "colour_contrast": 0.7,
+    "source_colour": 0,
+    "use_metal_map": false,
+    "corrosion": 0.24,
+    "corrosion_metres": 0.85
+  },
+  "heatshield": {
+    "asset": "Metal032",
+    "metres": [
+      0.8,
+      0.8
+    ],
+    "source_mean": 0.242,
+    "roughness_low": 0.32,
+    "roughness_high": 0.76,
+    "relief": 0.3,
+    "metal_amount": 0.8,
+    "colour_contrast": 0.8,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "rope_fibre": {
+    "asset": "Fabric030",
+    "metres": [
+      0.12,
+      0.12
+    ],
+    "source_mean": 0.104,
+    "roughness_low": 0.8,
+    "roughness_high": 0.98,
+    "relief": 0.6,
+    "metal_amount": 0,
+    "colour_contrast": 0.35,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "moulded_polymer": {
+    "asset": "Rubber004",
+    "metres": [
+      0.3,
+      0.3
+    ],
+    "source_mean": 0.025,
+    "roughness_low": 0.28,
+    "roughness_high": 0.62,
+    "relief": 0.12,
+    "metal_amount": 0,
+    "colour_contrast": 0.12,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "tread_plate": {
+    "asset": "DiamondPlate008C",
+    "metres": [
+      0.8,
+      0.8
+    ],
+    "source_mean": 0.152,
+    "roughness_low": 0.35,
+    "roughness_high": 0.72,
+    "relief": 0.8,
+    "metal_amount": 0.9,
+    "colour_contrast": 0.65,
+    "source_colour": 0,
+    "use_metal_map": true
+  },
+  "riveted_bare_plate": {
+    "asset": "MetalPlates001",
+    "metres": [
+      3.2,
+      3.2
+    ],
+    "source_mean": 0.235,
+    "roughness_low": 0.3,
+    "roughness_high": 0.76,
+    "relief": 0.65,
+    "metal_amount": 0.95,
+    "colour_contrast": 0.8,
+    "source_colour": 1,
+    "use_metal_map": true
+  },
+  "corroded_plate": {
+    "asset": "MetalPlates013",
+    "metres": [
+      3,
+      3
+    ],
+    "source_mean": 0.09,
+    "roughness_low": 0.4,
+    "roughness_high": 0.94,
+    "relief": 0.65,
+    "metal_amount": 0.95,
+    "colour_contrast": 0.8,
+    "source_colour": 1,
+    "use_metal_map": true
+  },
+  "timber_clean": {
+    "asset": "Wood096",
+    "metres": [
+      0.65,
+      1.3
+    ],
+    "source_mean": 0.357,
+    "roughness_low": 0.55,
+    "roughness_high": 0.88,
+    "relief": 0.5,
+    "metal_amount": 0,
+    "colour_contrast": 0.5,
+    "source_colour": 1,
+    "use_metal_map": false
+  },
+  "timber_weathered": {
+    "asset": "Wood051",
+    "metres": [
+      1,
+      2
+    ],
+    "source_mean": 0.038,
+    "roughness_low": 0.64,
+    "roughness_high": 0.96,
+    "relief": 0.65,
+    "metal_amount": 0,
+    "colour_contrast": 0.5,
+    "source_colour": 1,
+    "use_metal_map": false
+  },
+  "woven_upholstery": {
+    "asset": "Fabric030",
+    "metres": [
+      0.55,
+      0.55
+    ],
+    "source_mean": 0.104,
+    "roughness_low": 0.72,
+    "roughness_high": 0.95,
+    "relief": 0.55,
+    "metal_amount": 0,
+    "colour_contrast": 0.6,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "concrete_cast": {
+    "asset": "Concrete034",
+    "metres": [
+      1.1,
+      0.55
+    ],
+    "source_mean": 0.481,
+    "roughness_low": 0.74,
+    "roughness_high": 0.98,
+    "relief": 0.5,
+    "metal_amount": 0,
+    "colour_contrast": 0.5,
+    "source_colour": 1,
+    "use_metal_map": false
+  },
+  "concrete_worn": {
+    "asset": "Concrete048",
+    "metres": [
+      2,
+      2
+    ],
+    "source_mean": 0.319,
+    "roughness_low": 0.7,
+    "roughness_high": 0.98,
+    "relief": 0.65,
+    "metal_amount": 0,
+    "colour_contrast": 0.5,
+    "source_colour": 1,
+    "use_metal_map": false
+  },
+  "corrugated_steel": {
+    "asset": "CorrugatedSteel005",
+    "metres": [
+      2,
+      2
+    ],
+    "source_mean": 0.326,
+    "roughness_low": 0.4,
+    "roughness_high": 0.8,
+    "relief": 0.7,
+    "metal_amount": 0.9,
+    "colour_contrast": 0.5,
+    "source_colour": 1,
+    "use_metal_map": true
+  },
+  "asphalt": {
+    "asset": "Asphalt033",
+    "metres": [
+      2.5,
+      2.5
+    ],
+    "source_mean": 0.085,
+    "roughness_low": 0.8,
+    "roughness_high": 0.98,
+    "relief": 0.5,
+    "metal_amount": 0,
+    "colour_contrast": 0.5,
+    "source_colour": 1,
+    "use_metal_map": false
+  },
+  "exterior_render": {
+    "asset": "Plaster001",
+    "metres": [
+      1.5,
+      1.5
+    ],
+    "source_mean": 0.6572,
+    "roughness_low": 0.7,
+    "roughness_high": 0.96,
+    "relief": 0.32,
+    "metal_amount": 0,
+    "colour_contrast": 0.25,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "painted_cladding": {
+    "asset": "Wood051",
+    "metres": [
+      1,
+      2
+    ],
+    "source_mean": 0.038,
+    "roughness_low": 0.64,
+    "roughness_high": 0.96,
+    "relief": 0.32,
+    "metal_amount": 0,
+    "colour_contrast": 0.28,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "warehouse_sheet": {
+    "asset": "CorrugatedSteel005",
+    "metres": [
+      2,
+      2
+    ],
+    "source_mean": 0.326,
+    "roughness_low": 0.4,
+    "roughness_high": 0.8,
+    "relief": 0.26,
+    "metal_amount": 0,
+    "colour_contrast": 0.3,
+    "source_colour": 0,
+    "use_metal_map": true
+  },
+  "painted_timber": {
+    "asset": "Wood096",
+    "metres": [
+      0.65,
+      1.3
+    ],
+    "source_mean": 0.357,
+    "roughness_low": 0.55,
+    "roughness_high": 0.88,
+    "relief": 0.26,
+    "metal_amount": 0,
+    "colour_contrast": 0.28,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "pallet_wood": {
+    "asset": "Wood051",
+    "metres": [
+      1,
+      2
+    ],
+    "source_mean": 0.038,
+    "roughness_low": 0.64,
+    "roughness_high": 0.96,
+    "relief": 0.6,
+    "metal_amount": 0,
+    "colour_contrast": 0.7,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "roof_sheet": {
+    "asset": "Metal032",
+    "metres": [
+      1.4,
+      1.4
+    ],
+    "source_mean": 0.5,
+    "roughness_low": 0.4,
+    "roughness_high": 0.78,
+    "relief": 0.17,
+    "metal_amount": 0,
+    "colour_contrast": 0.18,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "working_concrete": {
+    "asset": "Concrete048",
+    "metres": [
+      2,
+      2
+    ],
+    "source_mean": 0.319,
+    "roughness_low": 0.7,
+    "roughness_high": 0.98,
+    "relief": 0.6,
+    "metal_amount": 0,
+    "colour_contrast": 0.55,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "container_enamel": {
+    "asset": "Paint004",
+    "metres": [
+      0.65,
+      0.65
+    ],
+    "source_mean": 0.723,
+    "roughness_low": 0.42,
+    "roughness_high": 0.8,
+    "relief": 0.13,
+    "metal_amount": 0,
+    "colour_contrast": 0.35,
+    "source_colour": 0,
+    "use_metal_map": false,
+    "corrosion": 0,
+    "corrosion_metres": 1.1,
+    "corrosion_base_band": 0.42
+  },
+  "packing_cardboard": {
+    "asset": "Cardboard004",
+    "metres": [
+      0.65,
+      0.65
+    ],
+    "source_mean": 0.3059,
+    "roughness_low": 0.75,
+    "roughness_high": 0.96,
+    "relief": 0.22,
+    "metal_amount": 0,
+    "colour_contrast": 0.6,
+    "source_colour": 1,
+    "use_metal_map": false
+  },
+  "crushed_aggregate": {
+    "asset": "Gravel023",
+    "metres": [
+      1.5,
+      1.5
+    ],
+    "source_mean": 0.6823,
+    "roughness_low": 0.7,
+    "roughness_high": 0.96,
+    "relief": 0.9,
+    "metal_amount": 0,
+    "colour_contrast": 0.8,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "coal_aggregate": {
+    "asset": "Gravel023",
+    "metres": [
+      1.5,
+      1.5
+    ],
+    "source_mean": 0.6823,
+    "roughness_low": 0.35,
+    "roughness_high": 0.8,
+    "relief": 0.9,
+    "metal_amount": 0,
+    "colour_contrast": 0.9,
+    "source_colour": 0,
+    "use_metal_map": false
+  },
+  "tank_cladding": {
+    "asset": "Paint004",
+    "metres": [
+      0.9,
+      0.9
+    ],
+    "source_mean": 0.723,
+    "roughness_low": 0.28,
+    "roughness_high": 0.5,
+    "relief": 0.05,
+    "metal_amount": 0,
+    "colour_contrast": 0.48,
+    "source_colour": 0,
+    "use_metal_map": false,
+    "corrosion": 0
+  }
+}

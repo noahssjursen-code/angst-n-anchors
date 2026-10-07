@@ -39,4 +39,5 @@ static func visual(hull_id: String, id: String = "") -> Node3D:
 	var coupling := (load(DIRECTORY+"marine_drive_coupling.glb") as PackedScene).instantiate() as Node3D
 	coupling.name = "CouplingRotor"
 	socket.add_child(coupling)
+	SurfaceMaterialLibrary.apply(root, "engine")
 	return root

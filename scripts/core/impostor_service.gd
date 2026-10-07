@@ -21,6 +21,7 @@ static func has_key(key: String) -> bool:
 static func stamp(key: String, show_ghost: bool = false) -> Node3D:
 	if CRANE_PROXIES.has(key):
 		var proxy := (load(CRANE_PROXIES[key]) as PackedScene).instantiate() as Node3D
+		SurfaceMaterialLibrary.apply(proxy, "crane_distance")
 		for mesh: MeshInstance3D in proxy.find_children("*","MeshInstance3D",true,false):
 			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		return proxy

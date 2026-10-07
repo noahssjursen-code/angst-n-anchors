@@ -214,6 +214,7 @@ func _build_visual() -> void:
 		var scene := load("res://resources/models/parts/port_kit/"+part_name+".glb") as PackedScene
 		assert(scene != null)
 		models.add_child(scene.instantiate())
+	SurfaceMaterialLibrary.apply(models)
 	_connection_marker = models.find_child("HoseConnection",true,false) as Node3D
 	_connection_direction = models.find_child("HoseDeparture",true,false) as Node3D
 	assert(_connection_marker != null, "Landing drive requires an authored suction socket")

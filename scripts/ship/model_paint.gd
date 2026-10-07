@@ -20,12 +20,15 @@ static func apply(root: Node, colors: Dictionary) -> void:
 			for slot in colors:
 				if not SLOTS.has(slot) or not original.resource_name.begins_with(SLOTS[slot]):
 					continue
-				var copy := original.duplicate() as StandardMaterial3D
 				var raw: Variant = colors[slot]
-				copy.albedo_color = raw if raw is Color else Color(float(raw[0]), float(raw[1]), float(raw[2]), 1)
-				if slot == "upper" or slot == "lower":
-					copy.albedo_texture = load("res://resources/models/vessels/trawler_hull_14m/trawler_painted_steel_basecolor.png")
-				mesh.set_surface_override_material(i, copy)
+				var colour: Color = raw if raw is Color else Color(float(raw[0]), float(raw[1]), float(raw[2]), 1)
+				var active := mesh.get_active_material(i)
+				if active != null and active.has_meta("marine_profile"):
+					mesh.set_surface_override_material(i, SurfaceMaterialLibrary.material(active.get_meta("marine_profile"), colour, original.resource_name))
+				else:
+					var copy := original.duplicate() as StandardMaterial3D
+					copy.albedo_color = colour
+					mesh.set_surface_override_material(i, copy)
 
 static func encode(color: Color) -> Array:
 	return [color.r, color.g, color.b]

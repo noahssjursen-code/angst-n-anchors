@@ -200,6 +200,7 @@ func _add_mooring_fittings(hull_id: String, deck_y: float) -> void:
 			root.add_child(point)
 			var guide: Node3D = (load("res://resources/models/parts/port_kit/deck_roller_fairlead.glb") as PackedScene).instantiate()
 			guide.name=point.name+"Fairlead"
+			SurfaceMaterialLibrary.apply(guide)
 			guide.position=Vector3(side*float(config.mooring_guide),deck_y,stations[index])
 			root.add_child(guide)
 			point.rope_lead=guide.find_child("RopeLead",true,false) as Node3D

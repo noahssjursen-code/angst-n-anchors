@@ -80,6 +80,7 @@ func _rebuild() -> void:
 					var material := original.duplicate() as StandardMaterial3D
 					material.albedo_color = ContainerPaintMaterial.FREIGHT_PALETTE[posmod(unit.paint_variant,8)]
 					mesh.set_surface_override_material(surface, material)
+	SurfaceMaterialLibrary.apply(_visual)
 	_rebuild_route_labels()
 	_build_halo()
 
@@ -181,6 +182,7 @@ func notify_grabbed() -> void:
 		var asset: String = MODELS.get(unit.container_type,"legacy_breakbulk_4m")
 		_lifting_frame = (load("res://resources/models/cargo/%s_spreader.glb" % asset) as PackedScene).instantiate()
 		add_child(_lifting_frame)
+		SurfaceMaterialLibrary.apply(_lifting_frame)
 	set_collision_enabled(false)
 	set_highlighted(false)
 	grabbed.emit(self)

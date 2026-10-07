@@ -94,6 +94,7 @@ func _rebuild_bollard_visual() -> void:
 	var visual: Node3D
 	if bollard_model_path == DEFAULT_BOLLARD_MODEL:
 		visual = (load(IMPORTED_BOLLARD) as PackedScene).instantiate()
+		SurfaceMaterialLibrary.apply(visual)
 		visual.scale = Vector3.ONE * bollard_scale
 		_rope_anchor = visual.find_child("RopeAnchor",true,false) as Node3D
 		assert(_rope_anchor != null)

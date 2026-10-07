@@ -211,6 +211,7 @@ func _install_imported_hoist() -> void:
 		var scene := load(HOIST_MODELS + entry[1] + ".glb") as PackedScene
 		assert(scene != null)
 		var visual := scene.instantiate() as Node3D
+		SurfaceMaterialLibrary.apply(visual)
 		visual.scale = Vector3.ONE * model_scale
 		part.add_child(visual)
 	# Guard collision follows the moving block, never the stretching wire.
@@ -250,6 +251,7 @@ func _install_hoist_motion() -> void:
 	for entry in [["provision_hoist_winch", Vector3(-.3,-1.96,10)], ["provision_rope_anchor", Vector3(.3,-1.66,-54.8)]]:
 		var scene := load(HOIST_MODELS+entry[0]+".glb") as PackedScene
 		var visual := scene.instantiate() as Node3D
+		SurfaceMaterialLibrary.apply(visual)
 		visual.position = entry[1]*model_scale
 		visual.scale = Vector3.ONE*model_scale
 		_boom.add_child(visual)
@@ -296,6 +298,7 @@ func _install_imported_station() -> void:
 		var scene := load("res://resources/models/parts/provision_station/" + entry[1] + ".glb") as PackedScene
 		assert(scene != null)
 		var visual := scene.instantiate() as Node3D
+		SurfaceMaterialLibrary.apply(visual)
 		visual.name = entry[1]
 		visual.scale = Vector3.ONE * model_scale
 		entry[0].add_child(visual)
@@ -362,13 +365,14 @@ func _structure_modules(part: Node3D, asset: String, offsets: Array[Vector3]) ->
 			child.queue_free()
 	var scene := load("res://resources/models/parts/provision_structure/"+asset+".glb") as PackedScene
 	var prototype := scene.instantiate() as Node3D
+	SurfaceMaterialLibrary.apply(prototype)
 	var meshes := prototype.find_children("*","MeshInstance3D",true,false)
 	assert(meshes.size()==1,"Structure module must export one merged mesh")
 	var source := meshes[0] as MeshInstance3D
 	assert(source.transform.is_equal_approx(Transform3D.IDENTITY))
 	var instances := MultiMesh.new()
 	instances.transform_format = MultiMesh.TRANSFORM_3D
-	instances.mesh = source.mesh
+	instances.mesh = SurfaceMaterialLibrary.finished_mesh(source)
 	instances.instance_count = offsets.size()
 	for index in offsets.size():
 		instances.set_instance_transform(index,Transform3D(Basis.IDENTITY.scaled(Vector3.ONE*model_scale),offsets[index]*model_scale))

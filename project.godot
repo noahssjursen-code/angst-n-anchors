@@ -128,5 +128,6 @@ toggle_camera={
 [rendering]
 
 anti_aliasing/quality/msaa_3d=2
+limits/global_shader_variables/buffer_size=262144
 rendering_device/d3d12/max_resource_descriptors=262144
 rendering_device/driver.windows="d3d12"

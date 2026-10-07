@@ -86,7 +86,9 @@ func _part_node(part_name: String, parent: Node3D, offset: Vector3) -> Node3D:
 func _asset(parent: Node3D, asset_name: String) -> void:
 	var scene:=load(DIRECTORY+asset_name+".glb") as PackedScene
 	assert(scene != null, "Missing authored crane part: "+asset_name)
-	parent.add_child(scene.instantiate())
+	var model := scene.instantiate() as Node3D
+	parent.add_child(model)
+	SurfaceMaterialLibrary.apply(model)
 
 func _box_collision(parent: Node3D, size_m: Vector3, center: Vector3) -> void:
 	var body:=StaticBody3D.new();body.collision_layer=1;body.collision_mask=0

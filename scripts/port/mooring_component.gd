@@ -1023,6 +1023,8 @@ func _ensure_segment_holder_pool(
 		mesh.height = 0.05
 		cyl.mesh = mesh
 		cyl.material_override = MeshBuilder.make_material(rope_color, 0.92, 0.0)
+		if SurfaceMaterialLibrary.enabled:
+			cyl.material_override = SurfaceMaterialLibrary.material("rope_fibre",rope_color)
 		parent.add_child(cyl)
 		pool.append(cyl)
 

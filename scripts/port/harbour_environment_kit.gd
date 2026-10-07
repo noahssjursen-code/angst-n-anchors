@@ -12,6 +12,10 @@ static func paving() -> ShaderMaterial:
 	if _paving == null:
 		_paving = ShaderMaterial.new()
 		_paving.shader = preload("res://resources/shaders/harbour_pavement.gdshader")
+		_paving.set_shader_parameter("colour_map", load(SurfaceMaterialLibrary.DIRECTORY + "Asphalt033/Asphalt033_1K-PNG_Color.png"))
+		_paving.set_shader_parameter("normal_map", load(SurfaceMaterialLibrary.DIRECTORY + "Asphalt033/Asphalt033_1K-PNG_NormalGL.png"))
+		_paving.set_shader_parameter("roughness_map", load(SurfaceMaterialLibrary.DIRECTORY + "Asphalt033/Asphalt033_1K-PNG_Roughness.png"))
+	_paving.set_shader_parameter("use_scan", SurfaceMaterialLibrary.enabled)
 	return _paving
 
 static func model(parent: Node3D, id: String, position: Vector3, yaw: float = 0.0, use_lod: bool = true) -> Node3D:
@@ -22,6 +26,7 @@ static func model(parent: Node3D, id: String, position: Vector3, yaw: float = 0.
 	node.rotation.y = yaw
 	if use_lod:
 		PortModelLod.attach(node, id if id.begins_with("res://") else ROOT + id + ".glb")
+	SurfaceMaterialLibrary.apply(node, id.get_file().get_basename())
 	if id == "quay_light" and not Engine.is_editor_hint():
 		var lamp := preload("res://scripts/port/harbour_area_light.gd").new()
 		node.add_child(lamp)
@@ -38,11 +43,15 @@ static func repeated(parent: Node3D, id: String, poses: Array[Transform3D]) -> v
 		batch.name = id.get_file().get_basename() + "_batch"
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
-		multi.mesh = source.mesh
+		# MultiMesh does not inherit a prototype's surface overrides. Duplicate
+		# the small mesh resource once per batch; all instances still share it.
+		multi.mesh = SurfaceMaterialLibrary.finished_mesh(source)
 		multi.instance_count = poses.size()
 		var local := prototype.global_transform.affine_inverse() * source.global_transform
 		for i in poses.size(): multi.set_instance_transform(i, poses[i] * local)
 		batch.multimesh = multi
+		for parameter in ["finish_x", "finish_y", "finish_z"]:
+			batch.set_instance_shader_parameter(parameter, source.get_instance_shader_parameter(parameter))
 		batch.visibility_range_end = 900.0
 		parent.add_child(batch)
 	prototype.free()

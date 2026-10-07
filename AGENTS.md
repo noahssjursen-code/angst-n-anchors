@@ -233,6 +233,10 @@ exclusive manoeuvre-lane leases. Player passage autopilot carries a three-minute
   source (ambientCG is approved) or author one. Record asset URL, license and
   usage. Keep texture scale believable in metres and preserve named paint regions,
   per-instance colour controls and independently animated parts.
+- Current shared implementation: `SurfaceMaterialLibrary` and
+  `resources/textures/marine/README.md`. Reuse its source manifest, profiles,
+  assignments and F6 review scene. Keep detail/LOD/MultiMesh finishes consistent,
+  modular rest-space texture joins continuous and halfwalls double-sided.
 - Inspect new materials close up AND on the assembled object in Godot lighting.
   Check tiling, seams, normal direction, highlights and distant mip behaviour.
   Share texture resources, use mipmaps and VRAM compression, and budget texture

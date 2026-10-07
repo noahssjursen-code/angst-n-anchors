@@ -2,6 +2,11 @@
 
 ## Mandatory material acceptance for every physical item
 
+Current implementation: `SurfaceMaterialLibrary` and
+[`the shared material guide`](../textures/marine/README.md). Reuse its profiles,
+source manifest and F6 review scene. Detailed models, distant variants and
+MultiMesh batches must receive the same appropriate surface assignment.
+
 Noah's standing rule (7 October 2026): every new physical item must reuse an
 appropriate existing material or introduce a new one. A flat placeholder colour
 does not satisfy asset acceptance. This applies to procedural and imported

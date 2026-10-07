@@ -488,10 +488,11 @@ func clear_ghost() -> void:
 func create_part(record: Dictionary, paint_instance := true) -> Node3D:
 	# Ghosts use a uniform translucent override. Avoid creating hidden paint
 	# materials that can be freed before the renderer processes their dependency.
-	var root := ShipSurfaceKit.create(record) if ShipSurfaceKit.is_surface(record["asset_id"]) else BrickCatalog.create_visual(record["asset_id"])
+	var root := ShipSurfaceKit.create(record, paint_instance) if ShipSurfaceKit.is_surface(record["asset_id"]) else BrickCatalog.create_visual(record["asset_id"], {"skip_finish":not paint_instance})
 	root.position = _position(record)
 	root.rotation_degrees.y = float(record["yaw_degrees"])
 	_fit_wall_ends(root, record)
+	if paint_instance: SurfaceMaterialLibrary.map_frame(root, root.transform)
 	if paint_instance and _paintable(str(record["asset_id"])):
 		ModelPaint.apply(root, record.get("colors", {"wall": ModelPaint.encode(wall_color)}))
 	if paint_instance and ShipSurfaceKit.is_surface(record["asset_id"]):

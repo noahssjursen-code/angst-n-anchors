@@ -114,6 +114,12 @@ static func _add_mound_triangle(st: SurfaceTool, a: Vector3, b: Vector3, c: Vect
 
 static func _material_for(commodity_id: String) -> ShaderMaterial:
 	var key := resolve_commodity(commodity_id)
+	if SurfaceMaterialLibrary.enabled:
+		var profile := "coal_aggregate" if key == "coal" else "crushed_aggregate"
+		var pigment := CommodityCatalog.commodity_color(key)
+		# Catalogue swatches are bright UI identifiers, not raw surface reflectance.
+		pigment = pigment.darkened(.68 if key == "coal" else .34)
+		return SurfaceMaterialLibrary.material(profile, pigment).duplicate()
 	if _material_cache.has(key):
 		return (_material_cache[key] as ShaderMaterial).duplicate()
 	var mat := ShaderMaterial.new()

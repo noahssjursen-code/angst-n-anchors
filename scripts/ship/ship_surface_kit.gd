@@ -66,7 +66,7 @@ static func tiles(poly: PackedVector2Array, style: String) -> Array[Dictionary]:
 					ids.sort()
 					result.append({"id":"%s_tri_%d_%d_%d" % [style,ids[0],ids[1],ids[2]],"origin":origin,"area":area(triangle)})
 	return result
-static func create(record: Dictionary) -> Node3D:
+static func create(record: Dictionary, finish := true) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Roof" if record["asset_id"]=="roof_tile" else "Floor"
 	var poly := polygon(record)
@@ -80,7 +80,7 @@ static func create(record: Dictionary) -> Node3D:
 	var half_width := maxf((max_x-min_x)*.5,.25)
 	var rise := minf(.12,half_width*.08) if record.get("crown",false) and style=="roof" else 0.0
 	for tile in tiles(poly,style):
-		var model := BrickCatalog.create_visual(tile["id"])
+		var model := BrickCatalog.create_visual(tile["id"], {"skip_finish":not finish})
 		model.position=Vector3(tile["origin"].x,0,tile["origin"].y)
 		root.add_child(model)
 		_crown(model,"Crown",tile["origin"].x,1.0,center,half_width,rise)
@@ -101,7 +101,7 @@ static func create(record: Dictionary) -> Node3D:
 			var start_shear := _offset_shear(previous,e,e,_eave_width(previous,int(record.get("visor_direction",0))),width)/width
 			var end_shear := _offset_shear(e,following,e,width,_eave_width(following,int(record.get("visor_direction",0))))/width
 			for j in count:
-				var model := BrickCatalog.create_visual("roof_edge_"+code)
+				var model := BrickCatalog.create_visual("roof_edge_"+code, {"skip_finish":not finish})
 				model.set_meta("edge_asset","roof_edge_"+code)
 				var p := a+e*length*j
 				model.position=Vector3(p.x,0,p.y)
@@ -117,6 +117,7 @@ static func create(record: Dictionary) -> Node3D:
 						if name in ["MiterStart","MiterEnd"]:
 							mesh.set_blend_shape_value(key,(start if name=="MiterStart" else end)*model.scale.x/4.0)
 				_crown_edge(model,p.x-center,(e.y+e.x*start)*model.scale.x,e.x,e.x*(end-start)*model.scale.x/length,half_width,rise)
+	if finish: SurfaceMaterialLibrary.apply(root, style)
 	return root
 static func _eave_width(direction: Vector2, visor_direction: int) -> float:
 	var outward := Vector2(direction.y,-direction.x)

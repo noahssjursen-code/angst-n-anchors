@@ -1,0 +1,164 @@
+{
+  "exact": {
+    "Concrete": "working_concrete",
+    "Office render": "exterior_render",
+    "Office cladding": "painted_cladding",
+    "Ivory trim": "painted_timber",
+    "Office metalwork": "dark_enamel",
+    "Pallet timber": "pallet_wood",
+    "Dunnage timber": "pallet_wood",
+    "Galvanized": "galvanized",
+    "Dark steel": "working_steel",
+    "Rubber": "rubber",
+    "Safety yellow": "machinery_enamel",
+    "Rack safety orange": "machinery_enamel",
+    "Wall paint": "warehouse_sheet",
+    "Roof paint": "roof_sheet",
+    "Fixed_DarkSteel": "working_steel",
+    "Fixed_PinSteel": "brushed_steel",
+    "Dark gunwale cap": "dark_enamel",
+    "Fixed_BootStripe": "dark_enamel",
+    "Fixed_BlackHousing": "dark_enamel",
+    "Fixed_VentRecess": "dark_enamel",
+    "Console charcoal": "dark_enamel",
+    "Galvanized marine rail": "galvanized",
+    "Fixed_Galvanized": "galvanized",
+    "Fixed_SacrificialZinc": "galvanized",
+    "Fixed brushed metal": "brushed_steel",
+    "Fixed door hardware": "brushed_steel",
+    "Fixed_Stainless": "brushed_steel",
+    "Fixed_ShaftStainless": "brushed_steel",
+    "Fixed_VentSteel": "brushed_steel",
+    "Fixed_MachinedSteel": "brushed_steel",
+    "Brushed stainless steel": "brushed_steel",
+    "Fixed_Nonslip": "deck_grip",
+    "Fixed_TreadGrip": "deck_grip",
+    "Fixed_StepEdge": "working_steel",
+    "Fixed_BulkEdge": "working_steel",
+    "Fixed_CargoBearing": "working_steel",
+    "Fixed_DarkMetal": "working_steel",
+    "Fixed_Bearing": "working_steel",
+    "Fixed_PropellerBronze": "bronze",
+    "Marine bronze": "bronze",
+    "Fixed_Rubber": "rubber",
+    "Fixed_Seal": "rubber",
+    "Fixed_BearingSeal": "rubber",
+    "Fixed_Hydraulic": "rubber",
+    "Fixed glazing gasket": "rubber",
+    "Fixed black grip": "rubber",
+    "Rubber seals and fenders": "rubber",
+    "Fixed_ExhaustOutlet": "heatshield",
+    "Fixed_HeatShield": "heatshield",
+    "Fixed_Warp": "rope_fibre",
+    "Fixed_NetTwine": "rope_fibre",
+    "Fixed_Boltrope": "rope_fibre",
+    "Fixed_FloatOrange": "moulded_polymer",
+    "Fixed_EmergencyStop": "moulded_polymer",
+    "Fixed_ServiceCaps": "moulded_polymer",
+    "Fixed_LoadMark": "moulded_polymer",
+    "Safety orange": "moulded_polymer",
+    "Fixed anodized window frame": "anodized",
+    "Deep petrol painted steel": "machinery_enamel",
+    "Warm white marine enamel": "cabin_enamel",
+    "Grey non-slip deck": "deck_grip",
+    "Red oxide antifouling": "antifouling",
+    "Container_LockSteel": "galvanized",
+    "Container_Seal": "rubber",
+    "Fixed_DoorSeal": "rubber",
+    "Fixed_ZincHardware": "galvanized",
+    "Fixed_PlywoodFloor": "pallet_wood",
+    "Fixed_Underframe": "working_steel",
+    "Fixed_LiftingFrame": "machinery_enamel",
+    "Fixed_LiftSteel": "brushed_steel",
+    "Fixed_RotatingSteel": "brushed_steel"
+  },
+  "preserve": [
+    "Glass, windows and optical lenses",
+    "Emissive diffusers and navigation lights",
+    "Authored colour atlases and markings on cranes and cargo",
+    "Character skin, face, hair and existing clothing prints",
+    "Vegetation alpha foliage",
+    "Ocean, sky and terrain systems"
+  ],
+  "prefix": {
+    "Fixed_Concrete_": "working_concrete",
+    "Paint_HullUpper": "hull_painted_plate",
+    "Paint_HullLower": "antifouling",
+    "Paint_Deck": "deck_grip",
+    "Paint_Upholstery": "seat_vinyl",
+    "Warm white painted steel": "cabin_enamel",
+    "Engine_Paint": "machinery_enamel",
+    "Paint_Bollard": "working_steel",
+    "Paint_Ochre_": "machinery_enamel",
+    "Paint_Enamel_": "machinery_enamel",
+    "Paint_Fascia": "cabin_enamel",
+    "Paint_Underside": "cabin_enamel",
+    "Container_Paint": "container_enamel"
+  },
+  "preserve_authored_colour_prefix": [
+    "Paint_Ochre_",
+    "Paint_Enamel_",
+    "Fixed_Concrete_",
+    "Container_Paint"
+  ],
+  "character_uv": {
+    "Top": {
+      "asset": "Fabric030",
+      "repeat": 1,
+      "normal_scale": 0.2,
+      "roughness": 1.0
+    },
+    "Trousers": {
+      "asset": "Fabric030",
+      "repeat": 4,
+      "normal_scale": 0.3,
+      "roughness": 1.0
+    },
+    "Headwear": {
+      "asset": "Fabric030",
+      "repeat": 4,
+      "normal_scale": 0.23,
+      "roughness": 1.0
+    },
+    "Footwear": {
+      "asset": "Rubber004",
+      "repeat": 4,
+      "normal_scale": 0.24,
+      "roughness": 0.85
+    },
+    "Sole": {
+      "asset": "Rubber004",
+      "repeat": 4,
+      "normal_scale": 0.2,
+      "roughness": 1.0
+    },
+    "Outerwear": {
+      "asset": "Rubber004",
+      "repeat": 5,
+      "normal_scale": 0.12,
+      "roughness": 0.85
+    },
+    "Trim": {
+      "asset": "Fabric030",
+      "repeat": 4,
+      "normal_scale": 0.18,
+      "roughness": 1.0
+    }
+  },
+  "asset_overrides": {
+    "loaded_storage_rack": {
+      "Office render": "packing_cardboard"
+    },
+    "lng_terminal_tank_24m": {
+      "Office render": "tank_cladding"
+    },
+    "insulated_gas_vessel": {
+      "Light diffuser": "tank_cladding"
+    },
+    "crane_distance": {
+      "Paint": "machinery_enamel",
+      "Steel": "working_steel",
+      "LightFinish": "cabin_enamel"
+    }
+  }
+}

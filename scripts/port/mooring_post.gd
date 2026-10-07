@@ -210,6 +210,7 @@ func _rebuild_docking_bollard() -> void:
 	var visual: Node3D
 	if bollard_model_path == DEFAULT_DOCKING_BOLLARD_MODEL:
 		visual = (load(IMPORTED_BOLLARD) as PackedScene).instantiate()
+		SurfaceMaterialLibrary.apply(visual)
 		visual.scale = Vector3.ONE * sc
 		_rope_anchor = visual.find_child("RopeAnchor",true,false) as Node3D
 		assert(_rope_anchor != null)
@@ -240,11 +241,13 @@ func _rebuild_timber_post() -> void:
 
 	var visual := MeshBuilder.cylinder(post_radius, post_height, post_color, 0.95, 0.0)
 	visual.name = "PostVisual"
+	visual.material_override = SurfaceMaterialLibrary.material("pallet_wood",post_color) if SurfaceMaterialLibrary.enabled else visual.material_override
 	visual.position = Vector3.UP * (post_height * 0.5)
 	add_child(visual)
 
 	var cap := MeshBuilder.cylinder(post_radius * 1.28, 0.16, post_color.lightened(0.08), 0.9, 0.0)
 	cap.name = "PostCap"
+	cap.material_override = SurfaceMaterialLibrary.material("pallet_wood",post_color.lightened(.08)) if SurfaceMaterialLibrary.enabled else cap.material_override
 	cap.position = Vector3.UP * post_height
 	add_child(cap)
 

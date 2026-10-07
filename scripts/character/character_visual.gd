@@ -27,7 +27,7 @@ func rebuild() -> void:
 		for surface in range(child.mesh.get_surface_count()):
 			var material: Material = child.mesh.surface_get_material(surface)
 			if material != null:
-				child.set_surface_override_material(surface, material.duplicate())
+				child.set_surface_override_material(surface, SurfaceMaterialLibrary.character_material(material,str(child.name)))
 	var rigs := _model.find_children("*", "Skeleton3D", true, false)
 	if not rigs.is_empty(): skeleton = rigs[0]
 	var players := _model.find_children("*", "AnimationPlayer", true, false)

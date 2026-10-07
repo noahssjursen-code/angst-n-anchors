@@ -20,6 +20,7 @@ static func outline(id: String) -> Dictionary:
 static func instantiate(id: String) -> Node3D:
 	var hull := (load(directory(id) + id + ".glb") as PackedScene).instantiate() as Node3D
 	hull.add_child(ShipDriveVisual.new(ENTRIES[id]["mounts"]))
+	SurfaceMaterialLibrary.apply(hull, "hull")
 	return hull
 
 static func make_grid(id: String) -> DeckGrid:
