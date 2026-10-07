@@ -20,12 +20,29 @@ func review() -> void:
 	world.environment.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR;world.environment.ambient_light_color=Color(.72,.8,.9);world.environment.ambient_light_energy=.65
 	add_child(world)
 	var sun:=DirectionalLight3D.new();sun.rotation_degrees=Vector3(-45,-30,0);sun.light_energy=1.4;sun.shadow_enabled=true;add_child(sun)
-	crane=ProvisionCrane.new();add_child(crane)
+	if OS.get_cmdline_user_args().has("--baseline-structure"):
+		var baseline:=GDScript.new()
+		baseline.source_code="extends ProvisionCrane\nfunc _install_imported_structure() -> void:\n\tpass\n"
+		assert(baseline.reload()==OK)
+		crane=baseline.new()
+	else:
+		crane=ProvisionCrane.new()
+	add_child(crane)
 	for frame in 10:await get_tree().process_frame
+	await get_tree().physics_frame
+	var space:=get_world_3d().direct_space_state
+	var mast_hit:=space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(4,10,0),Vector3(0,10,0),1))
+	assert(not mast_hit.is_empty(),"Mast lost its collision")
+	var jib_hit:=space.intersect_ray(PhysicsRayQueryParameters3D.create(crane.get_boom().to_global(Vector3(0,4,-10)),crane.get_boom().to_global(Vector3(0,0,-10)),1))
+	assert(not jib_hit.is_empty(),"Jib lost its collision")
+	if not OS.get_cmdline_user_args().has("--baseline-structure"):
+		assert(crane.get_boom().to_local(jib_hit.position).y>1.1,"New upper chord is outside collision")
 	camera=Camera3D.new();add_child(camera);camera.current=true
 	var hook:=crane.get_hook_global()
 	print("HOOK ",hook," TROLLEY ",crane.get_talje_global())
 	await shot("whole",Vector3(55,48,50),Vector3(0,22,-15))
+	await shot("mast-joint",Vector3(5,13,6),Vector3(0,11,0))
+	await shot("jib-joint",crane.get_boom().global_position+Vector3(4,3,-7),crane.get_boom().global_position+Vector3(0,0,-10))
 	await shot("hook",hook+Vector3(2.4,1.7,3.4),hook+Vector3(0,.5,0))
 	await shot("trolley",crane.get_talje_global()+Vector3(3,-1,4),crane.get_talje_global())
 	var start:=crane.get_hook_global();crane.hoist_length_m=18
@@ -37,6 +54,13 @@ func review() -> void:
 	for size in [.5,1.0,1.4]:
 		var test_crane:=ProvisionCrane.new();test_crane.model_scale=size;add_child(test_crane)
 		for frame in 4:await get_tree().process_frame
+		var mast:=test_crane.get_girder().get_node("mast_section_5m") as MultiMeshInstance3D
+		var jib:=test_crane.get_boom().get_node("jib_section_5m") as MultiMeshInstance3D
+		assert(mast.multimesh.instance_count==6 and jib.multimesh.instance_count==15)
+		for i in 5:
+			assert((mast.multimesh.get_instance_transform(i)*Vector3(0,5,0)).is_equal_approx(mast.multimesh.get_instance_transform(i+1).origin),"Mast seam gap")
+		for i in 14:
+			assert((jib.multimesh.get_instance_transform(i)*Vector3(0,0,-5)).is_equal_approx(jib.multimesh.get_instance_transform(i+1).origin),"Jib seam gap")
 		for length in [2.0,10.0,32.0]:
 			test_crane.hoist_length_m=length
 			test_crane.slew_degrees=length*3
@@ -66,6 +90,7 @@ func review() -> void:
 	assert(container.global_position.is_equal_approx(Vector3(4,0,4)))
 	assert(container.unit.to_dict()==identity)
 	print("PROVISION HOIST PASS: 3 scales/3 lengths, tangent continuity, rigid block, real container pickup/move/release")
+	camera.position=Vector3(55,48,50);camera.look_at(Vector3(0,22,-15))
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(),true)
 	var timings:Array[float]=[]
 	for frame in 120:

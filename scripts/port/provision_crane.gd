@@ -125,6 +125,7 @@ func _bind_rig() -> void:
 	_rig_hoist_parts()
 	if model_path == DEFAULT_MODEL:
 		_install_imported_hoist()
+		_install_imported_structure()
 	_apply_slew()
 	_apply_trolley()
 	_apply_hoist()
@@ -207,6 +208,60 @@ func _install_imported_hoist() -> void:
 	_wire_mesh = _find_wire_mesh(_wire)
 	_wire_mesh_base_scale = _wire_mesh.scale
 	_imported_hoist = true
+
+
+func _install_imported_structure() -> void:
+	var mast_offsets: Array[Vector3] = []
+	for section in 6:
+		mast_offsets.append(Vector3(0,section*5,0))
+	_structure_modules(_girder,"mast_section_5m",mast_offsets)
+	var jib_offsets: Array[Vector3] = []
+	for section in range(-4,11):
+		jib_offsets.append(Vector3(0,0,-section*5))
+	_structure_modules(_boom,"jib_section_5m",jib_offsets)
+	_structure_modules(_boom,"jib_end_frame",[Vector3(0,0,-55)])
+	var rail_offsets: Array[Vector3] = []
+	for section in 10:
+		rail_offsets.append(Vector3(0,0,-1-section*5))
+	_structure_modules(_waist_rails,"trolley_rails_5m",rail_offsets)
+	_structure_modules(_waist_rails,"trolley_rails_3m",[Vector3(0,0,-51)])
+	# Match the raised upper chord; retain the original lower-jib collider.
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.4,.55,75)
+	shape.shape = box
+	shape.position = Vector3(0,.935,-17.5)
+	body.add_child(shape)
+	_boom.add_child(body)
+	body.scale = Vector3.ONE * model_scale
+
+
+func _structure_modules(part: Node3D, asset: String, offsets: Array[Vector3]) -> void:
+	# Keep the role children and existing conservative collision envelope.
+	for child in part.get_children():
+		if child is MeshInstance3D:
+			part.remove_child(child)
+			child.queue_free()
+	var scene := load("res://resources/models/parts/provision_structure/"+asset+".glb") as PackedScene
+	var prototype := scene.instantiate() as Node3D
+	var meshes := prototype.find_children("*","MeshInstance3D",true,false)
+	assert(meshes.size()==1,"Structure module must export one merged mesh")
+	var source := meshes[0] as MeshInstance3D
+	assert(source.transform.is_equal_approx(Transform3D.IDENTITY))
+	var instances := MultiMesh.new()
+	instances.transform_format = MultiMesh.TRANSFORM_3D
+	instances.mesh = source.mesh
+	instances.instance_count = offsets.size()
+	for index in offsets.size():
+		instances.set_instance_transform(index,Transform3D(Basis.IDENTITY.scaled(Vector3.ONE*model_scale),offsets[index]*model_scale))
+	var visual := MultiMeshInstance3D.new()
+	visual.name = asset
+	visual.multimesh = instances
+	part.add_child(visual)
+	prototype.free()
 
 
 func _apply_slew() -> void:

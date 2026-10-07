@@ -1372,3 +1372,33 @@ Run tests/provision_hoist_review.tscn -- --shipyard-playtest for rendered motion
 rope-tangent checks at three scales/lengths, and real container pickup/move/release.
 Use tests/port_material_review.tscn with --provision-review for daylight port
 context. Captures are archived under Pictures/machinescreenshots.
+
+### Provision crane structural modules (7 October follow-up)
+
+Mast/jib/rail geometry now also uses Blender assets in provision_structure;
+this supersedes the preceding hoist-only limitation. Six5m mast sections form
+exactly30m. Fifteen5m triangular jib sections run from20m aft to55m forward,
+with a separate terminal frame. Ten5m rail pairs plus one3m end pair preserve
+existing1-54m trolley limits and +/-0.42m rail centres. Named end sockets and
+flat mating faces are authoring contracts. Avoid duplicated end triangles at
+module boundaries; only the far tip receives the extra closure frame.
+
+Each repeated family is a MultiMesh with shared imported mesh/material resources,
+not one complete-crane asset or dozens of separate rendering nodes. Five authored
+meshes total5584triangles/7surfaces before instancing; the full structural assembly
+is42408triangles before imported LOD. Source build_structure.py and five blends
+are retained. Nine512px paint maps are mipmapped/VRAM compressed; check actual
+vram_texture metadata after rebakes, not just compress/mode settings. Generated
+image hashes can otherwise leave a previous uncompressed texture cached.
+
+Keep the existing role parents and conservative mast/lower-jib collision; an
+additional upper envelope follows the taller triangular jib. Internal ladders,
+rest landings and service strips are visual details, not climbable gameplay.
+Existing cab, machinery housing, foundation and counterweight remain legacy.
+Full winch/feed routing and rotating sheaves remain unfinished. Do not claim a
+mechanically certified crane or a complete imported-crane conversion.
+
+Manufacturer tower-joint/ladder/landing visual reference (original game dimensions):
+https://www.liebherr.com/en-gb/tower-cranes/technologies/tower-systems-5222681
+provision_hoist_review checks module seams at three scales, physical ray hits,
+hoist/load contracts and optional --baseline-structure comparisons.
