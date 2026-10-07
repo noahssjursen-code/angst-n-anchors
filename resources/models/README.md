@@ -1655,3 +1655,12 @@ interactive crane machinery or all small port props. Verify actual transitions
 with port_distance_review --capture-range and --shipyard-playtest.
 coastal_distance_review --far-ports --ports-only uses a1000m aerial camera
 to see the harbour across intervening islands; it is not a sea-level review.
+
+Crane silhouette diagnostic: port_distance_review --capture-silhouette compares
+normal imported mesh LOD with the complete authored proxy at600/1500/3500m.
+This is review-only; do not raise production lod_bias without visible benefit
+and a rendering-cost comparison. Existing proxy paint is non-metallic with
+roughness0.86, so specular-material tuning is not an established shimmer fix.
+Run tests/lod_profiles_test.tscn --headless -- --shipyard-playtest for actual
+LOD autoload, range/hysteresis and scene swap cleanup checks. The old --script
+invocation lacks dependency initialization and is not a valid regression run.

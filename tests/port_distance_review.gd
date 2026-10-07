@@ -18,6 +18,20 @@ func review() -> void:
 	camera.fov = 40
 	add_child(camera)
 	camera.current = true
+	if OS.get_cmdline_user_args().has("--capture-silhouette"):
+		camera.far = 12000
+		camera.fov = 30
+		var proxy := ImpostorService.stamp("crane:provision")
+		add_child(proxy)
+		for distance in [600, 1500, 3500]:
+			for preserve in [false, true]:
+				for mesh: MeshInstance3D in proxy.find_children("*", "MeshInstance3D", true, false):
+					mesh.lod_bias = 128.0 if preserve else 1.0
+				await shot("silhouette-%d-%s" % [distance, "authored" if preserve else "auto"], Vector3(distance * .65, 25, distance * .76), Vector3(0, 25, 0))
+				print("SILHOUETTE ",distance," authored ",preserve," triangles ",RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME))
+		proxy.free()
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--capture-range"):
 		camera.far=20000
 		camera.projection=Camera3D.PROJECTION_ORTHOGONAL
