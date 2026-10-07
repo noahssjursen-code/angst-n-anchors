@@ -1602,3 +1602,17 @@ world_canopy_cache_hit/prepare_ms/ready_ms distinguish preparation from full
 main-thread upload completion. A boot-finished event is not canopy completion.
 Review coastal_distance_review with --forest-only --far-forest --whole-forest;
 add --sea-level for offshore views. All runs require --shipyard-playtest.
+
+### Distant village silhouettes (2026-10-07)
+LandDecorCache.house_distance_mesh merges the existing village-house surfaces
+into one shared, opaque, live-lit mesh per variant. It preserves the pitched roof,
+chimney and exact source vertices instead of projecting them onto six AABB faces.
+Each variant is56 triangles/one surface; colours use the source sRGB values with
+vertex_color_is_srgb enabled. Distant windows share the rough facade material;
+nearby houses keep their separate materials. No new authored model is introduced.
+ImpostorWarmup registers these resources directly, avoiding48 house-view captures
+at startup. Other building blueprints still use the existing image-bake fallback.
+Keep LodService lifecycle/range behavior and resource-only cache ownership.
+Run house_distance_test, land_decor_cache_lifecycle_test and building_light_review
+with --geometry-houses to inspect the geometry path (all with --shipyard-playtest).
+The review without that switch intentionally shows the old six-panel reference.

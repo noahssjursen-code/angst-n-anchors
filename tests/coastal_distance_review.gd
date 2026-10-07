@@ -18,13 +18,28 @@ func review() -> void:
 	player.set_physics_process(false)
 	camera=Camera3D.new();camera.far=16000;world.add_child(camera);camera.current=true
 	var home:=world.get_node("HomePort") as Node3D
+	var layout := world.get_world_layout() as WorldLayout
 	camera.fov=40
+	var offshore:=Vector3.ZERO
+	for step in 72:
+		var direction:=(-home.global_basis.z).rotated(Vector3.UP,step*TAU/72)
+		var clear:=true
+		for distance in [350.0,900.0,1800.0]:
+			var eye:Vector3=home.global_position+direction*distance
+			if layout.sample_signed_distance(Vector2(eye.x,eye.z))<30: clear=false
+		if clear:
+			offshore=direction
+			break
+	assert(offshore!=Vector3.ZERO,"No clear offshore review bearing")
 	for distance in [350.0,900.0,1800.0]:
 		if OS.get_cmdline_user_args().has("--forest-only"): break
-		camera.position=home.to_global(Vector3(0,30,-distance))
+		camera.position=home.global_position+offshore*distance+Vector3.UP*30
 		camera.look_at(home.global_position+Vector3(0,15,0))
 		weather(.5,.25)
 		await get_tree().create_timer(5).timeout
+		for attempt in 180:
+			if world.get_node("WorldTerrainStreamer").pending_near(camera.global_position,1800)==0: break
+			await get_tree().create_timer(.25).timeout
 		await capture("day-"+str(int(distance)))
 		weather(.08,.25)
 		await get_tree().create_timer(2).timeout
@@ -36,7 +51,6 @@ func review() -> void:
 		get_tree().quit()
 		return
 	weather(.5,.35)
-	var layout := world.get_world_layout() as WorldLayout
 	var wooded := Vector2.ZERO
 	var best := -1.0
 	for z in range(-12000,12000,250):

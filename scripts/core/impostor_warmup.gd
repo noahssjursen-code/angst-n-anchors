@@ -58,14 +58,9 @@ static func warm_land_houses(host: Node, status_cb: Callable = Callable()) -> vo
 		var key := land_house_key(variant)
 		if IMPOSTOR_CACHE.has_key(key):
 			continue
-		_status(status_cb, "Baking house impostors (%d/%d)…" % [variant + 1, LandDecorCache.VARIANT_COUNT])
-		# u=v=0 and index=variant → variant_index resolves to variant.
-		var node := LandDecorCache.house_instance(variant, 0.0, 0.0)
-		host.add_child(node)
-		await host.get_tree().process_frame
-		await IMPOSTOR_CACHE.bake_from_node(host, key, node, BAKE_RESOLUTION)
-		node.free()
-		await host.get_tree().process_frame
+		_status(status_cb, "Preparing distant houses (%d/%d)..." % [variant + 1, LandDecorCache.VARIANT_COUNT])
+		IMPOSTOR_CACHE.register_geometry(key,LandDecorCache.house_distance_mesh(variant))
+
 
 
 static func warm_cranes(host: Node, status_cb: Callable = Callable()) -> void:

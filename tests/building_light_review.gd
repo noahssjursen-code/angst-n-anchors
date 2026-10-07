@@ -37,11 +37,14 @@ func review() -> void:
 		var source:=LandDecorCache.house_instance(i,0,0)
 		add_child(source)
 		await ImpostorCache.bake_from_node(self,"review"+str(i),source,256)
+		if OS.get_cmdline_user_args().has("--geometry-houses"):
+			ImpostorCache.register_geometry("review"+str(i),LandDecorCache.house_distance_mesh(i))
 		source.position=Vector3((i-1)*25,0,0)
 		var proxy:=ImpostorCache.instance("review"+str(i));add_child(proxy);proxy.position=source.position+Vector3(0,0,30)
 		probes.append(proxy.position+Vector3(0,3,0))
 	await shot("day",Vector3(62,45,85),Vector3(0,3,14))
 	var day_brightness := brightness()
+	await shot("roof-close",Vector3(16,12,53),Vector3(0,4,30))
 	sun.rotation_degrees=Vector3(-25,150,0)
 	await shot("opposite-sun",Vector3(62,45,85),Vector3(0,3,14))
 	sun.light_energy=.025;env.environment.ambient_light_energy=.025

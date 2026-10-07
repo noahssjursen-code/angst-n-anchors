@@ -9,10 +9,12 @@ const VARIANT_COUNT := 8
 # their rendering instances when a static cache outlives the world.
 static var _house_prototypes: Array[Array] = []
 static var _initialized := false
+static var _distance_meshes: Dictionary = {}
 
 
 static func clear() -> void:
 	_house_prototypes.clear()
+	_distance_meshes.clear()
 	_initialized = false
 
 
@@ -113,3 +115,31 @@ static func _stamp(prototype: Array) -> Node3D:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(mi)
 	return root
+
+
+## Preserve the existing pitched roof/chimney silhouette in one shared draw.
+## This is a presentation reduction of the existing house, not new geometry.
+static func house_distance_mesh(variant: int) -> ArrayMesh:
+	_ensure_baked()
+	variant=posmod(variant,VARIANT_COUNT)
+	if _distance_meshes.has(variant): return _distance_meshes[variant]
+	var surface:=SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for part:Dictionary in _house_prototypes[variant]:
+		var mesh:Mesh=part.mesh
+		var material:StandardMaterial3D=part.material
+		var arrays:=mesh.surface_get_arrays(0)
+		var vertices:PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
+		var normals:PackedVector3Array=arrays[Mesh.ARRAY_NORMAL]
+		for i in vertices.size():
+			surface.set_color(material.albedo_color)
+			surface.set_normal(normals[i])
+			surface.add_vertex(vertices[i])
+	var result:=surface.commit()
+	var paint:=StandardMaterial3D.new()
+	paint.vertex_color_use_as_albedo=true
+	paint.vertex_color_is_srgb=true
+	paint.roughness=.95
+	result.surface_set_material(0,paint)
+	_distance_meshes[variant]=result
+	return result

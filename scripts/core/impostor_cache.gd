@@ -128,6 +128,12 @@ static func bake_from_node(
 	}
 
 
+## Store an already cheap visual mesh without baking six image panels.
+static func register_geometry(key: String, mesh: ArrayMesh) -> void:
+	if key.is_empty() or mesh==null: return
+	_entries[key]={"mesh":mesh}
+
+
 ## Stamp the footprint box: quads on each AABB face, same local pose as source.
 static func instance(key: String, show_ghost: bool = false) -> Node3D:
 	var root = IMPOSTOR_INSTANCE.new()
@@ -135,6 +141,15 @@ static func instance(key: String, show_ghost: bool = false) -> Node3D:
 	if not _entries.has(key):
 		return root as Node3D
 	var entry: Dictionary = _entries[key]
+	if entry.has("mesh"):
+		var visual:=MeshInstance3D.new()
+		visual.mesh=entry.mesh
+		visual.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(visual)
+		if show_ghost:
+			var bounds: AABB = visual.mesh.get_aabb()
+			root._add_footprint_ghost(bounds.size,bounds.get_center())
+		return root
 	root.setup(
 		entry.get("size", Vector3.ONE) as Vector3,
 		entry.get("center", Vector3.ZERO) as Vector3,
