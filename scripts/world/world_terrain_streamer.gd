@@ -438,10 +438,9 @@ func _install_chunk_data(
 	mesh_instance.name = "Visual"
 	mesh_instance.mesh = _array_mesh_from_data(data)
 	mesh_instance.material_override = _terrain_material(lod)
-	# Terrain beyond the sun's short 180 m shadow range never contributes useful
-	# shadow detail; disabling it on coarse rings avoids needless shadow work.
-	if lod >= 1:
-		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Coarse ridges still occlude sunlight over coastal water. Geometry LOD
+	# reduces their cost; dropping their shadows makes mountains transparent.
+	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	root.add_child(mesh_instance)
 
 	var record := {

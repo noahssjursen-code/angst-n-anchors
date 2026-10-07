@@ -24,15 +24,19 @@ var _suppress_wave_sync: bool = false
 
 const WIND_SPEED_MAX     : float = 30.0  # m/s. ~58 knots, Beaufort 10/11
 
+# Last published time, not the previous frame: small steps must accumulate.
+var _published_time_of_day: float = 0.42
+
 # --- Axis 0 : time of day ---
 @export_range(0.0, 1.0, 0.001) var time_of_day: float = 0.42:
 	set(v):
 		var next := wrapf(v, 0.0, 1.0)
-		var visual_delta := absf(wrapf(next - time_of_day, -0.5, 0.5))
+		var visual_delta := absf(wrapf(next - _published_time_of_day, -0.5, 0.5))
 		time_of_day = next
 		# WorldClock updates every frame; weather rendering only needs a refresh
 		# after a visually meaningful sun movement (~0.02 degrees).
 		if not _suppress_emit and visual_delta >= 0.00005:
+			_published_time_of_day = next
 			state_changed.emit()
 
 # --- Independent: cloud cover (0 clear sky → 1 fully overcast, no rain required) ---

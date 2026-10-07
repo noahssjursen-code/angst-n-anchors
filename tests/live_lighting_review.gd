@@ -53,6 +53,10 @@ func review() -> void:
 	world.add_child(camera)
 	camera.global_transform=player.get_node("Camera3D").global_transform
 	camera.current=true
+	if OS.get_cmdline_user_args().has("--solar-performance"):
+		await solar_performance()
+		get_tree().quit()
+		return
 	weather(0.0)
 	await get_tree().create_timer(1.3).timeout # Let pre-boot rain particles expire.
 	if OS.get_cmdline_user_args().has("--shadow-review"):
@@ -112,3 +116,19 @@ func shadow_review() -> void:
 			lamp.shadow_bias=.005 if variant=="low-bias" else .03
 		RenderingServer.positional_soft_shadow_filter_set_quality(4 if variant=="high-filter" else 2)
 		await capture("shadow-"+variant)
+
+func solar_performance() -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = 0
+	WorldClock.set_process(false)
+	weather(.24, 0.0)
+	var sun := renderer._sun as DirectionalLight3D
+	for long_range in [false, true]:
+		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if long_range else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+		sun.directional_shadow_max_distance = 6000.0 if long_range else 180.0
+		for frame in 60: await get_tree().process_frame
+		var start := Time.get_ticks_usec()
+		for frame in 180: await get_tree().process_frame
+		print("SOLAR FRAME MS range=",sun.directional_shadow_max_distance," mean=",float(Time.get_ticks_usec()-start)/180000.0,
+			" draws=",Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+		await capture("solar-range-"+str(sun.directional_shadow_max_distance))

@@ -174,6 +174,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
+	# Celestial direction follows the clock every frame, independent of throttled
+	# weather/color updates. Sky disk, direct shadows and water agree.
+	var sun_direction := _celestial_dir(0.0)
+	if _sun != null:
+		_sun.basis = Basis.looking_at(-sun_direction, Vector3.UP)
+	if _moon_light != null:
+		_moon_light.basis = Basis.looking_at(-_celestial_dir(0.5), Vector3.UP)
+	for material in [_ocean_shader_material, _ocean_mid_material, _ocean_far_material, _ocean_horizon_material]:
+		if material != null:
+			material.set_shader_parameter("sun_direction", sun_direction)
 	_follow_camera_xz()
 	_update_underwater_effect()
 	if _ocean_shader_material:
@@ -453,12 +463,13 @@ func _build_sky() -> void:
 	sun.light_color                       = Color(1.0, 0.92, 0.78)
 	sun.light_energy                      = 1.5
 	sun.shadow_enabled                    = true
-	# 2 cascades over 180 m gives a 90 m near split and 90 m far — plenty for
-	# the dock + immediate-water visible foreground. 4 cascades was rendering
-	# the shadowmap twice as often as needed for this shadow distance and was
-	# a measurable GPU chunk (~0.3-0.6 ms/frame on mid-tier).
-	sun.directional_shadow_mode           = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_max_distance   = 180.0
+	# Preserve close ship detail while allowing coastal ridges to shade the bay.
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance = 6000.0
+	sun.directional_shadow_split_1 = 0.015
+	sun.directional_shadow_split_2 = 0.06
+	sun.directional_shadow_split_3 = 0.25
+	sun.directional_shadow_blend_splits = true
 	sun.shadow_bias                       = 0.04
 	add_child(sun)
 
