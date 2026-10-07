@@ -37,6 +37,9 @@ extends Resource
 @export var hull_speed_fn: float = 0.4
 @export var lateral_drag_coeff: float = 3.4
 @export var yaw_drag_coeff: float = 9.5
+## Gameplay manoeuvring resistance; only fades out below cruising speed.
+@export var harbour_drag_rate: float = 0.0
+@export var astern_drag_multiplier: float = 1.0
 
 @export_group("Propulsion")
 @export var shaft_power_kw: float = 1000.0

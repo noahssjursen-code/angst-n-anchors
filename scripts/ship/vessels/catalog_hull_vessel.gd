@@ -282,6 +282,8 @@ func _add_systems(
 	hydro.hull_speed_fn = profile.hull_speed_fn
 	hydro.lateral_drag_coeff = profile.lateral_drag_coeff
 	hydro.yaw_drag_coeff = profile.yaw_drag_coeff
+	hydro.harbour_drag_rate = profile.harbour_drag_rate
+	hydro.astern_drag_multiplier = profile.astern_drag_multiplier
 	hydro.wind_frontal_area = profile.wind_frontal_area_m2
 	hydro.wind_lateral_area = profile.wind_lateral_area_m2
 	hydro.wind_drag_coeff = profile.wind_drag_coeff

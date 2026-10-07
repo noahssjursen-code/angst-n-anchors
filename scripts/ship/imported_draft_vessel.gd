@@ -24,6 +24,9 @@ func configure(snapshot: Dictionary) -> void:
 	physics_profile.roll_gyradius_fraction = .40
 	physics_profile.pitch_gyradius_fraction = .32
 	physics_profile.heave_damping_ratio = 1.0
+	physics_profile.reverse_multiplier = 0.65
+	physics_profile.harbour_drag_rate = 0.055
+	physics_profile.astern_drag_multiplier = 3.0
 	# Explicit hydrodynamics owns resistance. Godot's default 0.1/s plus the
 	# inherited 0.05/s damping otherwise consumes ~134 kN on the 420 t coaster
 	# at only 4.1 knots, despite its measured water drag being merely ~2.3 kN.

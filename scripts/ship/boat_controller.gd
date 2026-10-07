@@ -30,7 +30,7 @@ static var helmed_count: int = 0
 ## Default stages:
 ## 0 full astern, 1 stop, 2 dead slow, 3 half, 4 full ahead.
 @export var throttle_stage_values: PackedFloat32Array = PackedFloat32Array([
-	-0.55, 0.0, 0.28, 0.56, 1.0
+	-1.0, 0.0, 0.28, 0.56, 1.0
 ])
 @export var stage_label_astem: String = "ASTERN"
 @export var stage_label_stop: String = "STOP"
