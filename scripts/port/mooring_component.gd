@@ -577,6 +577,14 @@ func set_line_tied(forward_slot: bool, tied: bool) -> void:
 	else:
 		_capture_rest_distances()
 	_sync_berth_with_dock()
+	# Keep the old dock available until its berth is released, then discard
+	# detached endpoints. They must not reject a later arrival at another port.
+	if not bow_line_tied:
+		_front_post = null
+		_bow_point = null
+	if not stern_line_tied:
+		_rear_post = null
+		_stern_point = null
 	_emit_mooring_state()
 
 
@@ -656,13 +664,19 @@ func _state_signature() -> String:
 func _emit_mooring_state() -> void:
 	if _suppress_state_signal:
 		return
-	_remember_authority_identity()
+	# Final cast-off retains the destination remembered before endpoints clear.
+	# The ship may still be parented beneath its original spawning port.
+	if is_moored or _known_port_id.is_empty() or _known_berth_id.is_empty():
+		_remember_authority_identity()
 	if _known_port_id.is_empty() or _known_berth_id.is_empty():
 		return
 	var signature := _state_signature()
 	if signature == _last_emitted_state:
 		return
 	_last_emitted_state = signature
+	var harbour := _resolve_harbour_controller()
+	if harbour != null:
+		harbour.observe_arriving_mooring(_resolve_boat_body())
 	mooring_state_changed.emit(
 		_known_port_id,
 		_known_berth_id,
@@ -777,6 +791,13 @@ func _find_port_dock() -> Node:
 		var stern_dock := _dock_from_node(_rear_post)
 		if stern_dock != null:
 			return stern_dock
+	# The final line was just switched off, but berth release still needs its
+	# destination. set_line_tied clears these references after synchronisation.
+	for post in [_front_post, _rear_post]:
+		if is_instance_valid(post):
+			var last_dock := _dock_from_node(post)
+			if last_dock != null:
+				return last_dock
 	var n: Node = get_parent()
 	while n != null:
 		if n is PortPlot:
@@ -849,6 +870,8 @@ func _berth_index_for_post(dock: Node, post: Node) -> int:
 
 
 func _would_split_berths(new_post: Node) -> bool:
+	if not bow_line_tied and not stern_line_tied:
+		return false
 	var harbour := _resolve_harbour_controller()
 	if harbour != null:
 		var new_slot := harbour.berth_for_bollard(new_post)

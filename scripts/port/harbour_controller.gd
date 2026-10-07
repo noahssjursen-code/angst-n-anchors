@@ -665,6 +665,13 @@ func apply_remote_ship_berth(ship: BoatBody, berth_id: String) -> bool:
 	return plug_ship(bid, ship)
 
 
+func observe_arriving_mooring(ship: BoatBody) -> void:
+	# A sailed-in ship is not plugged into this harbour until both lines are
+	# tied. Listen before its first line so arrival reaches the authority too.
+	if is_instance_valid(_authority_bridge):
+		_authority_bridge._wire_ship(ship)
+
+
 func ship_berth_meta(ship: BoatBody) -> String:
 	## UDP-friendly: berth=<berth_id>
 	var bid := ship_berth_id(ship)

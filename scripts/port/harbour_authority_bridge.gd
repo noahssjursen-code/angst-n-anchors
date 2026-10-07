@@ -224,7 +224,7 @@ func _apply_berth_projection(projection: Dictionary) -> void:
 				mooring.apply_authoritative_state(slot, desired_bow, desired_stern)
 	else:
 		var released_mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
-		if released_mooring != null:
+		if released_mooring != null and released_mooring._known_port_id == _controller.port_id() and released_mooring._known_berth_id == berth_id:
 			released_mooring.apply_authoritative_state(slot, false, false)
 		if _controller.ship_berth_id(ship) == berth_id:
 			_controller.unplug_ship(ship)
@@ -292,7 +292,6 @@ func _on_local_mooring_changed(
 	var vessel_id := HarbourController.ship_id_of(ship)
 	if vessel_id.is_empty() or not _owns_vessel(vessel_id):
 		return
-	var request_id := WorldGateway.next_request_id("vessel-mooring")
 	var context := {
 		"kind": "mooring",
 		"vessel_id": vessel_id,
@@ -301,20 +300,47 @@ func _on_local_mooring_changed(
 		"bow_line": bow_line,
 		"stern_line": stern_line,
 	}
-	_pending[request_id] = context
 	_pending_mooring_by_vessel[vessel_id] = context
+	# Preserve the latest toggles while a remote arrival claim is in flight.
+	for inflight: Dictionary in _pending.values():
+		if inflight.get("kind") == "mooring_claim" and inflight.get("vessel_id") == vessel_id:
+			return
+	_submit_mooring(context)
+	NetworkManager.force_local_ship_meta_resync()
+
+
+func _submit_mooring(context: Dictionary, claim_accepted: bool = false) -> void:
+	var vessel_id := str(context.vessel_id)
+	var port_id := str(context.port_id)
+	var berth_id := str(context.berth_id)
+	var state: Dictionary = WorldGateway.projection("vessel_berth", vessel_id).get("state", {})
+	var needs_claim := str(state.get("port_id", "")) != port_id or str(state.get("berth_id", "")) != berth_id
+	if needs_claim and not claim_accepted and not bool(context.bow_line) and not bool(context.stern_line):
+		_pending_mooring_by_vessel.erase(vessel_id)
+		return # Never claim a berth merely to report no lines there.
+	var request_id := WorldGateway.next_request_id("vessel-mooring")
+	var pending := context.duplicate(true)
+	if needs_claim and not claim_accepted:
+		pending["kind"] = "mooring_claim"
+		_pending[request_id] = pending
+		WorldGateway.send_command(
+			WorldContracts.COMMAND_VESSEL_BERTH_CLAIM,
+			WorldContracts.vessel_berth_claim_body(vessel_id, port_id, [berth_id]),
+			request_id,
+		)
+		return
+	_pending[request_id] = pending
 	WorldGateway.send_command(
 		WorldContracts.COMMAND_VESSEL_MOORING_SET,
 		WorldContracts.vessel_mooring_body(
 			vessel_id,
 			port_id,
 			berth_id,
-			bow_line,
-			stern_line,
+			bool(context.bow_line),
+			bool(context.stern_line),
 		),
 		request_id,
 	)
-	NetworkManager.force_local_ship_meta_resync()
 
 
 func _owns_vessel(vessel_id: String) -> bool:
@@ -433,6 +459,12 @@ func _on_command_completed(request_id: String, result: Dictionary) -> void:
 	var pending := _pending[request_id] as Dictionary
 	_pending.erase(request_id)
 	if bool(result.get("ok", false)):
+		if str(pending.get("kind", "")) == "mooring_claim":
+			var latest: Dictionary = _pending_mooring_by_vessel.get(str(pending.vessel_id), pending).duplicate(true)
+			latest["kind"] = "mooring"
+			_pending_mooring_by_vessel[str(pending.vessel_id)] = latest
+			_submit_mooring(latest, true)
+			return
 		if str(pending.get("kind", "")) == "mooring":
 			var assignment := (
 				(result.get("data", {}) as Dictionary).get("assignment", {}) as Dictionary
@@ -453,6 +485,16 @@ func _on_command_completed(request_id: String, result: Dictionary) -> void:
 	var vessel_id := str(pending.get("vessel_id", ""))
 	if not vessel_id.is_empty():
 		_pending_mooring_by_vessel.erase(vessel_id)
+		if str(pending.get("kind", "")) == "mooring_claim":
+			var ship := _find_ship(vessel_id)
+			if ship != null:
+				var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
+				if mooring != null:
+					mooring._suppress_state_signal = true
+					mooring.release_mooring()
+					mooring._suppress_state_signal = false
+					mooring.last_mooring_reject = str(result.get("message", "Berth unavailable"))
+					mooring.mooring_rejected.emit(mooring.last_mooring_reject)
 	push_warning("Harbour authority rejected %s: %s" % [pending.get("kind", "operation"), result.get("message", "unknown error")])
 	_reconcile_all()
 
