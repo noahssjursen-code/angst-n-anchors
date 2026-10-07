@@ -1343,3 +1343,32 @@ under that override is wasted work and triggered renderer material dependency
 errors when previews were replaced before the next frame. Placed parts keep
 create_part(record)'s default paint path and independent colour regions. Verify
 both the ghost and placed model with imported_parts_paint_test.
+
+### Provision crane hoist kit (7 October)
+
+The default ProvisionCrane keeps its existing role hierarchy and cargo/authority
+controls, but its trolley, wire and hook visuals now use three independent
+Blender assets under parts/provision_hoist. Source build_hoist.py lives under
+_source/provision_hoist and reuses the crane_kit paint baker. Three source blends
+are retained; six512px baked paint maps use mipmaps and VRAM compression.
+
+LoadSeat remains the existing hook origin. Lower-sheave tangents are x=+/-0.30m,
+y=0.85m in Godot. Straight falls are authored10m downward and scale only in length;
+the block and trolley must never inherit that stretch. Respect model_scale both
+in visual dimensions and in the wire length calculation. Current rail centres
+are +/-0.42m; trolley running-wheel bottoms sit on the existing rail top.
+Custom JSON crane models keep their original visuals. Do not change freight
+identity, pad placement, reach limits or AI control to accommodate cosmetic parts.
+
+This is a hoist-kit migration, not a finished whole-crane replacement. Mast,
+jib, cab and counterweight remain legacy models. Running wheels/sheaves are
+fixed meshes for now; drum/feed-rope routing and rotation remain future work.
+No certified load rating or mechanical simulation is implied by these visuals.
+Original geometry was informed by the manufacturer's two-fall/trolley arrangement:
+https://www.liebherr.com/en-sg/tower-cranes/assistance-systems-7101961
+https://assets-cdn.liebherr.com/assets/api/ac6958da-b4ba-40b6-8f25-3f1734d3a33c/Original/
+
+Run tests/provision_hoist_review.tscn -- --shipyard-playtest for rendered motion,
+rope-tangent checks at three scales/lengths, and real container pickup/move/release.
+Use tests/port_material_review.tscn with --provision-review for daylight port
+context. Captures are archived under Pictures/machinescreenshots.

@@ -65,6 +65,9 @@ var _wire_mesh: MeshInstance3D
 var _wire_mesh_base_scale := Vector3.ONE
 var _hook: Node3D
 var _wire_rest_length := WIRE_REST_LENGTH_M
+var _imported_hoist := false
+const HOIST_MODELS := "res://resources/models/parts/provision_hoist/"
+const LOWER_SHEAVE_HEIGHT_M := 0.85
 var _talje_rail_y := -0.78
 var _attached_container: ContainerNode = null
 var _space_held := false
@@ -77,6 +80,7 @@ func _ready() -> void:
 
 
 func reload_model() -> void:
+	_imported_hoist = false
 	_pad = null
 	_girder = null
 	_cabin = null
@@ -119,6 +123,8 @@ func _bind_rig() -> void:
 	_hook = _part("hook")
 	_load_meta()
 	_rig_hoist_parts()
+	if model_path == DEFAULT_MODEL:
+		_install_imported_hoist()
 	_apply_slew()
 	_apply_trolley()
 	_apply_hoist()
@@ -160,6 +166,49 @@ func _model_meta() -> Dictionary:
 	return meta as Dictionary if typeof(meta) == TYPE_DICTIONARY else {}
 
 
+func _install_imported_hoist() -> void:
+	# Keep the existing role nodes, pivots and cargo load seat. Only replace the
+	# default crane's generated visual/collision children after rig reparenting.
+	for entry in [[_hook, "provision_hook_block"], [_wire, "provision_rope_pair_10m"], [_talje, "provision_trolley"]]:
+		var part: Node3D = entry[0]
+		for child in part.get_children():
+			if child is MeshTransformer or child is ModelAssembler:
+				continue
+			part.remove_child(child)
+			child.queue_free()
+		var scene := load(HOIST_MODELS + entry[1] + ".glb") as PackedScene
+		assert(scene != null)
+		var visual := scene.instantiate() as Node3D
+		visual.scale = Vector3.ONE * model_scale
+		part.add_child(visual)
+	# Guard collision follows the moving block, never the stretching wire.
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(.76,.82,.42)
+	shape.shape = box
+	shape.position.y = .81
+	body.add_child(shape)
+	_hook.add_child(body)
+	body.scale = Vector3.ONE * model_scale
+	var trolley_body := StaticBody3D.new()
+	trolley_body.collision_layer = 1
+	trolley_body.collision_mask = 0
+	var trolley_shape := CollisionShape3D.new()
+	var trolley_box := BoxShape3D.new()
+	trolley_box.size = Vector3(1.4,.3,1.4)
+	trolley_shape.shape = trolley_box
+	trolley_shape.position.y = -.25
+	trolley_body.add_child(trolley_shape)
+	_talje.add_child(trolley_body)
+	trolley_body.scale = Vector3.ONE * model_scale
+	_wire_mesh = _find_wire_mesh(_wire)
+	_wire_mesh_base_scale = _wire_mesh.scale
+	_imported_hoist = true
+
+
 func _apply_slew() -> void:
 	if _cabin == null or not is_instance_valid(_cabin):
 		return
@@ -184,7 +233,9 @@ func _apply_hoist() -> void:
 		if _wire_mesh != null:
 			_wire_mesh_base_scale = _wire_mesh.scale
 	var rest := maxf(_wire_rest_length, 0.1)
-	var ratio := hoist_length_m / rest
+	# The straight falls meet the sheave tangents above the unchanged load seat.
+	var visible_length := hoist_length_m - LOWER_SHEAVE_HEIGHT_M * model_scale if _imported_hoist else hoist_length_m
+	var ratio := visible_length / (rest * model_scale) if _imported_hoist else visible_length / rest
 	_wire.scale = Vector3.ONE
 	if _wire_mesh != null and is_instance_valid(_wire_mesh):
 		_wire_mesh.scale = Vector3(
