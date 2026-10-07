@@ -415,6 +415,10 @@ static func advance_placement_job(layout: Object, job: Dictionary, flatten_zones
 static func coastal_species(layout: Object, point: Vector2) -> int:
 	var inland := -float(layout.sample_signed_distance(point))
 	var height := float(layout.sample_height(point))
+	return coastal_species_from_samples(point,inland,height)
+
+
+static func coastal_species_from_samples(point:Vector2, inland:float, height:float) -> int:
 	var cell := point / 180.0
 	var ix := floori(cell.x)
 	var iz := floori(cell.y)

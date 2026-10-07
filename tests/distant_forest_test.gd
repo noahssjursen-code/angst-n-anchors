@@ -13,6 +13,10 @@ func _run() -> void:
 	for node in [a,b]:
 		node.layout=Coast.new();node.cell_m=100.0
 		node.coverage=Image.create(4,4,false,Image.FORMAT_R8);node.coverage.fill(Color.WHITE)
+		for y in 4:
+			for x in 4: node.coverage.set_pixel(x,y,Color(float(x+y)/6.0,0,0))
+		# Packed sampling must match Image sampling, including filtered edges.
+		if node==a: node.prepare_density_pixels()
 		node.zones=[zone]
 		for y in 4:
 			for x in 4: node.build_cell(Vector2i(x,y))

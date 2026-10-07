@@ -1616,3 +1616,10 @@ Keep LodService lifecycle/range behavior and resource-only cache ownership.
 Run house_distance_test, land_decor_cache_lifecycle_test and building_light_review
 with --geometry-houses to inspect the geometry path (all with --shipyard-playtest).
 The review without that switch intentionally shows the old six-panel reference.
+
+Forest generation reuses signed-distance/height samples for species selection.
+Its packed density lookup retains Image R8 conversion and bilinear/clamped rules.
+For validation against an existing playtest cache, add --verify-forest-cache to
+coastal_distance_review with --whole-forest: this deliberately rebuilds and checks
+all placements for exact equality. Use after optimization, not after intentional
+placement-rule changes (which require a cache version bump).

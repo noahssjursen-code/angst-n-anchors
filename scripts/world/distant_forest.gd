@@ -15,6 +15,8 @@ var ready_ms := 0
 var layout: Object
 var jobs: Array[Vector2i] = []
 var coverage: Image
+var density_pixels:=PackedFloat32Array()
+var verify_cache:=false
 var cell_m: float
 var cancel_lock := Mutex.new()
 var cancelled := false
@@ -32,6 +34,8 @@ func _exit_tree() -> void:
 func generate() -> void:
 	var started := Time.get_ticks_msec()
 	batches = CACHE.read(cache_path, cache_key)
+	var reference:Dictionary=batches if verify_cache else {}
+	if verify_cache: batches={}
 	cache_hit = not batches.is_empty()
 	if cache_hit:
 		jobs.clear()
@@ -42,12 +46,17 @@ func generate() -> void:
 		if stop: return
 		build_cell(cell)
 	jobs.clear()
+	if verify_cache:
+		assert(not reference.is_empty() and batches==reference,"Forest optimization changed cached placements")
+		print("FOREST CACHE PARITY PASS: all world placements/species/scales unchanged")
 	CACHE.write(cache_path, cache_key, batches)
 	prepare_ms = Time.get_ticks_msec() - started
 func configure(source: Object) -> void:
 	started_ms=Time.get_ticks_msec()
+	verify_cache=ShipyardPlaytestMode.active() and OS.get_cmdline_user_args().has("--verify-forest-cache")
 	layout=source
 	coverage=ForestField.coverage_texture().get_image()
+	prepare_density_pixels()
 	cell_m=layout.world_size_m/coverage.get_width()
 	for y in coverage.get_height():
 		for x in coverage.get_width():
@@ -66,10 +75,19 @@ func configure(source: Object) -> void:
 	worker=Thread.new();worker.start(generate)
 func point(cell: Vector2i) -> Vector2:
 	return Vector2(cell)*cell_m-Vector2.ONE*layout.half_extent_m
+func prepare_density_pixels() -> void:
+	density_pixels.resize(coverage.get_width()*coverage.get_height())
+	for y in coverage.get_height():
+		for x in coverage.get_width():
+			density_pixels[y*coverage.get_width()+x]=coverage.get_pixel(x,y).r
+func density_pixel(x:int,y:int) -> float:
+	x=clampi(x,0,coverage.get_width()-1);y=clampi(y,0,coverage.get_height()-1)
+	if density_pixels.is_empty(): return coverage.get_pixel(x,y).r
+	return density_pixels[y*coverage.get_width()+x]
 func density_at(p:Vector2) -> float:
 	var uv:Vector2=(p+Vector2.ONE*layout.half_extent_m)/cell_m-Vector2(.5,.5)
 	var c:=Vector2i(floori(uv.x),floori(uv.y));var f:=uv-Vector2(c)
-	return lerpf(lerpf(coverage.get_pixel(clampi(c.x,0,coverage.get_width()-1),clampi(c.y,0,coverage.get_width()-1)).r,coverage.get_pixel(clampi(c.x+1,0,coverage.get_width()-1),clampi(c.y,0,coverage.get_width()-1)).r,f.x),lerpf(coverage.get_pixel(clampi(c.x,0,coverage.get_width()-1),clampi(c.y+1,0,coverage.get_width()-1)).r,coverage.get_pixel(clampi(c.x+1,0,coverage.get_width()-1),clampi(c.y+1,0,coverage.get_width()-1)).r,f.x),f.y)
+	return lerpf(lerpf(density_pixel(c.x,c.y),density_pixel(c.x+1,c.y),f.x),lerpf(density_pixel(c.x,c.y+1),density_pixel(c.x+1,c.y+1),f.x),f.y)
 func _process(_delta:float) -> void:
 	if layout==null or pending()==0 or not ForestTreeMesh.assets_ready(): return
 	if meshes.is_empty():
@@ -102,11 +120,14 @@ func build_cell(cell:Vector2i) -> void:
 		for x in count:
 			var random:=WorldForestStreamer._hash01(cell.x,cell.y,x,y)
 			var p:=origin+Vector2(x+.2+random*.6,y+.2+WorldForestStreamer._hash01(cell.y,cell.x,y,x)*.6)*spacing
-			if random>density_at(p) or layout.sample_signed_distance(p)>-22.0: continue
+			if random>density_at(p): continue
+			var inland:float=-layout.sample_signed_distance(p)
+			if inland<22.0: continue
 			if ForestField.inside_flatten_zones(p,local_zones): continue
-			var height:float=layout.sample_height(p)-WorldTerrainStreamer.TERRAIN_SINK_M
+			var natural_height:float=layout.sample_height(p)
+			var height:=natural_height-WorldTerrainStreamer.TERRAIN_SINK_M
 			if height<1.2: continue
-			var species:=WorldForestStreamer.coastal_species(layout,p)
+			var species:=WorldForestStreamer.coastal_species_from_samples(p,inland,natural_height)
 			var scale:=lerpf(.8,1.35,WorldForestStreamer._hash01(x,y,cell.y,cell.x))
 			# Placement has no rotation: keep four floats instead of Variant transforms.
 			groups[species].append_array(PackedFloat32Array([p.x,height,p.y,scale]))
