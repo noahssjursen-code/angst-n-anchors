@@ -357,9 +357,10 @@ func find_free_slot(fp: Vector2i = Vector2i.ZERO) -> int:
 	return _find_free_block(use_fp, Vector2.ZERO, false)
 
 
-func slot_drop_world_for_free(fp: Vector2i = Vector2i.ZERO) -> Vector3:
+func slot_drop_world_for_free(fp: Vector2i = Vector2i.ZERO, world_hint: Vector3 = Vector3.INF) -> Vector3:
 	var use_fp := fp if fp.x >= 1 and fp.y >= 1 else get_slot_footprint()
-	var origin := _find_free_block(use_fp, Vector2.ZERO, false)
+	var local_hint := to_local(world_hint) if world_hint != Vector3.INF else Vector3.ZERO
+	var origin := _find_free_block(use_fp, Vector2(local_hint.x, local_hint.z), world_hint != Vector3.INF)
 	if origin < 0:
 		return Vector3.INF
 	return to_global(_cell_center_local(origin, use_fp))

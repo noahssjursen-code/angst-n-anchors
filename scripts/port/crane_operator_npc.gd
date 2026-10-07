@@ -185,6 +185,8 @@ func _refresh_panel() -> void:
 				hint = ""
 			elif equip is BulkCraneEquipmentJob and not (equip as BulkCraneEquipmentJob).last_failure.is_empty():
 				hint = (equip as BulkCraneEquipmentJob).last_failure
+			elif equip is ProvisionCraneEquipmentJob and not (equip as ProvisionCraneEquipmentJob).last_failure.is_empty():
+				hint = (equip as ProvisionCraneEquipmentJob).last_failure
 			elif not can_load and not can_unload:
 				if equip.has_method("serve_hint"):
 					hint = str(equip.call("serve_hint", ship, QuayEquipmentJob.MODE_LOAD))

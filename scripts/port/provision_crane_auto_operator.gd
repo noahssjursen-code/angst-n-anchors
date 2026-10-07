@@ -17,10 +17,10 @@ enum Phase {
 	NEXT,
 }
 
-const NEAR_M := 3.5
-const OVER_M := 4.0
+const NEAR_M := 0.22
+const OVER_M := 0.25
 const WORK_S := 0.45
-const TIMEOUT_S := 18.0
+const TIMEOUT_S := 45.0
 const TRAVEL_LIFT_M := 6.0
 const YARD_DROP_GROUP := "container_yard_drop"
 const CRANE_SCRIPT := preload("res://scripts/port/provision_crane.gd")
@@ -32,6 +32,7 @@ signal job_started(operation: Operation)
 signal cycle_completed(operation: Operation, cycle_index: int)
 signal job_finished(operation: Operation, cycles_completed: int)
 signal job_stopped()
+signal job_failed(reason: String)
 signal phase_changed(phase: Phase)
 
 @export var max_cycles := 0
@@ -44,6 +45,9 @@ var _pickup: ContainerNode
 var _drop_pad: CargoSlotPadComponent
 var _yard_pad: CargoSlotPadComponent
 var _drop_world := Vector3.ZERO
+var _drop_local := Vector3.ZERO
+var _lift_height := 0.0
+var _movement_recorded := false
 var _phase := Phase.IDLE
 var _timer := 0.0
 var _cycles := 0
@@ -89,6 +93,13 @@ func get_status_line() -> String:
 
 
 func stop() -> void:
+	var was_active := _active
+	_clear_operation()
+	if was_active:
+		job_stopped.emit()
+
+
+func _clear_operation() -> void:
 	_active = false
 	operation = Operation.NONE
 	_ship = null
@@ -98,7 +109,24 @@ func stop() -> void:
 	_drop_world = Vector3.ZERO
 	_set_phase(Phase.IDLE)
 	_update_gizmos()
-	job_stopped.emit()
+
+
+func get_progress_label() -> String:
+	return "%s · %s · container %d" % ["Loading" if operation == Operation.LOAD else "Unloading", _phase_label(), _cycles + 1] if _active else "idle"
+
+
+func _finish() -> void:
+	var completed_op := operation
+	var count := _cycles
+	_clear_operation()
+	job_finished.emit(completed_op, count)
+
+
+func _fail(reason: String) -> void:
+	# A failed or cancelled lift keeps its cargo attached. Never leave a floating
+	# unregistered box behind and never report a failed transfer as completion.
+	_clear_operation()
+	job_failed.emit(reason)
 
 
 func start_load(ship: BoatBody) -> bool:
@@ -110,28 +138,30 @@ func start_unload(ship: BoatBody) -> bool:
 
 
 func _begin(op: Operation, ship: BoatBody) -> bool:
-	if _crane == null or ship == null or not is_instance_valid(ship):
+	if _active or _crane == null or ship == null or not is_instance_valid(ship):
 		return false
 	if not _crane.can_reach_ship(ship):
 		return false
-	if op == Operation.LOAD and (_find_yard_pickup(ship) == null or _find_ship_drop(ship) == null):
-		return false
-	if op == Operation.UNLOAD and (
-		_find_ship_pickup(ship) == null or not _yard_has_free_slot()
-	):
-		return false
-	stop()
-	_active = true
+	_clear_operation()
 	operation = op
 	_ship = ship
 	_cycles = 0
-	_prepare_cycle()
+	if not _prepare_cycle():
+		_clear_operation()
+		return false
+	_active = true
 	job_started.emit(operation)
 	return true
 
 
 func _process(delta: float) -> void:
 	if not _active or _crane == null:
+		return
+	if not is_instance_valid(_ship) or (not _movement_recorded and not is_instance_valid(_pickup)):
+		_fail("The cargo or vessel is no longer available.")
+		return
+	if _timer > TIMEOUT_S:
+		_fail("Crane could not align with the cargo bed. Cargo is still secured; reposition the vessel and retry.")
 		return
 	_timer += delta
 	match _phase:
@@ -141,18 +171,20 @@ func _process(delta: float) -> void:
 				_set_phase(Phase.LOWER_PICKUP)
 		Phase.LOWER_PICKUP:
 			_crane.ik_hook_to(delta, _aim_point(_pickup, false), "track")
-			if _hook_near(_aim_point(_pickup, false), NEAR_M) or _timer > TIMEOUT_S:
+			if _hook_near(_aim_point(_pickup, false), NEAR_M):
 				_set_phase(Phase.GRAB)
 		Phase.GRAB:
 			if not _did_act:
 				_did_act = true
-				if _pickup != null and is_instance_valid(_pickup):
-					_crane.attach_container(_pickup)
-			if _crane.get_attached_container() != null or _timer > WORK_S:
+				if not _crane.attach_container(_pickup):
+					_fail("Cargo pickup failed; the container has not been moved.")
+					return
+			if _crane.get_attached_container() == _pickup:
 				_set_phase(Phase.RAISE_PICKUP)
 		Phase.RAISE_PICKUP:
-			_crane.ik_hook_to(delta, _aim_point(_pickup, true), "raise")
-			if _crane.hoist_length_m <= _crane.hoist_min_m + 2.5 or _timer > TIMEOUT_S:
+			# Raise vertically before slewing a loaded container over the quay.
+			_crane.ik_hook_to(delta, _crane.get_hook_global(), "raise")
+			if _crane.hoist_length_m <= _crane.hoist_min_m + 2.05:
 				_set_phase(Phase.TO_DROP)
 		Phase.TO_DROP:
 			_crane.ik_hook_to(delta, _drop_aim(true), "raise")
@@ -160,22 +192,30 @@ func _process(delta: float) -> void:
 				_set_phase(Phase.LOWER_DROP)
 		Phase.LOWER_DROP:
 			_crane.ik_hook_to(delta, _drop_aim(false), "track")
-			if _hook_near(_drop_aim(false), NEAR_M) or _timer > TIMEOUT_S:
+			var destination := _destination_pad()
+			if not is_instance_valid(destination):
+				_fail("The cargo bed is no longer available.")
+				return
+			_crane.align_attached_container(destination.global_basis.orthonormalized(), delta)
+			if _hook_near(_drop_aim(false), NEAR_M):
 				_set_phase(Phase.RELEASE)
 		Phase.RELEASE:
 			if not _did_act:
 				_did_act = true
-				if operation == Operation.LOAD:
-					_crane.release_container()
-				elif _yard_pad != null:
-					_crane.release_container_on_pad(_yard_pad)
-				else:
-					_crane.release_container_to_world(_drop_world)
-			if _crane.get_attached_container() == null or _timer > WORK_S:
+				# The selected bed, not whichever overlapping pad is found first.
+				var target := _destination_pad()
+				if not is_instance_valid(target) or _crane.release_container_on_pad(target) == null:
+					_fail("The selected cargo bed is occupied or out of alignment. Cargo remains on the hook.")
+					return
+				_movement_recorded = _report_freight_movement()
+				if not _movement_recorded:
+					_fail("Cargo landed, but freight confirmation failed. Check the contract before continuing.")
+					return
+			if _crane.get_attached_container() == null:
 				_set_phase(Phase.RAISE_EMPTY)
 		Phase.RAISE_EMPTY:
 			_crane.ik_hook_to(delta, _drop_aim(true), "raise")
-			if _crane.hoist_length_m <= _crane.hoist_min_m + 2.5 or _timer > TIMEOUT_S:
+			if _crane.hoist_length_m <= _crane.hoist_min_m + 2.05:
 				_set_phase(Phase.NEXT)
 		Phase.NEXT:
 			_finish_cycle()
@@ -184,68 +224,53 @@ func _process(delta: float) -> void:
 	_update_gizmos()
 
 
-func _prepare_cycle() -> void:
+func _prepare_cycle() -> bool:
 	_did_act = false
 	_timer = 0.0
 	_drop_pad = null
 	_yard_pad = null
 	_drop_world = Vector3.ZERO
+	_movement_recorded = false
+	var suspended := _crane.get_attached_container()
 	if operation == Operation.LOAD:
-		_pickup = _find_yard_pickup(_ship)
-		var drop := _find_ship_drop(_ship)
+		_pickup = suspended if is_instance_valid(suspended) else _find_yard_pickup(_ship)
+		if not is_instance_valid(_pickup) or not _is_loadable_here(_pickup, _ship): return false
+		var drop := _find_ship_drop(_ship, _pickup.unit)
 		if _pickup == null or drop.is_empty():
-			stop()
-			return
+			return false
 		_drop_pad = drop["pad"] as CargoSlotPadComponent
 		_drop_world = drop["world"] as Vector3
 	else:
-		_pickup = _find_ship_pickup(_ship)
+		_pickup = suspended if is_instance_valid(suspended) else _find_ship_pickup(_ship)
 		_yard_pad = _find_yard_pad()
-		if _pickup == null or _yard_pad == null or _yard_pad.find_free_slot() < 0:
-			stop()
-			return
+		if _pickup == null or not _is_deliverable_here(_pickup, _ship) or _yard_pad == null:
+			return false
 		_drop_world = _yard_pad.slot_drop_world_for_free(_pickup.unit.footprint_cells(_yard_pad.cell_size_m))
 		if _drop_world == Vector3.INF:
-			stop()
-			return
-	_set_phase(Phase.TO_PICKUP)
+			return false
+	_drop_local = _destination_pad().to_local(_drop_world)
+	_lift_height = _pickup.lift_height_m()
+	if not _crane.can_reach_point(_drop_aim(false), .1): return false
+	_set_phase(Phase.RAISE_PICKUP if is_instance_valid(suspended) else Phase.TO_PICKUP)
+	return true
 
 
 func _finish_cycle() -> void:
-	if not _report_freight_movement():
-		stop()
+	if not _movement_recorded:
+		_fail("Cargo transfer was not confirmed.")
 		return
 	_cycles += 1
 	cycle_completed.emit(operation, _cycles)
 	if max_cycles > 0 and _cycles >= max_cycles:
-		var done_op := operation
-		var n := _cycles
-		stop()
-		job_finished.emit(done_op, n)
+		_finish()
 		return
-	if operation == Operation.LOAD:
-		if _find_yard_pickup(_ship) == null or _find_ship_drop(_ship) == null:
-			var done_op := operation
-			var n := _cycles
-			stop()
-			job_finished.emit(done_op, n)
-			return
-	if operation == Operation.UNLOAD and (
-		_find_ship_pickup(_ship) == null or not _yard_has_free_slot()
-	):
-		var done_op := operation
-		var n := _cycles
-		stop()
-		job_finished.emit(done_op, n)
-		return
-	_prepare_cycle()
+	if not _prepare_cycle(): _finish()
 
 
 func _aim_point(node: ContainerNode, raised: bool) -> Vector3:
 	if node == null or not is_instance_valid(node):
 		return _crane.get_hook_global()
-	var p := node.global_position
-	p.y += node.lift_height_m()
+	var p := node.to_global(Vector3.UP * node.lift_height_m())
 	if raised:
 		p.y += TRAVEL_LIFT_M
 	return p
@@ -262,10 +287,17 @@ func _hook_over(target: Vector3, radius_m: float) -> bool:
 
 func _drop_aim(raised: bool) -> Vector3:
 	var p := _drop_world
-	if is_instance_valid(_pickup): p.y += _pickup.lift_height_m() + ContainerNode.floor_offset_y()
+	var pad := _destination_pad()
+	if is_instance_valid(pad):
+		var offset := ContainerNode.floor_offset_y() if pad.show_pad_visual else 0.0
+		p = pad.to_global(_drop_local + Vector3.UP * (_lift_height + offset))
 	if raised:
 		p.y += TRAVEL_LIFT_M
 	return p
+
+
+func _destination_pad() -> CargoSlotPadComponent:
+	return _drop_pad if operation == Operation.LOAD else _yard_pad
 
 
 func _find_yard_pickup(ship: BoatBody) -> ContainerNode:
@@ -291,10 +323,8 @@ func _find_yard_pickup(ship: BoatBody) -> ContainerNode:
 		if not fits or not _is_loadable_here(cn, ship):
 			continue
 		## Prefer cargo on this crane's yard when several berths share the scene.
-		if not yard.contains_node(cn):
-			var on_any_yard := CargoSlotPadComponent.is_on_yard_pad(cn)
-			if on_any_yard:
-				continue
+		if not yard.contains_node(cn): continue
+		if not _crane.can_reach_point(_aim_point(cn, false), .1): continue
 		var d := _crane.get_hook_global().distance_to(cn.global_position)
 		if d < best_d:
 			best_d = d
@@ -359,12 +389,12 @@ func _report_freight_movement() -> bool:
 	return false
 
 
-func _find_ship_drop(ship: BoatBody) -> Dictionary:
+func _find_ship_drop(ship: BoatBody, unit: ContainerUnit = null) -> Dictionary:
 	if ship == null:
 		return {}
 	for pad in ship.get_cargo_pads():
-		var world := pad.slot_drop_world_for_free(_pickup.unit.footprint_cells(pad.cell_size_m) if is_instance_valid(_pickup) else Vector2i.ZERO)
-		if world != Vector3.INF:
+		var world := pad.slot_drop_world_for_free(unit.footprint_cells(pad.cell_size_m) if unit != null else Vector2i.ZERO)
+		if world != Vector3.INF and _crane.can_reach_point(world, .1):
 			return {"pad": pad, "world": world}
 	return {}
 

@@ -4,6 +4,7 @@ extends QuayEquipmentJob
 ## QuayEquipmentJob adapter for ProvisionCrane general-cargo load/unload.
 
 var _crane: ProvisionCrane
+var last_failure := ""
 
 
 func bind_crane(crane: ProvisionCrane) -> void:
@@ -14,6 +15,31 @@ func bind_crane(crane: ProvisionCrane) -> void:
 			op.job_finished.connect(_on_auto_job_finished)
 		if not op.job_stopped.is_connected(_on_auto_job_stopped):
 			op.job_stopped.connect(_on_auto_job_stopped)
+		if not op.job_failed.is_connected(_on_auto_job_failed):
+			op.job_failed.connect(_on_auto_job_failed)
+		if not op.phase_changed.is_connected(_on_phase_changed):
+			op.phase_changed.connect(_on_phase_changed)
+
+
+func _on_phase_changed(_phase: int) -> void:
+	status_changed.emit()
+
+
+func progress_label() -> String:
+	var op := _crane.get_auto_operator() if is_instance_valid(_crane) else null
+	return op.get_progress_label() if op != null else "idle"
+
+
+func _on_auto_job_failed(reason: String) -> void:
+	last_failure = reason
+	notify_job_stopped()
+	status_changed.emit()
+
+
+func start_job(ship: BoatBody, mode: String, commodity_id: String = "", context: Dictionary = {}) -> bool:
+	if is_job_active(): return false
+	last_failure = ""
+	return super.start_job(ship, mode, commodity_id, context)
 
 
 func _on_auto_job_finished(_operation: Variant = null, _cycles: int = 0) -> void:
@@ -81,6 +107,7 @@ func status_lines() -> PackedStringArray:
 
 
 func serve_hint(ship: BoatBody, mode: String) -> String:
+	if not last_failure.is_empty(): return last_failure
 	if _crane == null or not is_instance_valid(_crane):
 		return "No crane on this tool"
 	if ship == null or not is_instance_valid(ship):
@@ -106,6 +133,8 @@ func serve_hint(ship: BoatBody, mode: String) -> String:
 
 
 func _has_yard_container(ship: BoatBody) -> bool:
+	var held := _crane.get_attached_container()
+	if is_instance_valid(held): return _can_load_unit(held.unit, ship)
 	return _find_yard_container(ship) != null
 
 
@@ -129,6 +158,8 @@ func _has_yard_slot() -> bool:
 
 
 func _has_ship_container(ship: BoatBody) -> bool:
+	var held := _crane.get_attached_container()
+	if is_instance_valid(held): return _can_deliver_unit(held.unit, ship)
 	for pad in ship.get_cargo_pads():
 		for node in pad.iter_container_nodes():
 			var container := node as ContainerNode

@@ -452,6 +452,9 @@ func step(delta: float, command: ProvisionCraneCommand = null) -> void:
 
 
 func playtest_input(delta: float) -> void:
+	if is_auto_active():
+		_space_held = Input.is_physical_key_pressed(KEY_SPACE)
+		return
 	var cmd := ProvisionCraneCommand.new()
 	if Input.is_key_pressed(KEY_A):
 		cmd.slew_rate += 1.0
@@ -567,9 +570,8 @@ func attach_container(node: ContainerNode) -> bool:
 		pad.take_container_node(node)
 	var parent := _hook if _hook != null else self
 	node.reparent(parent, true)
-	node.position = Vector3(0.0, -node.lift_height_m(), 0.0)
-	node.rotation = Vector3.ZERO
 	_attached_container = node
+	_tick_attached_container()
 	node.notify_grabbed()
 	## Floor halo is pad-selection only — hide while airborne under the hook.
 	node.set_highlighted(false)
@@ -581,29 +583,30 @@ func release_container() -> ContainerNode:
 		_attached_container = null
 		return null
 	var node := _attached_container
-	_attached_container = null
-	node.set_highlighted(false)
-	node.notify_released()
-	var hook_pos := get_hook_global()
 	if is_inside_tree():
-		var pad := CargoSlotPadComponent.find_nearest_pad(get_tree(), hook_pos)
-		if pad != null and pad.try_place_container_node(node, hook_pos):
-			return node
-	return _drop_container_to_quay(node)
+		var pad := CargoSlotPadComponent.find_nearest_pad(get_tree(), node.global_position)
+		return release_container_on_pad(pad, node.global_position)
+	return null
 
 
-func release_container_on_pad(pad: CargoSlotPadComponent) -> ContainerNode:
+func release_container_on_pad(pad: CargoSlotPadComponent, world_hint: Vector3 = Vector3.INF) -> ContainerNode:
 	if _attached_container == null or not is_instance_valid(_attached_container):
 		_attached_container = null
 		return null
 	var node := _attached_container
-	_attached_container = null
-	node.set_highlighted(false)
-	node.notify_released()
 	if pad != null and is_instance_valid(pad) and is_inside_tree():
-		if pad.try_place_container_node(node, get_hook_global()):
+		var target := pad.slot_drop_world_for_free(node.unit.footprint_cells(pad.cell_size_m), world_hint)
+		if target == Vector3.INF: return null
+		if pad.show_pad_visual: target += pad.global_basis.y * ContainerNode.floor_offset_y()
+		# Transactional landing: don't detach until an actual free bed is reached.
+		# Failed placement used to reparent at the airborne pose, creating floaters.
+		if node.global_position.distance_to(target) > .4: return null
+		if pad.try_place_container_node(node, node.global_position):
+			_attached_container = null
+			node.set_highlighted(false)
+			node.notify_released()
 			return node
-	return _drop_container_to_quay(node)
+	return null
 
 
 func release_container_to_world(world_pos: Vector3, parent: Node = null) -> ContainerNode:
@@ -622,16 +625,6 @@ func release_container_to_world(world_pos: Vector3, parent: Node = null) -> Cont
 	node.reparent(drop_parent, true)
 	node.global_position = world_pos
 	node.rotation = Vector3.ZERO
-	return node
-
-
-func _drop_container_to_quay(node: ContainerNode) -> ContainerNode:
-	var drop_parent := _quay_drop_parent()
-	if drop_parent == null and is_inside_tree():
-		drop_parent = get_tree().current_scene
-	var world_xf := node.global_transform
-	node.reparent(drop_parent, true)
-	node.global_transform = world_xf
 	return node
 
 
@@ -657,7 +650,7 @@ func ik_hook_to(delta: float, target: Vector3, hoist_mode: String = "track") -> 
 	var slew_err := 0.0
 	if to_target.length() > 0.4 and to_hook.length() > 0.4:
 		slew_err = rad_to_deg(to_hook.angle_to(to_target))
-		if absf(slew_err) > 2.0:
+		if absf(slew_err) > 0.04:
 			slew_degrees -= clampf(slew_err, -slew_step, slew_step)
 
 	## Trolley — radial reach from slew pivot. Gated on azimuth (like bulk boom IK)
@@ -665,9 +658,13 @@ func ik_hook_to(delta: float, target: Vector3, hoist_mode: String = "track") -> 
 	var target_reach := to_target.length()
 	var hook_reach := to_hook.length()
 	var reach_err := target_reach - hook_reach
-	var want_z := clampf(-target_reach, trolley_min_z_m, trolley_max_z_m)
-	if absf(slew_err) < 12.0 and target_reach > 0.4 and absf(want_z - trolley_z_m) > 0.5:
-		var reach_deadzone := 2.0 if hoist_mode == "raise" else 1.25
+	# The jib is offset from the slew pivot (-1.75, ..., -.25 in the authored
+	# rig). Setting trolley_z=-radius leaves a permanent lateral/radial error.
+	# Correct from the actual hook radius, in the trolley parent's local units.
+	var rail_scale := maxf(_talje.get_parent_node_3d().global_basis.z.length(), .001)
+	var want_z := clampf(trolley_z_m - reach_err / rail_scale, trolley_min_z_m, trolley_max_z_m)
+	if absf(slew_err) < 12.0 and target_reach > 0.4 and absf(want_z - trolley_z_m) > 0.025:
+		var reach_deadzone := .05
 		if absf(reach_err) > reach_deadzone:
 			var soft := clampf(absf(reach_err) / 8.0, 0.15, 1.0)
 			var rate := 0.35 if hoist_mode == "raise" else 0.55
@@ -679,10 +676,9 @@ func ik_hook_to(delta: float, target: Vector3, hoist_mode: String = "track") -> 
 			hoist_length_m = move_toward(hoist_length_m, raised, hoist_step)
 		"track":
 			var y_err := target.y - hook.y
-			if y_err < -0.35:
-				hoist_length_m += hoist_step
-			elif y_err > 0.35:
-				hoist_length_m -= hoist_step
+			# World-space error to local hoist units; no fixed-step oscillation.
+			var hoist_scale := maxf(_talje.global_basis.y.length(), .001)
+			hoist_length_m = move_toward(hoist_length_m, hoist_length_m - y_err / hoist_scale, hoist_step / hoist_scale)
 		_:
 			pass
 
@@ -708,6 +704,14 @@ func is_hook_over(target: Vector3, radius_m: float = 4.0) -> bool:
 func horizontal_reach_limits_m() -> Vector2:
 	var inner := absf(trolley_max_z_m)
 	var outer := absf(trolley_min_z_m)
+	if is_instance_valid(_talje) and is_instance_valid(_hook) and is_inside_tree():
+		var rail := _talje.get_parent_node_3d()
+		var offset := get_hook_global() - get_talje_global()
+		var pivot := get_slew_pivot_global()
+		var a := rail.to_global(Vector3(0, _talje_rail_y, trolley_max_z_m)) + offset - pivot
+		var b := rail.to_global(Vector3(0, _talje_rail_y, trolley_min_z_m)) + offset - pivot
+		inner = Vector2(a.x, a.z).length()
+		outer = Vector2(b.x, b.z).length()
 	if inner > outer:
 		var swap := inner
 		inner = outer
@@ -765,14 +769,21 @@ func _tick_attached_container() -> void:
 		_attached_container = null
 		return
 	## Keep snug under hook while slewing / trolleying / hoisting.
-	_attached_container.position = Vector3(0.0, -_attached_container.lift_height_m(), 0.0)
-	_attached_container.rotation = Vector3.ZERO
+	_attached_container.global_basis = _hook.global_basis.orthonormalized()
+	_attached_container.global_position = get_hook_global() - _attached_container.global_basis.y * _attached_container.lift_height_m()
+
+
+func align_attached_container(target_basis: Basis, delta: float) -> void:
+	if not is_instance_valid(_attached_container): return
+	var rotation := _attached_container.global_basis.get_rotation_quaternion()
+	_attached_container.global_basis = Basis(rotation.slerp(target_basis.get_rotation_quaternion(), minf(delta * 5.0, 1.0)))
+	_attached_container.global_position = get_hook_global() - _attached_container.global_basis.y * _attached_container.lift_height_m()
 
 
 func get_status_lines() -> PackedStringArray:
 	var load_line := "Hook   empty  (Space grab/drop — snaps to cargo pad)"
 	if _attached_container != null:
-		load_line = "Hook   container  (Space drop onto pad grid)"
+		load_line = "Hook   container  (Lower onto a free bed · Space release)"
 	return PackedStringArray([
 		"Type   Provision T-crane",
 		"Model  %s" % model_path.get_file(),
