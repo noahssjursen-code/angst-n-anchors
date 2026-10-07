@@ -14,12 +14,14 @@ static func paving() -> ShaderMaterial:
 		_paving.shader = preload("res://resources/shaders/harbour_pavement.gdshader")
 	return _paving
 
-static func model(parent: Node3D, id: String, position: Vector3, yaw: float = 0.0) -> Node3D:
+static func model(parent: Node3D, id: String, position: Vector3, yaw: float = 0.0, use_lod: bool = true) -> Node3D:
 	if not _scenes.has(id): _scenes[id] = load(id if id.begins_with("res://") else ROOT + id + ".glb")
 	var node := (_scenes[id] as PackedScene).instantiate() as Node3D
 	parent.add_child(node)
 	node.position = position
 	node.rotation.y = yaw
+	if use_lod:
+		PortModelLod.attach(node, id if id.begins_with("res://") else ROOT + id + ".glb")
 	if id == "quay_light" and not Engine.is_editor_hint():
 		var lamp := preload("res://scripts/port/harbour_area_light.gd").new()
 		node.add_child(lamp)
@@ -28,7 +30,7 @@ static func model(parent: Node3D, id: String, position: Vector3, yaw: float = 0.
 
 static func repeated(parent: Node3D, id: String, poses: Array[Transform3D]) -> void:
 	if poses.is_empty(): return
-	var prototype := model(parent, id, Vector3.ZERO)
+	var prototype := model(parent, id, Vector3.ZERO, 0.0, false)
 	var meshes := prototype.find_children("*", "MeshInstance3D", true, false)
 	for raw in meshes:
 		var source := raw as MeshInstance3D

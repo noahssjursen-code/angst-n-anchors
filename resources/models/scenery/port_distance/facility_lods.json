@@ -1,0 +1,58 @@
+{
+  "res://resources/models/parts/port_facilities/harbour_authority_20m.glb": {
+    "mesh": "res://resources/models/scenery/port_distance/harbour_authority_20m_lod1.glb",
+    "source_sha256": "d60b03a65d877c0bf71dfbb25cb51e5f495a6faf6933187d687c0caa8a51ddc2",
+    "detailed_triangles": 36302,
+    "lod_triangles": 7686,
+    "switch_m": 260,
+    "margin_m": 20
+  },
+  "res://resources/models/parts/port_facilities/harbour_office.glb": {
+    "mesh": "res://resources/models/scenery/port_distance/harbour_office_lod1.glb",
+    "source_sha256": "3a52e5275c426602c2d9eaed0b51f461d26db8c43a2e4f2bdb599ed70c672ea6",
+    "detailed_triangles": 31010,
+    "lod_triangles": 6541,
+    "switch_m": 180,
+    "margin_m": 20
+  },
+  "res://resources/models/parts/harbour_kit/warehouse_12x18.glb": {
+    "mesh": "res://resources/models/scenery/port_distance/warehouse_12x18_lod1.glb",
+    "source_sha256": "c11280ae85961205e0576045cc958bb1bdd2063632c9a6b00019ef13e3a254a5",
+    "detailed_triangles": 26638,
+    "lod_triangles": 5860,
+    "switch_m": 220,
+    "margin_m": 20
+  },
+  "res://resources/models/parts/port_facilities/lng_terminal_tank_24m.glb": {
+    "mesh": "res://resources/models/scenery/port_distance/lng_terminal_tank_24m_lod1.glb",
+    "source_sha256": "52ad05cfb349511bd4e101b66d53d60ee53f2a513b0edc3556481a5291bba042",
+    "detailed_triangles": 13468,
+    "lod_triangles": 2375,
+    "switch_m": 300,
+    "margin_m": 20
+  },
+  "res://resources/models/parts/port_facilities/grain_silo.glb": {
+    "mesh": "res://resources/models/scenery/port_distance/grain_silo_lod1.glb",
+    "source_sha256": "bfdf444fa6ffa2716efc08719dfa0ac092defc11d2b47d683efb5e9b2874c9c5",
+    "detailed_triangles": 22888,
+    "lod_triangles": 4105,
+    "switch_m": 240,
+    "margin_m": 20
+  },
+  "res://resources/models/parts/port_facilities/liquid_tank.glb": {
+    "mesh": "res://resources/models/scenery/port_distance/liquid_tank_lod1.glb",
+    "source_sha256": "263041d2aae960c3dcf2653223aeac6c03eb66834bccd798d90c08f1f76d0fe8",
+    "detailed_triangles": 5584,
+    "lod_triangles": 1158,
+    "switch_m": 180,
+    "margin_m": 20
+  },
+  "res://resources/models/parts/port_facilities/insulated_gas_vessel.glb": {
+    "mesh": "res://resources/models/scenery/port_distance/insulated_gas_vessel_lod1.glb",
+    "source_sha256": "e0981b3a1c42324815e49551e6c6c1ba5ebc2c2d7a6a978a5b8cb9a31c896fe9",
+    "detailed_triangles": 5068,
+    "lod_triangles": 1075,
+    "switch_m": 160,
+    "margin_m": 20
+  }
+}

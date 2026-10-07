@@ -1664,3 +1664,70 @@ roughness0.86, so specular-material tuning is not an established shimmer fix.
 Run tests/lod_profiles_test.tscn --headless -- --shipyard-playtest for actual
 LOD autoload, range/hysteresis and scene swap cleanup checks. The old --script
 invocation lacks dependency initialization and is not a valid regression run.
+
+## Authored port mesh LODs (7 October 2026)
+
+Live port structures use 3D geometry at distance. Do not reintroduce baked
+six-face image boxes. The old blueprint catalogue currently has no active
+layouts; archived building JSON is not the current office. ImpostorService
+retains legacy key names but rejects image-only building/house entries.
+Custom blueprints without a mesh variant retain detailed geometry until their
+normal cull range. Performance-showcase image baking is not a live port path.
+
+PortModelLod attaches an authored lower-detail GLB beside the imported facility
+meshes. Godot visibility-parent dependencies switch all detailed meshes against
+one far mesh, using a shared bounds origin and a20m hysteresis margin. This is
+visual-only: the original root, sockets, collision, lights and state remain.
+Automatic imported mesh LOD continues to operate within each representation.
+No global antialiasing, water, world geography, layout or captain-save changes.
+The seven covered assets are both offices, warehouse, grain silo, liquid tank,
+small gas vessel and large LNG tank. Switch distances160–300m are in
+scenery/port_distance/facility_lods.json; far variants remain while their port
+is loaded. Loading is shared and only requested when a covered model is used.
+MultiMesh batching deliberately uses the original prototype without attaching
+a second representation; do not batch both levels on top of each other.
+
+Rebuild with Blender background execution of
+_source/port_distance/build_facility_lods.py. This derives editable .blend and
+GLB variants from the shipped Blender exports, preserving origin, major shape,
+UVs and materials. Source SHA256 values make stale variants test failures.
+Current total per asset family:140958 detailed triangles ->28800 authored LOD
+triangles. This is a mesh budget comparison, not a promised FPS increase.
+
+For cranes, first run tests/export_crane_sources.tscn with --shipyard-playtest
+in a rendered Godot process, then run Blender on
+_source/port_distance/build_distance.py. Source exports are intermediate files
+under the ignored authoring directory. Expanded MultiMesh children MUST retain
+semantic asset names so the generator can protect mast/jib/boom lattice parts.
+Whole-component collapse previously deleted diagonal braces despite matching
+bounding boxes. Critical lattice now uses planar reduction only; generator
+requires22 provision lattice modules and at least1 bulk boom. Other details are
+reduced. Bulk source pose is38degrees to match the live port. Four low-frequency
+materials retain light enamel/concrete separately from dark steel and ochre.
+Budgets:38991 provision triangles,6134 bulk triangles; four or fewer surfaces.
+These replace the older13074/3174 proxies which lost internal structure.
+Automatic import LOD still reduces them further on screen. Static distant
+cranes represent the default assembled pose, not live animated hoist state.
+crane_lods.json fingerprints source parts, assembly scripts and export tooling.
+
+Acceptance commands (all isolated with -- --shipyard-playtest):
+- tests/port_model_lod_review.tscn: source fingerprints, half-or-less geometry,
+  matching bounds/origins, mesh-only far assets, visibility dependencies,
+  identical-camera detail/LOD captures and approach/departure captures.
+- Same scene --benchmark:28 facilities with original/LOD repeated comparisons,
+  GPU measurements and persistent collision checks; includes a night capture.
+- tests/port_distance_review.tscn --compare-models: current exported source vs
+  reduced cranes, source fingerprints, bounds and paired actual renders.
+- tests/port_distance_review.tscn: mesh/material budgets and day/night lighting.
+- tests/lod_profiles_test.tscn (headless): ranges, hysteresis, scene swap cleanup,
+  and rejection of legacy building image-box cache entries.
+- tests/harbour_environment_test.tscn --capture: real player movement/collision,
+  office frontage/footway, retained cargo placement and quay/apron connection.
+- tests/coastal_distance_review.tscn --ports-only: actual world350/900/1800m,
+  day/night. All captures archive in Pictures/machinescreenshots.
+
+Godot4.6 basis: https://docs.godotengine.org/en/4.6/tutorials/3d/visibility_ranges.html
+and https://docs.godotengine.org/en/4.6/tutorials/3d/mesh_lod.html . Visibility
+ranges choose authored variants; automatic mesh LOD reduces triangle density
+inside each. Full-port proxies beyond port streaming radius remain separate,
+unfinished work. Do not claim this patch makes unloaded ports persist.

@@ -27,6 +27,7 @@ func expand_instances(node: Node) -> void:
 		var batch := node as MultiMeshInstance3D
 		for i in batch.multimesh.instance_count:
 			var mesh := MeshInstance3D.new()
+			mesh.name = str(batch.name) + "_" + str(i)
 			mesh.mesh = batch.multimesh.mesh
 			mesh.material_override = batch.material_override
 			mesh.transform = batch.transform * batch.multimesh.get_instance_transform(i)

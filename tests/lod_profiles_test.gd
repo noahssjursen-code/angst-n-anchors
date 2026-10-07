@@ -37,6 +37,11 @@ func run() -> void:
 		check(service.tier_at(8050, &"tall", 1, key, service.Tier.CULLED) == service.Tier.CULLED, "No early reappearance")
 		check(service.tier_at(8000, &"tall", 1, key, service.Tier.CULLED) == service.Tier.IMPOSTOR, "Crane reappears on approach")
 		check(service.tier_at(560, &"tall", 1, key, service.Tier.IMPOSTOR) == service.Tier.DETAILED, "Detail returns on approach")
+	# A legacy sprite cache entry may exist in editor/perf tools, but must not
+	# be eligible for live port LOD.
+	ImpostorCache._entries["building:test-legacy"] = {"textures":{}, "size":Vector3.ONE}
+	check(not ImpostorService.has_key("building:test-legacy"), "Reject legacy port image boxes")
+	ImpostorCache._entries.erase("building:test-legacy")
 	# Exercise actual scene ownership and repeated swaps, not just distance math.
 	var camera := Camera3D.new()
 	add_child(camera)

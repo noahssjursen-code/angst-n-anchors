@@ -13,6 +13,8 @@ const CRANE_PROXIES := {
 
 static func has_key(key: String) -> bool:
 	if CRANE_PROXIES.has(key): return ResourceLoader.exists(CRANE_PROXIES[key])
+	if key.begins_with("building:") or key.begins_with("land_house:"):
+		return IMPOSTOR_CACHE.has_geometry(key)
 	return IMPOSTOR_CACHE.has_key(key)
 
 
@@ -22,6 +24,8 @@ static func stamp(key: String, show_ghost: bool = false) -> Node3D:
 		for mesh: MeshInstance3D in proxy.find_children("*","MeshInstance3D",true,false):
 			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		return proxy
+	if (key.begins_with("building:") or key.begins_with("land_house:")) and not IMPOSTOR_CACHE.has_geometry(key):
+		return Node3D.new()
 	return IMPOSTOR_CACHE.instance(key, show_ghost) as Node3D
 
 

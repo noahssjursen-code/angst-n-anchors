@@ -1,0 +1,46 @@
+{
+  "provision": {
+    "triangles": 38991,
+    "protected_lattice_parts": 22
+  },
+  "bulk": {
+    "triangles": 6134,
+    "protected_lattice_parts": 1
+  },
+  "inputs": {
+    "res://resources/data/models/dockyard/provision_crane.json": "c0badb74b5782a9e829e7401e424247b9ad2b96d29128a64541f3a663ecbb268",
+    "res://resources/models/_source/port_distance/build_distance.py": "ec674ad0999622cecf9e12e8ff2d43fc4693a6336433637ea1bb6db63f54e3a8",
+    "res://resources/models/_source/port_distance/export_cranes.gd": "f9fad9ea9ee37b33d1a6a4ee650349c3d602612fb39d11ee626e0bed6f77eaf8",
+    "res://resources/models/parts/crane_kit/crane_boom_30m.glb": "3f26ba4bfd260ad14263d1464fa68d8d6698c3af26ca733eb3cd0a2436de69fc",
+    "res://resources/models/parts/crane_kit/crane_cabin.glb": "85f273ea17a14ea90edfb62277f393e41c8d9093ea62fa57b9e71696fc1024db",
+    "res://resources/models/parts/crane_kit/crane_luff_barrel.glb": "2a06f7776a34217cac82c353af6a11e14b9008d7bfe8495443738daa242542a8",
+    "res://resources/models/parts/crane_kit/crane_luff_rod.glb": "751f87a8d0ebcca6943da751a0b81143c43042d472b7348a379c3f9987a31ffe",
+    "res://resources/models/parts/crane_kit/crane_pedestal.glb": "6a9427ec92a1fa13b8d29c7f6f275132fd77d3199b534907098ada33b9f671b1",
+    "res://resources/models/parts/crane_kit/crane_wire_10m.glb": "434f740486bd9e26ff834983aff15f69617dd792ee931fb20176fb90cef4f248",
+    "res://resources/models/parts/crane_kit/grab_actuator_barrel.glb": "bc9a0b29c298511aceb296557420c644ca4cf59c9bb51e863b490925148bf676",
+    "res://resources/models/parts/crane_kit/grab_actuator_rod.glb": "e161131a48904a62aff94e7c1b62d220180371aad6714842fc804e9d535b4b79",
+    "res://resources/models/parts/crane_kit/grab_head.glb": "468df56014cbf15d778e8320cfedd244b4a2e31c8a474491afcbcab855e6806f",
+    "res://resources/models/parts/crane_kit/grab_jaw_left.glb": "074291d281fe59705f1b6a82c777acfe28c3d8e93ec7164febd53ad27f801a0a",
+    "res://resources/models/parts/crane_kit/grab_jaw_right.glb": "a9e4b9ddc8965b8dbe384f609cb7c0fcd8a8367195a6b376f6621e0c7520df47",
+    "res://resources/models/parts/provision_hoist/provision_feed_rope_1m.glb": "b7010ea2abae0affdd0c146893e8baf76eee9e0c85153544544a3e4dffb4f4e2",
+    "res://resources/models/parts/provision_hoist/provision_hoist_winch.glb": "df8573a700d93421ff5dd8a3e7e966b23e37d07402cd9f2a81a2a231e79e7d53",
+    "res://resources/models/parts/provision_hoist/provision_hook_block.glb": "5ff9fce9860e53aa02281133fdeda693a2f0ca5ecebc2f4cc3441eba0b5fc52f",
+    "res://resources/models/parts/provision_hoist/provision_rope_anchor.glb": "2b9beb9a6e9907a4db81b5115e4c601054af572f568393f81959841f21b845ee",
+    "res://resources/models/parts/provision_hoist/provision_rope_pair_10m.glb": "16a62bea792feffe8a4b3d1795a7843c00b5e30d7117e245677c7013b7405c08",
+    "res://resources/models/parts/provision_hoist/provision_trolley.glb": "8398b8a7d784c93b00bf337dea46534c0fa516761ff0091a0d44a7ed549cd20e",
+    "res://resources/models/parts/provision_station/counterweight_rack.glb": "8fcf67df38a95fa2bd01aa3b6fbc9c17141c2ca457f434878785e9cfbde268bf",
+    "res://resources/models/parts/provision_station/machinery_station.glb": "208e72d5938f0aab8bc452b600e28efa32496fd6b3743f207dc9153e6d44553d",
+    "res://resources/models/parts/provision_station/operator_cab.glb": "a22e9be0dddfc2160516d7b7e4f9e80895abf306b1dffdcfaffa3c1049adb1e2",
+    "res://resources/models/parts/provision_station/slew_platform.glb": "e2e97978bb9ee41845a7aa5def7243612f8a927fba8d3bedbb1d336c72275860",
+    "res://resources/models/parts/provision_station/tower_foundation.glb": "6bb95d7d8abcdf9a71763fad6e63936c30c8eed35c2c293f379f203d921d15dc",
+    "res://resources/models/parts/provision_structure/jib_end_frame.glb": "7e7130a882a3e68010158d7dfde91ce4ba24a3ebb4f1de044ab08d0ddfb9e211",
+    "res://resources/models/parts/provision_structure/jib_section_5m.glb": "d99337c4c54b202b194adc022d02ae4eff09285585a008120730f974557358d2",
+    "res://resources/models/parts/provision_structure/mast_section_5m.glb": "4ae9f3eb12f06d4b13869709daaec4dfa56613a0ed575a188617cbb6e0ac9885",
+    "res://resources/models/parts/provision_structure/trolley_rails_3m.glb": "b805cb5969264bf25a9ebf0ac391c81c0c5c0d91dfbdbb6b4e928c70f5c67544",
+    "res://resources/models/parts/provision_structure/trolley_rails_4m.glb": "e87a0d78affc1c3cfe3884774556a406e58dd87015f8f448a2700211ab4faf67",
+    "res://resources/models/parts/provision_structure/trolley_rails_5m.glb": "698b037d5e1960798aabf5a2c5d045c0bd3dfbd7074ce551c059a5c37166dfab",
+    "res://scripts/core/impostor_warmup.gd": "dff400e64ca3edb83466c8d2fbcc063ee9c9aa6b80669addd76b045128a91b89",
+    "res://scripts/port/bulk_crane.gd": "75a5bd054a239fee5a236b28b491c1fdd1ace4c1a867ef4ba2c52b7e0f65b7f0",
+    "res://scripts/port/provision_crane.gd": "446697c3b6aa69c28381674a9f1c96e1a6aebf6f8b955bd934c4c2304307dc2f"
+  }
+}

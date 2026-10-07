@@ -19,6 +19,10 @@ static func has_key(key: String) -> bool:
 	return _entries.has(key)
 
 
+static func has_geometry(key: String) -> bool:
+	return _entries.has(key) and _entries[key].has("mesh")
+
+
 static func entry_count() -> int:
 	return _entries.size()
 

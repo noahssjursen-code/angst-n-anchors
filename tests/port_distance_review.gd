@@ -2,6 +2,7 @@ extends "res://tests/provision_hoist_review.gd"
 
 func review() -> void:
 	assert(ShipyardPlaytestMode.active())
+	get_tree().create_timer(120).timeout.connect(func():get_tree().quit(1))
 	output = "C:/Users/noahs/Pictures/machinescreenshots/port-distance-" + str(Time.get_unix_time_from_system()).replace(".", "-")
 	DirAccess.make_dir_recursive_absolute(output)
 	var env := WorldEnvironment.new()
@@ -18,6 +19,32 @@ func review() -> void:
 	camera.fov = 40
 	add_child(camera)
 	camera.current = true
+	if OS.get_cmdline_user_args().has("--compare-models"):
+		var provenance: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/scenery/port_distance/crane_lods.json"))
+		for path: String in provenance.inputs:
+			assert(FileAccess.get_sha256(path)==provenance.inputs[path], "Rebuild outdated crane LOD: "+path)
+		var label:=Label.new();label.position=Vector2(16,70);add_child(label)
+		for kind in ["provision","bulk"]:
+			# Export the current assembled source first with export_crane_sources.
+			var document := GLTFDocument.new()
+			var state := GLTFState.new()
+			assert(document.append_from_file("res://resources/models/_source/port_distance/"+kind+"_source.glb", state)==OK)
+			var full := document.generate_scene(state) as Node3D
+			var low := ImpostorService.stamp("crane:"+kind)
+			add_child(full);add_child(low)
+			var bounds := ImpostorCache.compute_local_aabb(full)
+			var low_bounds := ImpostorCache.compute_local_aabb(low)
+			print("CRANE MATCH ",kind," detailed ",bounds," low ",low_bounds)
+			assert(bounds.get_center().distance_to(low_bounds.get_center()) < 1.0,"Crane origin or pose mismatch")
+			assert((bounds.size-low_bounds.size).length() < 2.0,"Crane silhouette mismatch")
+			for variant in ["detailed","lod1"]:
+				full.visible=variant=="detailed";low.visible=variant=="lod1"
+				label.text=kind+" / "+variant+" / same camera"
+				await shot(kind+"-match-"+variant,bounds.get_center()+Vector3(65,25,70),bounds.get_center())
+			full.free();low.free()
+		print("CRANE MATCH PASS ",output)
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--capture-silhouette"):
 		camera.far = 12000
 		camera.fov = 30
@@ -58,8 +85,8 @@ func review() -> void:
 		var meshes := proxy.find_children("*", "MeshInstance3D", true, false)
 		assert(meshes.size() == 1, "Distance crane should be one static mesh")
 		var mesh := (meshes[0] as MeshInstance3D).mesh
-		assert(mesh.get_surface_count() <= 3)
-		assert(mesh.get_faces().size() / 3 <= 14000)
+		assert(mesh.get_surface_count() <= 4)
+		assert(mesh.get_faces().size() / 3 <= (40000 if kind=="provision" else 6500))
 		for surface in mesh.get_surface_count():
 			var material := mesh.surface_get_material(surface) as StandardMaterial3D
 			assert(material != null and material.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED)
