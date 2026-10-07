@@ -18,8 +18,78 @@ func _initialize() -> void:
 	_test_transforms(layout)
 	_test_requests(layout)
 	_test_refresh_gate()
+	_test_bounded_distribution()
+	_test_incremental_placement()
+	_test_cached_empty_chunks()
 	ForestField.clear()
 	_finish()
+
+
+class FlatForestLayout extends RefCounted:
+	var half_extent_m := 20000.0
+	func sample_signed_distance(_p: Vector2) -> float: return -500.0
+	func sample_height(_p: Vector2) -> float: return 30.0
+
+class SeaLayout extends RefCounted:
+	var half_extent_m := 20000.0
+	func sample_signed_distance(_p: Vector2) -> float: return 500.0
+	func sample_height(_p: Vector2) -> float: return -30.0
+
+func _test_cached_empty_chunks() -> void:
+	var sea := SeaLayout.new()
+	ForestField.clear()
+	ForestField.initialize(sea, SEED, [])
+	var streamer := FOREST_STREAMER.new()
+	streamer._layout = sea
+	streamer._build_chunk(Vector2i.ZERO, PROP_LOD.Tier.FULL)
+	var key := STREAMER.chunk_key(Vector2i.ZERO)
+	_check(streamer._chunks.has(key), "empty sea chunks are remembered")
+	_check(streamer._chunks[key].instances == 0, "empty chunks contain no scene instances")
+	streamer._refresh_requests(Vector3(128, 0, 128))
+	_check(not streamer._queued.has(key), "moving observer does not resample a completed empty chunk")
+	streamer._build_chunk(Vector2i.ZERO, PROP_LOD.Tier.PROXY)
+	_check(streamer._chunks[key].transforms.is_empty(), "empty result survives a detail change")
+	streamer.free()
+
+func _test_incremental_placement() -> void:
+	var flat := FlatForestLayout.new()
+	ForestField.clear()
+	ForestField.initialize(flat, SEED, [])
+	var expected := FOREST_STREAMER.build_chunk_transforms(flat, Vector2i.ZERO, 6.5, 1521)
+	var job := FOREST_STREAMER.create_placement_job(Vector2i.ZERO, 6.5, 1521)
+	var steps := 0
+	while not job.done:
+		var before: int = job.cursor
+		FOREST_STREAMER.advance_placement_job(flat, job, [], 16, true)
+		_check(job.cursor - before <= 16, "placement obeys per-step candidate budget")
+		steps += 1
+	_check(steps > 1, "dense placement is spread across multiple steps")
+	_check(job.transforms == expected, "incremental placement preserves deterministic transforms")
+	var grouped := 0
+	for group in job.groups: grouped += group.size()
+	_check(grouped == expected.size(), "incremental species grouping retains every tree")
+
+
+func _test_bounded_distribution() -> void:
+	var flat := FlatForestLayout.new()
+	ForestField.initialize(flat,SEED,[])
+	var full := FOREST_STREAMER.build_chunk_transforms(flat,Vector2i.ZERO,6.5,160,[])
+	var reduced := FOREST_STREAMER.build_chunk_transforms(flat,Vector2i.ZERO,6.5,90,[])
+	var quadrants := {}
+	for xf in full:
+		quadrants[Vector2i(int(xf.origin.x/128),int(xf.origin.z/128))] = true
+	_check(quadrants.size()==4,"capped forest covers all four chunk quadrants")
+	_check(full.size()==160 and reduced.size()==90,"dense chunk honors both budgets")
+	for i in reduced.size():
+		_check(reduced[i]==full[i],"mid trees retain near positions")
+	for species in 4:
+		for near in [true,false]:
+			var mesh := TREE_MESH.species_mesh(species,near)
+			_check(mesh.get_surface_count()<=2,"at most bark and foliage surfaces")
+			_check(mesh.get_faces().size()/3<=2100,"vegetation geometry budget")
+			if not near:
+				_check(mesh.get_faces().size()/3 == 2, "distant tree is one cutout card")
+				_check(mesh.custom_aabb.size.z >= mesh.get_aabb().size.x, "billboard bounds cover all camera angles")
 
 
 func _test_density(layout: WorldLayout) -> void:
@@ -65,8 +135,8 @@ func _test_meshes() -> void:
 
 func _test_transforms(layout: WorldLayout) -> void:
 	var found := false
-	for z in range(4, 16):
-		for x in range(8, 18):
+	for z in range(16, 64, 4):
+		for x in range(32, 72, 4):
 			var transforms := FOREST_STREAMER.build_chunk_transforms(
 				layout, Vector2i(x, z), 28.0, 120, []
 			)

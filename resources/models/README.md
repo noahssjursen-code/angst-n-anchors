@@ -1494,3 +1494,36 @@ Run tests/port_distance_review.tscn -- --shipyard-playtest for day/night geometr
 review and mesh/material/bounds checks. Existing building/house screenshot
 impostors now generate mipmaps, but their full lighting/transition replacement
 remains separate work. Do not describe all port-distance presentation as complete.
+
+### Coastal forest foliage (7 October)
+
+`scenery/coastal_vegetation` contains pine, birch, spruce and juniper, each with a
+branch-card near model and a matching two-triangle distant silhouette. Near trees
+use 1316-1966 triangles and two surfaces; distant trees use one surface. Metre-scale
+assets replace the oversized cone trees. Blender sources pack their images and
+`_source/coastal_vegetation/build_foliage.py` regenerates the complete set. Sprays
+and silhouettes are rendered from authored geometry, not downloaded photographs.
+
+Keep automatic GLB mesh simplification disabled for these assets: it removes
+foliage cards and opens the canopy. Texture imports use mipmaps and high-quality
+VRAM compression. The runtime foliage shader uses alpha cutout/depth writing and
+live lighting, with crown normals/occlusion for near cards and an upright facing
+silhouette at distance. CPU bounds cover the billboard at every yaw. Do not use
+unlit screenshot materials or crossed silhouette planes here.
+
+WorldForestStreamer uses deterministic 256m MultiMesh patches, 6.5m candidates,
+four species groups and unchanged density/shore/slope/port exclusions. Placement
+advances in 16-candidate batches under the frame budget. Empty results, positions
+and species groups survive detail changes. Assets load in the background. Forest
+and terrain clearance queries filter spatially before testing nearby zones.
+
+Review `tests/forest_visual_demo.tscn` with `-- --shipyard-playtest`: Space switches
+near/distant geometry, N switches lighting, 1/2/3 change views. `--capture-forest`
+archives comparisons in Pictures/machinescreenshots. `tests/coastal_distance_review.tscn`
+checks the actual generated world; `--forest-only` skips repeated port captures.
+Forest/terrain scripts test deterministic incremental placement, clearance,
+distribution, mesh budgets, empty-patch caching and conservative bounds.
+
+This is a dense coastal-forest foundation. Close bark detail, understory/rock
+integration, per-tree transition blending and canopy beyond 2.2km remain work.
+Single-view silhouettes are intended for distant viewing, not walking among them.

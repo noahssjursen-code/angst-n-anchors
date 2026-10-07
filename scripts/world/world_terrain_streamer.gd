@@ -658,10 +658,10 @@ static func _terrain_zone_bounds(zones: Array) -> Rect2:
 ## Return only terrain modifiers whose influence can reach this 1 km chunk.
 ## The conservative bounds include falloff and rotation, so filtering cannot
 ## change terrain output; it only removes guaranteed-distant work.
-static func zones_intersecting_chunk(zones: Array, coord: Vector2i) -> Array:
+static func zones_intersecting_chunk(zones: Array, coord: Vector2i, chunk_size_m := CHUNK_SIZE_M) -> Array:
 	if zones.is_empty():
 		return []
-	var chunk_bounds := Rect2(chunk_origin(coord), Vector2(CHUNK_SIZE_M, CHUNK_SIZE_M))
+	var chunk_bounds := Rect2(Vector2(coord) * chunk_size_m, Vector2.ONE * chunk_size_m)
 	var result: Array = []
 	for zone_variant in zones:
 		var zone := zone_variant as Dictionary

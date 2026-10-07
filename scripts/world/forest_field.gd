@@ -22,12 +22,14 @@ static var _initialized := false
 static var _coverage_texture: ImageTexture
 static var _world_half_extent_m := 20000.0
 static var _flatten_zones: Array = []
+static var _zone_chunks: Dictionary = {}
 
 
 static func initialize(layout: Object, seed: int, flatten_zones: Array = []) -> void:
 	_layout = layout
 	world_seed = seed
 	_flatten_zones = flatten_zones
+	_zone_chunks.clear()
 	_world_half_extent_m = float(layout.half_extent_m) if layout != null else 20000.0
 	_ensure_noise()
 	_coverage_texture = bake_coverage_map()
@@ -38,6 +40,7 @@ static func clear() -> void:
 	_layout = null
 	_coverage_texture = null
 	_flatten_zones = []
+	_zone_chunks.clear()
 	_initialized = false
 
 
@@ -117,7 +120,10 @@ static func _estimate_slope(world_xz: Vector2) -> float:
 
 
 static func _inside_flatten_zone(world_xz: Vector2) -> bool:
-	for zone_variant in _flatten_zones:
+	var coord := Vector2i(floori(world_xz.x / 1000.0), floori(world_xz.y / 1000.0))
+	if not _zone_chunks.has(coord):
+		_zone_chunks[coord] = WorldTerrainStreamer.zones_intersecting_chunk(_flatten_zones, coord, 1000.0)
+	for zone_variant in _zone_chunks[coord]:
 		var zone := zone_variant as Dictionary
 		## Town / polygon clears (forest only) and legacy rectangular pads.
 		if zone.has("polygon"):
