@@ -366,6 +366,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				data.layout_seed,
 				data.population, data.features, data.rotation_y,
 				data.berth_count, data.size,
+				"", ShipClass.display_name(data.max_ship_class), data.trade_profile.export_slots,
 			)
 
 		var is_home := data.port_id == home_port_id or (i == 0 and home_port_id == "port-home")

@@ -16,16 +16,17 @@ var theme_id: String = ""
 
 ## Coherent destinies. Slot order = unlock order (first unlocked earliest).
 ## Weights are by region only — size no longer picks a different economy.
+## Grain and LNG are intentionally absent until their gameplay is ready.
 const THEMES: Array[Dictionary] = [
 	{
 		"id": "provisions_depot",
 		"exports": ["provisions"],
-		"imports": ["grain", "diesel"],
+		"imports": ["diesel"],
 		"w_mainland": 4.0, "w_fjord": 3.0, "w_archipelago": 5.0,
 	},
 	{
 		"id": "farm_harbour",
-		"exports": ["grain", "provisions"],
+		"exports": ["provisions"],
 		"imports": ["diesel"],
 		"w_mainland": 7.0, "w_fjord": 3.0, "w_archipelago": 1.0,
 	},
@@ -48,12 +49,6 @@ const THEMES: Array[Dictionary] = [
 		"w_mainland": 1.5, "w_fjord": 2.0, "w_archipelago": 7.0,
 	},
 	{
-		"id": "lng_terminal",
-		"exports": ["lng"],
-		"imports": ["provisions", "containers"],
-		"w_mainland": 2.0, "w_fjord": 3.0, "w_archipelago": 5.0,
-	},
-	{
 		"id": "container_feeder",
 		"exports": ["containers"],
 		"imports": ["containers", "provisions"],
@@ -67,8 +62,8 @@ const THEMES: Array[Dictionary] = [
 	},
 	{
 		"id": "bulk_hub",
-		"exports": ["grain", "coal"],
-		"imports": ["provisions", "containers"],
+		"exports": ["provisions"],
+		"imports": ["iron_ore", "provisions", "containers"],
 		"w_mainland": 6.0, "w_fjord": 2.0, "w_archipelago": 2.0,
 	},
 ]
@@ -90,8 +85,10 @@ static func derive(definition: PortDefinition, world_seed: int) -> PortTradeProf
 	profile.destiny_import_slots = _unique_list(theme.get("imports", []) as Array)
 	## Every harbour handles ordinary mixed freight in both directions. Themes
 	## describe the specialist economy layered on top of this universal service.
-	_ensure_list_starts_with(profile.destiny_export_slots, "provisions")
-	_ensure_list_starts_with(profile.destiny_import_slots, "provisions")
+	# General freight is supplied independently by _apply_size_unlock. It must
+	# not take the first specialist unlock away from mining/industrial ports.
+	_ensure_list_has(profile.destiny_export_slots, "provisions")
+	_ensure_list_has(profile.destiny_import_slots, "provisions")
 	_strip_duplicate_one_way_lists(profile.destiny_export_slots, profile.destiny_import_slots)
 	if profile.destiny_export_slots.has("containers") \
 			or profile.destiny_import_slots.has("containers"):
@@ -150,7 +147,13 @@ static func _apply_size_unlock(profile: PortTradeProfile, size: int) -> void:
 		export_n = profile.destiny_export_slots.size()
 		import_n = profile.destiny_import_slots.size()
 	profile.export_slots = _take_head(profile.destiny_export_slots, export_n)
-	profile.import_slots = _take_head(profile.destiny_import_slots, import_n)
+	# Fish landing is a mandatory facility, not the port's first specialist
+	# import. Do not let it displace ore receiving at small industrial harbours.
+	var trade_imports := profile.destiny_import_slots.duplicate()
+	trade_imports.erase(PortFishingService.COMMODITY_ID)
+	profile.import_slots = _take_head(trade_imports, import_n)
+	if profile.destiny_import_slots.has(PortFishingService.COMMODITY_ID):
+		profile.import_slots.push_front(PortFishingService.COMMODITY_ID)
 	_strip_duplicate_one_way(profile)
 	_force_bidirectional_commodity(profile, "provisions")
 	if profile.export_slots.has("containers") or profile.import_slots.has("containers"):
@@ -170,11 +173,6 @@ static func _force_bidirectional_commodity(profile: PortTradeProfile, commodity_
 static func _ensure_list_has(slots: Array[String], commodity_id: String) -> void:
 	if not slots.has(commodity_id):
 		slots.append(commodity_id)
-
-
-static func _ensure_list_starts_with(slots: Array[String], commodity_id: String) -> void:
-	slots.erase(commodity_id)
-	slots.push_front(commodity_id)
 
 
 ## Region-weighted destiny pick — independent of current harbour size.
