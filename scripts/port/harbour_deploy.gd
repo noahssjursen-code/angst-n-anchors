@@ -22,9 +22,34 @@ static func ship_requirements(record: Dictionary) -> Dictionary:
 		"loa_world_m": loa_m,
 		"beam_world_m": beam_m,
 		"registration_id": registration_id,
-		"terminal_families": terminal_families_for_registration(registration_id),
+		"terminal_families": terminal_families_for_record(record),
 		"display": VesselSpawn.vessel_name_of(record),
 	}
+
+
+## Berth routing hints from the authored fit-out, not legal registration or a
+## vessel name. Runtime components still validate mounting and actual capacity.
+static func terminal_families_for_record(record: Dictionary) -> PackedStringArray:
+	var layout: Dictionary = record.get("brick_layout", record.get("prebuilt_layout", {}))
+	if not ImportedVesselLayout.is_imported(layout):
+		return terminal_families_for_registration(str(record.get("registration_id", "")))
+	var ids := PackedStringArray()
+	for part: Dictionary in layout.get("parts", []):
+		ids.append(str(part.get("asset_id", "")))
+	var families := PackedStringArray()
+	if ImportedVesselLayout.has_capability(layout, "fishing"):
+		families.append("fishing")
+	if ids.has("container_bed_20ft") or ids.has("cargo_securing_bed_4m"):
+		families.append("general")
+		families.append("container")
+	if ids.has("hold_coaming_6x12") or (ids.has("bulk_divider_5m") and not ids.has("cargo_deck_5x8")):
+		families.append("bulk_ore")
+		families.append("bulk_grain")
+	# A general quay remains a mooring fallback for boats without a local service.
+	# Specialized liquid/grain facilities must never win by being shorter.
+	if not families.has("general"):
+		families.append("general")
+	return families
 
 
 static func terminal_families_for_registration(registration_id: String) -> PackedStringArray:
@@ -51,7 +76,7 @@ static func free_slots_for(
 	return out
 
 
-## Physical compatibility only. Multiplayer callers send this ordered list to
+## Hull fit and service preferences. Multiplayer callers send this ordered list to
 ## world authority, which atomically chooses the first unoccupied berth.
 static func compatible_slots_for(
 		harbour: HarbourController,
@@ -74,7 +99,7 @@ static func compatible_slots_for(
 		if not s.accepts_loa_m(loa_world):
 			continue
 		out.append(s)
-	## If registration declares quay families, only offer those faces.
+	## Filter by authored services (or legacy registration for legacy vessels).
 	if not families.is_empty():
 		var matched: Array = []
 		for slot in out:
@@ -87,7 +112,7 @@ static func compatible_slots_for(
 		var b_match := _family_rank(b.family, families)
 		if a_match != b_match:
 			return a_match < b_match
-		## Prefer shortest berth that still fits — save long quays for larger hulls.
+		## Prefer shortest berth that still fits â€” save long quays for larger hulls.
 		if not is_equal_approx(a.length_m, b.length_m):
 			return a.length_m < b.length_m
 		return a.berth_id < b.berth_id
@@ -104,7 +129,7 @@ static func _family_rank(family: String, preferred: PackedStringArray) -> int:
 	for i in range(preferred.size()):
 		if preferred[i] == f:
 			return i
-	## Soft fallback: bulk registrations may still use a general asphalt if no bulk free.
+	## Unlisted families rank below declared services and are filtered out above.
 	if f == "general" or f == "twin":
 		return 100 + preferred.size()
 	return 200 + preferred.size()
@@ -133,8 +158,8 @@ static func pick_slot(
 			if occupant == null or HarbourController.ship_id_of(occupant) == authority_vessel_id(record):
 				return s
 		return null
-	## When registration names terminal families, require a matching free berth.
-	var families := terminal_families_for_registration(str(record.get("registration_id", "")))
+	## Require a matching free berth using the same policy as authority candidates.
+	var families := terminal_families_for_record(record)
 	if not families.is_empty():
 		for slot in slots:
 			var s := slot as QuayBerthSlot
@@ -198,5 +223,5 @@ static func _auto_moor_slot(ship: BoatBody, slot: QuayBerthSlot) -> void:
 	if posts.size() < 2:
 		mooring.call_deferred("auto_moor", ship.get_tree())
 		return
-	## Nearest berth bollards to bow/stern — not the quay end-posts.
+	## Nearest berth bollards to bow/stern â€” not the quay end-posts.
 	mooring.call_deferred("moor_to_nearest_of", posts)

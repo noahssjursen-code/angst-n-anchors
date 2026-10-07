@@ -166,6 +166,13 @@ func _test_harbourmaster_deployment() -> void:
 		plot.add_child(bollard)
 		berth.add_bollard(bollard)
 	harbour.register_berth(berth)
+	# Shorter specialized quays used to beat the working cargo quay when an
+	# imported vessel had no legacy registration. Exercise the actual NPC path.
+	for family in ["liquid", "bulk_grain"]:
+		var decoy := QuayBerthSlot.new()
+		decoy.setup("master-deploy-test/" + family, family, family, [], 60.0, 20.0)
+		plot.add_child(decoy)
+		harbour.register_berth(decoy)
 	harbour.activate()
 	var master := HarbourMasterNpc.new()
 	master.port_id = plot.port_id

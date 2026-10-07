@@ -270,7 +270,7 @@ func _deploy_fleet_vessel(record: Dictionary) -> void:
 	if resolved.is_empty():
 		_dialogue.clear()
 		_dialogue.add_quote(
-			"That vessel cannot sail until its registration checklist passes at the shipyard."
+			"That vessel could not be prepared. Open its draft at the shipyard and check the hull and helm equipment."
 		)
 		_dialogue.add_back_button(_show_main)
 		return

@@ -188,6 +188,24 @@ Preserve legacy cargo records and reject containers that do not fit. Harbour Car
 carries two 20-foot containers on its supported MAIN DECK, not down in the hold.
 The separate cargo deck and securing beds remain editable Blender parts.
 
+### Berth and freight compatibility
+
+`HarbourDeploy.terminal_families_for_record` derives imported vessel service
+preferences from its authored equipment. Do not use the removed legal
+registration, display name, or starter ID to classify imported ships. Legacy
+records retain their registration policy. Cargo beds prefer general cargo then
+container quays; fishing equipment prefers fish landing; bulk holds prefer bulk
+quays. General quays may provide fallback mooring. Never assign a non-tanker to
+an LNG jetty merely because that berth is shorter. Authority still owns occupancy.
+
+These routing hints do not grant cargo capacity: runtime mounted pads/holds remain
+the source of usable storage. Freight offers must fit the actual issued container
+footprint at the pad's cell size, reserve unfilled contract capacity, and belong to
+the booking port. Keep draft, live component, berth and freight records distinct;
+never manufacture inventory from a vessel label. Run
+`tests/harbour_service_routing_test.tscn -- --shipyard-playtest` for routing and
+booking regressions through actual harbourmaster deployment.
+
 ### Vessel orientation
 
 **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid cells are vessel metres.

@@ -104,6 +104,8 @@ func accept_offer(offer: Dictionary) -> bool:
 
 
 func accept_offer_for_ship(offer: Dictionary, ship: BoatBody, port_id: String) -> bool:
+	if str(offer.get("origin_port_id", "")) != port_id:
+		return false
 	if not is_ship_ready_at_port(ship, port_id) or not is_offer_compatible_with_ship(offer, ship):
 		return false
 	var accepted := offer.duplicate(true)
@@ -128,11 +130,18 @@ func is_offer_compatible_with_ship(offer: Dictionary, ship: BoatBody) -> bool:
 	if berth == null or not berth.commodities.has(commodity_id):
 		return false
 	var required := float(offer.get("quantity", 0.0))
+	if not is_finite(required) or required <= 0.0:
+		return false
 	var handling := str(offer.get("handling_mode", ""))
 	if handling in ["general", "container"]:
+		if not is_equal_approx(required, roundf(required)):
+			return false
+		# Match the units issued by make_container_units, including real ISO size
+		# and each pad's cell resolution. Legacy nominal slots can be too short.
+		var unit := ContainerFactory.make_one("", "", commodity_id)
 		var free_units := 0
 		for pad in ship.get_cargo_pads():
-			free_units += pad.get_free_slot_count()
+			free_units += pad.get_free_slot_count(unit.footprint_cells(pad.cell_size_m))
 		return float(free_units) - _reserved_quantity(ship, false) >= required
 	if handling == "bulk":
 		var available_t := 0.0
