@@ -18,6 +18,26 @@ func review() -> void:
 	camera.fov = 40
 	add_child(camera)
 	camera.current = true
+	if OS.get_cmdline_user_args().has("--capture-range"):
+		camera.far=20000
+		camera.projection=Camera3D.PROJECTION_ORTHOGONAL
+		camera.size=110
+		var label:=Label.new();label.position=Vector2(16,70);add_child(label)
+		camera.position=Vector3(0,50,3500);camera.look_at(Vector3(0,20,0))
+		var host:=PortStructureLod.new();add_child(host)
+		host.setup("crane:provision",func()->Node3D:return Node3D.new(),PortStructureLod.PROFILE_TALL)
+		var baseline:=OS.get_cmdline_user_args().has("--baseline-range")
+		for distance in [3500,4300,5600,7800,8400]:
+			camera.position=Vector3(0,50,distance);camera.look_at(Vector3(0,20,0))
+			await get_tree().create_timer(.4).timeout
+			var should_show:bool=distance<=4000 if baseline else distance<=8000
+			assert((host.get_child_count()>0)==should_show,"Crane distance transition mismatch")
+			label.text="Crane range inspection: %dm | orthographic view | %s" % [distance,"visible" if should_show else "culled"]
+			await shot("range-"+str(distance),camera.position,Vector3(0,20,0))
+		host.free()
+		print("PORT RANGE PASS ",output)
+		get_tree().quit()
+		return
 	for kind in ["provision", "bulk"]:
 		var proxy := ImpostorService.stamp("crane:" + kind)
 		add_child(proxy)

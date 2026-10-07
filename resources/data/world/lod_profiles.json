@@ -6,7 +6,7 @@
 	},
 	"tall": {
 		"detailed_m": 560.0,
-		"impostor_m": 4000.0,
+		"impostor_m": 8000.0,
 		"hysteresis_m": 160.0
 	},
 	"port_shell": {

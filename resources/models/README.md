@@ -1646,3 +1646,12 @@ Run tests/forest_root_review.tscn with --shipyard-playtest; --baseline-roots
 shows the original continuous-height placements on the same actual terrain.
 The fixture checks every tree against actual mesh vertex heights and archives
 close, context and isolated worst-root captures.
+
+Distant crane visibility (2026-10-07): tall proxies remain visible to8km
+(160m downgrade hysteresis), covering port streaming at4.8km plus800m
+unload hysteresis and crane offsets inside a port. Detailed range remains560m.
+Only static imported crane proxies use this extended range; do not extend
+interactive crane machinery or all small port props. Verify actual transitions
+with port_distance_review --capture-range and --shipyard-playtest.
+coastal_distance_review --far-ports --ports-only uses a1000m aerial camera
+to see the harbour across intervening islands; it is not a sea-level review.

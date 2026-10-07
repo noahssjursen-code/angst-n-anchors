@@ -20,20 +20,22 @@ func review() -> void:
 	var home:=world.get_node("HomePort") as Node3D
 	var layout := world.get_world_layout() as WorldLayout
 	camera.fov=40
+	var port_distances := [350.0,900.0,1800.0]
+	if OS.get_cmdline_user_args().has("--far-ports"): port_distances = [3500.0,4300.0,5600.0]
 	var offshore:=Vector3.ZERO
 	for step in 72:
 		var direction:=(-home.global_basis.z).rotated(Vector3.UP,step*TAU/72)
 		var clear:=true
-		for distance in [350.0,900.0,1800.0]:
+		for distance in port_distances:
 			var eye:Vector3=home.global_position+direction*distance
 			if layout.sample_signed_distance(Vector2(eye.x,eye.z))<30: clear=false
 		if clear:
 			offshore=direction
 			break
 	assert(offshore!=Vector3.ZERO,"No clear offshore review bearing")
-	for distance in [350.0,900.0,1800.0]:
+	for distance in port_distances:
 		if OS.get_cmdline_user_args().has("--forest-only"): break
-		camera.position=home.global_position+offshore*distance+Vector3.UP*30
+		camera.position=home.global_position+offshore*distance+Vector3.UP*(1000 if OS.get_cmdline_user_args().has("--far-ports") else 30)
 		camera.look_at(home.global_position+Vector3(0,15,0))
 		weather(.5,.25)
 		await get_tree().create_timer(5).timeout
