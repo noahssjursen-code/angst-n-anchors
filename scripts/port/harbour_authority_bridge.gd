@@ -200,7 +200,8 @@ func _apply_berth_projection(projection: Dictionary) -> void:
 	var pending := _pending_mooring_by_vessel.get(vessel_id, {}) as Dictionary
 	if not pending.is_empty():
 		if (
-			bool(pending.get("bow_line", false)) != desired_bow
+			str(pending.get("berth_id", "")) != berth_id
+			or bool(pending.get("bow_line", false)) != desired_bow
 			or bool(pending.get("stern_line", false)) != desired_stern
 		):
 			return ## Do not roll a local cast-off back to an older cached projection.
@@ -303,7 +304,7 @@ func _on_local_mooring_changed(
 	_pending_mooring_by_vessel[vessel_id] = context
 	# Preserve the latest toggles while a remote arrival claim is in flight.
 	for inflight: Dictionary in _pending.values():
-		if inflight.get("kind") == "mooring_claim" and inflight.get("vessel_id") == vessel_id:
+		if inflight.get("kind") in ["mooring_claim", "mooring_retarget_release"] and inflight.get("vessel_id") == vessel_id:
 			return
 	_submit_mooring(context)
 	NetworkManager.force_local_ship_meta_resync()
@@ -465,7 +466,24 @@ func _on_command_completed(request_id: String, result: Dictionary) -> void:
 			var latest: Dictionary = _pending_mooring_by_vessel.get(str(pending.vessel_id), pending).duplicate(true)
 			latest["kind"] = "mooring"
 			_pending_mooring_by_vessel[str(pending.vessel_id)] = latest
-			_submit_mooring(latest, true)
+			var assignment: Dictionary = (result.get("data", {}) as Dictionary).get("assignment", pending)
+			if str(latest.port_id) != str(assignment.port_id) or str(latest.berth_id) != str(assignment.berth_id):
+				# A delayed claim belongs to its original berth. Release that
+				# reservation before claiming the player's newer choice.
+				var release_id := WorldGateway.next_request_id("mooring-retarget-release")
+				var release := pending.duplicate(true)
+				release["kind"] = "mooring_retarget_release"
+				_pending[release_id] = release
+				WorldGateway.send_command(WorldContracts.COMMAND_VESSEL_MOORING_SET,
+					WorldContracts.vessel_mooring_body(str(pending.vessel_id), str(assignment.port_id), str(assignment.berth_id), false, false), release_id)
+			else:
+				_submit_mooring(latest, true)
+			return
+		if str(pending.get("kind", "")) == "mooring_retarget_release":
+			var latest: Dictionary = _pending_mooring_by_vessel.get(str(pending.vessel_id), {})
+			if not latest.is_empty():
+				latest["kind"] = "mooring"
+				_submit_mooring(latest)
 			return
 		if str(pending.get("kind", "")) == "mooring":
 			var assignment := (
