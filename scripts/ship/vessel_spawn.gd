@@ -149,6 +149,7 @@ static func apply_identity(boat: BoatBody, record: Dictionary) -> void:
 	boat.set_meta("vessel_display_name", vessel_name)
 	boat.set_meta("registration_id", str(record.get("registration_id", "")))
 	boat.set_meta("vessel_uid", str(record.get("uid", "")))
+	boat.set_meta("hull_id", str(record.get("hull_id", "")))
 	## Multiplayer world commands must name the durable server vessel, not the
 	## transient scene/network instance. The latter is presentation identity and
 	## can change whenever a client streams the vessel back in.

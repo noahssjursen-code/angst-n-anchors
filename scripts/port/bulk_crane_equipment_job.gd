@@ -68,10 +68,16 @@ func can_serve(ship: BoatBody, mode: String) -> bool:
 	if not _crane.can_reach_ship(ship):
 		return false
 	var m := mode.strip_edges().to_lower()
+	var op := _crane.get_auto_operator()
+	if op == null: return false
 	if m == MODE_LOAD:
-		return _has_loadable_hold(ship) and _nearest_mound("") != null
+		var cid := _default_load_commodity(ship)
+		return op._best_load_hold(ship, cid) != null and _nearest_mound(cid) != null
 	if m == MODE_UNLOAD:
-		return _has_unloadable_hold(ship)
+		var hold := op._best_unload_hold(ship, "")
+		var payload := _crane.get_bucket_lot()
+		var cid := payload.commodity_id if not payload.is_empty() else (hold.state.commodity_id if hold != null else "")
+		return not cid.is_empty() and _nearest_mound(cid) != null and (hold != null or not payload.is_empty())
 	return false
 
 

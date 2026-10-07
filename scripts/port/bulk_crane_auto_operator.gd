@@ -167,8 +167,14 @@ func _process(delta: float) -> void:
 	if not _hold.cargo_accessible:
 		_fail("The cargo hatch is closed. Open it before restarting.")
 		return
-	_timer += delta
-	_tick(delta)
+	# Keep IK stable at low frame rates and accelerated simulation. A single
+	# large step otherwise overshoots the sub-metre grab alignment tolerance.
+	var remaining := delta
+	while remaining > 0.0 and _active:
+		var step := minf(remaining, 1.0 / 60.0)
+		_timer += step
+		_tick(step)
+		remaining -= step
 	_update_gizmos()
 
 
@@ -326,7 +332,7 @@ func _tick(delta: float) -> void:
 			_crane.step_jaws(delta)
 			if not _did_act and (_crane.is_bucket_at_target(0.08) or _timer >= WORK_S + 1.0):
 				if operation == Operation.LOAD:
-					_crane.grab_from_mound(_mound, _hold.state.available_tonnes_t())
+					_crane.grab_from_mound(_mound, _hold.state.available_tonnes_t(), _ship, _hold.state.consignment_id)
 				else:
 					_crane.grab_from_hold(_hold)
 				_did_act = true
@@ -423,7 +429,7 @@ func _lower_ready(target: Vector3) -> bool:
 	if inside and mouth.distance_to(target) <= 0.6:
 		return true
 	if _timer >= TIMEOUT_S:
-		_fail("Grab cannot reach the cargo target. Reposition the ship or use a nearer crane.")
+		_fail("Grab cannot reach cargo (gap %.2f m, hoist %.1f m). Reposition the ship or use a nearer crane." % [mouth.distance_to(target), _crane.hoist_length_m])
 	return false
 
 
@@ -477,6 +483,8 @@ func _pick_hold(ship: BoatBody, commodity_id: String, loading: bool) -> BulkHold
 	for hold in ship.get_bulk_holds():
 		if not hold.cargo_accessible: continue
 		if loading:
+			if FreightService.has_bulk_freight(ship) and FreightService.bulk_load_remaining(ship, cid, hold.state.consignment_id) <= BulkCargoLot.TONNES_EPS:
+				continue
 			if cid.is_empty() or not hold.can_accept_commodity(cid):
 				continue
 			if hold.state.available_tonnes_t() <= BulkCargoLot.TONNES_EPS:

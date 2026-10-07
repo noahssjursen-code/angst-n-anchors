@@ -87,7 +87,9 @@ static func compatible_slots_for(
 		return []
 	var req := ship_requirements(record)
 	var ship_class: ShipClass.Type = req["ship_class"]
-	if not ShipClass.fits(ship_class, max_ship_class):
+	# Imported hull dimensions are real metres; legacy classes predate these
+	# hulls and can reject a 32 m coaster at a physically suitable 100 m quay.
+	if not ImportedHullCatalog.has(str(record.get("hull_id", ""))) and not ShipClass.fits(ship_class, max_ship_class):
 		return []
 	var loa_world := float(req["loa_world_m"])
 	var families: PackedStringArray = req["terminal_families"]

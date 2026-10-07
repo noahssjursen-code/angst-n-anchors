@@ -126,6 +126,14 @@ func is_offer_compatible_with_ship(offer: Dictionary, ship: BoatBody) -> bool:
 	if ship == null or not is_instance_valid(ship):
 		return false
 	var commodity_id := str(offer.get("commodity_id", ""))
+	var destination := PortCatalog.get_port_info(str(offer.get("destination_port_id", "")))
+	var limit_name := str(destination.get("max_ship_class_name", ""))
+	var hull := HullRegistry.get_by_id(str(ship.get_meta("hull_id", "")))
+	for class_id in ShipClass.DISPLAY_NAME:
+		if str(ShipClass.DISPLAY_NAME[class_id]) != limit_name: continue
+		if ImportedHullCatalog.has(str(ship.get_meta("hull_id", ""))):
+			if float(hull.get("loa_m", 0.0)) > ShipClass.max_length(class_id): return false
+		elif int(hull.get("ship_class", 0)) > int(class_id): return false
 	var berth := ship.get_moored_berth() as QuayBerthSlot
 	if berth == null or not berth.commodities.has(commodity_id):
 		return false
@@ -280,6 +288,69 @@ func unstage_berth(port_id: String, berth_id: String, ship: BoatBody) -> void:
 		_active[index] = contract
 	if not removed_by_contract.is_empty():
 		_publish()
+
+
+## Distinguish booked freight from the unbooked cargo used in equipment demos.
+func has_bulk_freight(ship: BoatBody) -> bool:
+	if not is_instance_valid(ship): return false
+	for contract in _active:
+		if str(contract.get("handling_mode", "")) == "bulk" and str(contract.get("vessel_uid", "")) == _vessel_uid(ship): return true
+	return false
+
+
+func bulk_load_remaining(ship: BoatBody, commodity: String, shipment: String = "") -> float:
+	var remaining := 0.0
+	for contract in _active:
+		if str(contract.get("handling_mode", "")) != "bulk" or str(contract.get("vessel_uid", "")) != _vessel_uid(ship): continue
+		if str(contract.get("origin_port_id", "")) != ship.get_harbour_port_id() or str(contract.get("commodity_id", "")) != commodity: continue
+		if not shipment.is_empty() and str((contract.get("consignment", {}) as Dictionary).get("consignment_id", "")) != shipment: continue
+		remaining += maxf(0.0, float(contract.quantity) - float(contract.get("issued_quantity", 0.0)))
+	return remaining
+
+
+## Reserve each physical scoop before it leaves the stockpile. Parallel cranes
+## share issued_quantity, so they cannot issue the same booked tonnes twice.
+func issue_bulk_lot(ship: BoatBody, commodity: String, maximum_t: float, shipment: String = "") -> BulkCargoLot:
+	if not is_instance_valid(ship): return BulkCargoLot.empty()
+	for contract in _active:
+		if str(contract.get("handling_mode", "")) != "bulk": continue
+		if str(contract.get("vessel_uid", "")) != _vessel_uid(ship): continue
+		if str(contract.get("origin_port_id", "")) != ship.get_harbour_port_id(): continue
+		if str(contract.get("commodity_id", "")) != commodity: continue
+		var id := str((contract.get("consignment", {}) as Dictionary).get("consignment_id", ""))
+		if not shipment.is_empty() and id != shipment: continue
+		var amount := minf(maximum_t, float(contract.quantity) - float(contract.get("issued_quantity", 0.0)))
+		if amount <= BulkCargoLot.TONNES_EPS: continue
+		contract["issued_quantity"] = float(contract.get("issued_quantity", 0.0)) + amount
+		_publish()
+		return BulkCargoLot.create(commodity, amount, id)
+	return BulkCargoLot.empty()
+
+
+func bulk_contract(lot: BulkCargoLot, ship: BoatBody) -> Dictionary:
+	if lot == null or lot.is_empty() or lot.consignment_id.is_empty() or not is_instance_valid(ship): return {}
+	for contract in _active:
+		if str(contract.get("handling_mode", "")) != "bulk": continue
+		if str(contract.get("vessel_uid", "")) != _vessel_uid(ship): continue
+		if str(contract.get("commodity_id", "")) != lot.commodity_id: continue
+		if str((contract.get("consignment", {}) as Dictionary).get("consignment_id", "")) == lot.consignment_id:
+			return contract
+	return {}
+
+
+func record_bulk_loaded(lot: BulkCargoLot, ship: BoatBody) -> bool:
+	var contract := bulk_contract(lot, ship)
+	if contract.is_empty() or ship.get_harbour_port_id() != str(contract.origin_port_id): return false
+	if float(contract.get("loaded_quantity", 0.0)) + lot.tonnes_t > float(contract.get("issued_quantity", 0.0)) + 0.001: return false
+	return record_loaded(str(contract.id), lot.tonnes_t)
+
+
+func record_bulk_delivered(lot: BulkCargoLot, port_id: String, ship: BoatBody) -> bool:
+	var contract := bulk_contract(lot, ship)
+	if contract.is_empty() or port_id != str(contract.destination_port_id): return false
+	if ship.get_harbour_port_id() != port_id: return false
+	if float(contract.get("delivered_quantity", 0.0)) + lot.tonnes_t > float(contract.get("loaded_quantity", 0.0)) + 0.001: return false
+	return record_delivered(str(contract.id), port_id, lot.tonnes_t)
 
 
 func record_loaded(contract_id: String, quantity: float = 1.0) -> bool:

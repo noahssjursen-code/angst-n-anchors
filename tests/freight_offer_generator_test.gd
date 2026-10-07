@@ -8,6 +8,18 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	# Shipment identity must survive partial grabs, overflow and save round-trips.
+	var hold := BulkHoldState.new()
+	hold.capacity_tonnes_t = 40.0
+	var overflow := hold.accept_lot(BulkCargoLot.create("iron_ore", 55.0, "shipment-a"))
+	assert(is_equal_approx(overflow.tonnes_t, 15.0) and overflow.consignment_id == "shipment-a")
+	var scoop := hold.withdraw_tonnes(12.5)
+	assert(scoop.consignment_id == "shipment-a" and is_equal_approx(scoop.tonnes_t, 12.5))
+	assert(is_equal_approx(hold.accept_lot(BulkCargoLot.create("iron_ore", 5.0, "shipment-b")).tonnes_t, 5.0), "different bookings cannot lose identity by mixing")
+	hold = BulkHoldState.from_dict(hold.to_dict())
+	assert(hold.consignment_id == "shipment-a" and is_equal_approx(hold.filled_tonnes_t, 27.5))
+	assert(hold.withdraw_tonnes(100).consignment_id == "shipment-a")
+	assert(hold.is_empty() and hold.consignment_id.is_empty())
 	var ports: Array[Dictionary] = [
 		_port("origin", Vector3.ZERO, ["containers"], []),
 		_port("near", Vector3(1000.0, 0.0, 0.0), [], ["containers"]),
@@ -16,10 +28,11 @@ func _run() -> void:
 		_port("liquid", Vector3(3000.0, 0.0, 0.0), [], ["diesel"]),
 	]
 	ports[0]["commodity_exports"] = ["containers", "grain", "diesel"]
-	var first := FreightOfferGenerator.generate("origin", ports, 4)
-	var second := FreightOfferGenerator.generate("origin", ports, 4)
+	var first := FreightOfferGenerator.generate("origin", ports, 4, 0)
+	var second := FreightOfferGenerator.generate("origin", ports, 4, 0)
 	assert(first == second, "same port and day must generate identical freight")
-	assert(first.size() == 3, "container and bulk destinations become offers")
+	assert(first.size() == 4, "container routes plus standard and small bulk loads become offers")
+	assert(FreightOfferGenerator.generate("origin", ports, 4).size() == 3, "board remains bounded")
 	assert(_offer_to(first, "liquid").is_empty(), "unfinished liquid handling stays filtered")
 	var near_offer := _offer_to(first, "near")
 	var far_offer := _offer_to(first, "far")

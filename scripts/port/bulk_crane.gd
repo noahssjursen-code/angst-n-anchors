@@ -61,7 +61,7 @@ signal bucket_changed(open_amount: float)
 @export var boom_min_deg: float = 8.0
 @export var boom_max_deg: float = 72.0
 @export var hoist_min_m: float = 3.0
-@export var hoist_max_m: float = 28.0
+@export var hoist_max_m: float = 40.0
 @export var slew_speed_deg: float = 55.0
 @export var boom_speed_deg: float = 28.0
 @export var hoist_speed_m: float = 8.0
@@ -509,6 +509,12 @@ func horizontal_reach_limits_m() -> Vector2:
 	var boom_len := maxf(get_boom_length_m(), 8.0)
 	var r_min := boom_len * cos(deg_to_rad(boom_max_deg))
 	var r_max := boom_len * cos(deg_to_rad(boom_min_deg))
+	if is_instance_valid(_boom) and is_instance_valid(_cabin):
+		# The offset boom hinge rotates with the cab. Reach must be measured
+		# from the slew pivot, independent of where the crane currently points.
+		var offset := _cabin.to_local(_boom.global_position) * model_scale
+		r_min = Vector2(offset.x, offset.z - r_min).length()
+		r_max = Vector2(offset.x, offset.z - r_max).length()
 	if r_min > r_max:
 		var swap := r_min
 		r_min = r_max
@@ -517,8 +523,8 @@ func horizontal_reach_limits_m() -> Vector2:
 
 
 ## True when the grab can plumb over `target` within boom angle limits.
-func can_reach_point(target: Vector3, margin_m: float = 2.0) -> bool:
-	var hinge := get_boom_hinge_global()
+func can_reach_point(target: Vector3, margin_m: float = 0.25) -> bool:
+	var hinge := get_slew_pivot_global()
 	var horiz := Vector2(target.x - hinge.x, target.z - hinge.z).length()
 	var limits := horizontal_reach_limits_m()
 	return horiz >= limits.x - margin_m and horiz <= limits.y + margin_m
@@ -567,6 +573,8 @@ func find_nearest_ore_mound(commodity_id: String = "") -> OreMound:
 		var mound := node as OreMound
 		if not cid.is_empty() and mound.commodity_id != cid:
 			continue
+		if not can_reach_point(mound.pickup_global()):
+			continue
 		var dist := origin.distance_to(mound.global_position)
 		if dist < best_dist:
 			best_dist = dist
@@ -611,12 +619,21 @@ func step_jaws(delta: float) -> void:
 		bucket_open = move_toward(bucket_open, _bucket_open_target, bucket_speed * delta)
 
 
-func grab_from_mound(mound: OreMound, max_tonnes_t: float = INF) -> void:
+var _payload_ship: BoatBody
+
+
+func grab_from_mound(mound: OreMound, max_tonnes_t: float = INF, ship: BoatBody = null, shipment: String = "") -> void:
 	if not is_instance_valid(mound) or not bucket_lot.is_empty():
 		return
 	var capacity_t := bucket_capacity_tonnes_t()
+	if is_instance_valid(ship) and FreightService.has_bulk_freight(ship):
+		bucket_lot = FreightService.issue_bulk_lot(ship, mound.commodity_id, minf(capacity_t, max_tonnes_t), shipment)
+		_payload_ship = ship
+		bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+		return
 	var taken := mound.take(minf(capacity_t, max_tonnes_t))
 	bucket_lot = BulkCargoLot.create(mound.commodity_id, taken)
+	_payload_ship = ship
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
 
 
@@ -628,6 +645,11 @@ func grab_from_hold(hold: BulkHoldComponent) -> void:
 	if withdrawn.is_empty():
 		return
 	bucket_lot = withdrawn.duplicate_lot()
+	_payload_ship = hold.get_parent() as BoatBody
+	var ancestor := hold.get_parent()
+	while ancestor != null and _payload_ship == null:
+		_payload_ship = ancestor as BoatBody
+		ancestor = ancestor.get_parent()
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
 
 
@@ -645,6 +667,7 @@ func force_release_at(world_pos: Vector3) -> void:
 		Vector3.DOWN * 1.5,
 		bucket_capacity_tonnes_t(),
 		bucket_scale,
+		_payload_ship,
 	)
 	material_dropped.emit(dropped, world_pos)
 	bucket_lot = BulkCargoLot.empty()
@@ -734,6 +757,7 @@ func _try_drop_material() -> void:
 		drop_vel,
 		bucket_capacity_tonnes_t(),
 		bucket_scale,
+		_payload_ship,
 	)
 	material_dropped.emit(dropped, mouth)
 	bucket_lot = BulkCargoLot.empty()

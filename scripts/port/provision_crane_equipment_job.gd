@@ -74,7 +74,7 @@ func can_serve(ship: BoatBody, mode: String) -> bool:
 
 
 func can_reach_ship(ship: BoatBody) -> bool:
-	if _crane == null or not is_instance_valid(_crane):
+	if _crane == null or not is_instance_valid(_crane) or not _crane.is_inside_tree():
 		return false
 	return _crane.can_reach_ship(ship)
 

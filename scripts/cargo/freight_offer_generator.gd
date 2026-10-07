@@ -33,6 +33,13 @@ static func generate(
 			if not imports.has(commodity_id) or not is_handling_available(commodity_id):
 				continue
 			candidates.append(_make_offer(origin, destination, commodity_id, day))
+			if CommodityCatalog.commodity_handling_mode(commodity_id) == "bulk":
+				# A separate small consignment, not a silently resized accepted job.
+				var small := _make_offer(origin, destination, commodity_id, day)
+				small["id"] += ":small"
+				small["quantity"] = 20.0
+				small["pay_marks"] = maxi(MIN_PAY, int(round(float(small.distance_m) * 0.055)) + 160)
+				candidates.append(small)
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("id", "")) < str(b.get("id", "")))
 	if max_offers <= 0 or candidates.size() <= max_offers:

@@ -176,6 +176,8 @@ static func find_accepting_hold_at(world_pos: Vector3, lot: BulkCargoLot) -> Bul
 			continue
 		if not hold.can_accept_commodity(lot.commodity_id):
 			continue
+		if not hold.state.is_empty() and hold.state.consignment_id != lot.consignment_id:
+			continue
 		if hold.state.available_tonnes_t() <= BulkCargoLot.TONNES_EPS:
 			continue
 		var dist := hold.global_position.distance_squared_to(world_pos)
