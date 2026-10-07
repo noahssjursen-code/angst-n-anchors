@@ -25,6 +25,7 @@ const REQUEST_MOVE_THRESHOLD_M := 50.0
 @export_range(1, 4, 1) var max_jobs_per_frame := 1
 @export_range(1, 16, 1) var queue_refresh_frames := 5
 
+var _distant: Node3D
 var _layout: Object
 var _flatten_zones: Array = []
 var _chunks: Dictionary = {}
@@ -45,6 +46,10 @@ func configure(layout: Object, flatten_zones: Array = []) -> void:
 	set_process(_layout != null)
 	if _layout != null:
 		TREE_MESH.request_assets()
+		if is_instance_valid(_distant): _distant.free()
+		_distant = load("res://scripts/world/distant_forest.gd").new()
+		add_child(_distant)
+		_distant.configure(layout)
 		_refresh_requests(WorldReferenceScript.visual_position(get_viewport()))
 
 
@@ -79,6 +84,9 @@ func get_debug_stats() -> Dictionary:
 	for value in _chunks.values():
 		instances += int((value as Dictionary).get("instances", 0))
 	return {
+		"world_canopy_pending": _distant.pending() if is_instance_valid(_distant) else 0,
+		"world_canopy_trees": _distant.trees if is_instance_valid(_distant) else 0,
+		"world_canopy_peak_ms": _distant.peak_ms if is_instance_valid(_distant) else 0,
 		"loaded": _chunks.size(),
 		"pending": _jobs.size(),
 		"instances": instances,
@@ -277,6 +285,8 @@ func _unload_chunk(key: Variant) -> void:
 
 
 func _clear_chunks() -> void:
+	if is_instance_valid(_distant): _distant.queue_free()
+	_distant = null
 	for key in _chunks.keys():
 		_unload_chunk(key)
 	_chunks.clear()

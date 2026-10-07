@@ -123,7 +123,11 @@ static func _inside_flatten_zone(world_xz: Vector2) -> bool:
 	var coord := Vector2i(floori(world_xz.x / 1000.0), floori(world_xz.y / 1000.0))
 	if not _zone_chunks.has(coord):
 		_zone_chunks[coord] = WorldTerrainStreamer.zones_intersecting_chunk(_flatten_zones, coord, 1000.0)
-	for zone_variant in _zone_chunks[coord]:
+	return inside_flatten_zones(world_xz, _zone_chunks[coord])
+
+
+static func inside_flatten_zones(world_xz: Vector2, zones: Array) -> bool:
+	for zone_variant in zones:
 		var zone := zone_variant as Dictionary
 		## Town / polygon clears (forest only) and legacy rectangular pads.
 		if zone.has("polygon"):

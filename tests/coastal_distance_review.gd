@@ -1,7 +1,7 @@
 extends "res://tests/live_lighting_review.gd"
 func review() -> void:
 	assert(ShipyardPlaytestMode.active())
-	get_tree().create_timer(300).timeout.connect(func():get_tree().quit(1))
+	get_tree().create_timer(600).timeout.connect(func():get_tree().quit(1))
 	output="C:/Users/noahs/Pictures/machinescreenshots/coastal-distance-"+str(Time.get_unix_time_from_system()).replace(".","-")
 	DirAccess.make_dir_recursive_absolute(output)
 	GameSettings.map_generation_seed=424242
@@ -49,6 +49,11 @@ func review() -> void:
 	var target := Vector3(wooded.x,layout.sample_height(wooded),wooded.y)
 	player.global_position = target + Vector3.UP * 2
 	print("WOODLAND TARGET ",target," density ",best)
+	if OS.get_cmdline_user_args().has("--whole-forest"):
+		for attempt in 900:
+			if int(world.get_node("WorldForestStreamer").get_debug_stats().world_canopy_pending)==0: break
+			await get_tree().create_timer(.2).timeout
+		assert(int(world.get_node("WorldForestStreamer").get_debug_stats().world_canopy_pending)==0,"World canopy did not finish")
 	var coverage := ForestField.coverage_texture().get_image()
 	var uv := wooded / (ForestField.world_half_extent_m()*2.0) + Vector2(.5,.5)
 	print("COVERAGE TARGET ",coverage.get_pixel(int(uv.x*coverage.get_width()),int(uv.y*coverage.get_height())), " BIND ",world.get_node("WorldTerrainStreamer")._near_material.get_shader_parameter("forest_map"))

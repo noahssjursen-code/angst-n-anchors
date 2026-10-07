@@ -1570,3 +1570,25 @@ and eliminating startup building captures remain future work.
 Run tests/building_light_review.tscn with --shipyard-playtest for source/proxy
 day, opposite sun and night comparisons plus albedo/mipmap/source-material and
 rendered brightness regressions. Actual-world port review can use --ports-only.
+
+Whole-world forest silhouettes (user correction, 7 October): the terrain-only
+handover was insufficient. DistantForest now retains batched, lit two-triangle
+tree silhouettes throughout the generated world, independent of the camera's
+nearby256m patch set. Never return to a camera-centred square of trees with only
+flat tint outside it. The existing1950-2180m fade now hands over to these tree
+silhouettes. Geographic density, bare shoreline and port clearings still apply.
+Distant crowns approximate coverage at9m candidates (near trees6.5m); crown width
+is1.8x, height remains authored scale. These are woodland massing, not exact
+one-to-one copies of every nearby tree. Ordinary camera far clipping still applies.
+
+Generation reads immutable layout data and a copied coverage image/clear zones
+on one worker. Do not use ForestField's mutable zone-cache dictionary on that
+worker; inside_flatten_zones is the pure exclusion helper. Scene/GPU creation
+stays on the main thread with a2ms upload budget and4x4 coverage-cell batches.
+Cancellation is mutex-protected and joined at exit. Initial generation happens
+in the background; completion is exposed in world_canopy_pending telemetry.
+The test40km world has1,749,103 distant crowns, about80MiB of raw GPU transforms;
+not free memory. This is a whole-world persistent layer, not additional detailed
+models/collisions. Consider a versioned visual cache for faster repeated startup.
+Review coastal_distance_review with --forest-only --far-forest --whole-forest;
+add --sea-level for offshore views. All runs require --shipyard-playtest.

@@ -9,6 +9,7 @@ uniform bool distant = false;
 varying vec3 canopy_normal_world;
 varying vec3 tree_position;
 varying float forest_outer_fade;
+uniform float forest_world_canopy = 0.0;
 
 void vertex() {
 	forest_outer_fade = smoothstep(1950.0,2180.0,length(MODEL_MATRIX[3].xz-MAIN_CAM_INV_VIEW_MATRIX[3].xz));
@@ -38,6 +39,7 @@ void vertex() {
 void fragment() {
 	if (forest_lod_enabled > 0.5 && forest_hidden_pixel(distant, forest_lod_mix, FRAGCOORD.xy)) discard;
 	if (forest_lod_enabled > 0.5 && forest_hidden_pixel(false, forest_outer_fade, FRAGCOORD.xy)) discard;
+	if (forest_world_canopy > 0.5 && forest_hidden_pixel(true, forest_outer_fade, FRAGCOORD.xy)) discard;
 	vec4 foliage = texture(foliage_texture, UV);
 	// The branch bake is diffuse colour. Crown depth supplies the occlusion
 	// absent from overlapping cutout cards, without adding emissive fill.
