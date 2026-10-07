@@ -337,13 +337,19 @@ void main() {
 
 		// Read old foam, decay, and add new foam based on jacobian
 		float foam = imageLoad(displacement_textures, ivec3(id.xy, i)).a;
-		foam *= exp(-params.foam_decay_rate);
-		foam = clamp(foam, 0.0, 1.0);
+		// Preserve the authored 60 Hz recurrence at any actual update interval.
+		// Integrate constant injection/decay exactly, including zero decay.
+		float ticks = max(params.delta_time, 0.0) * 60.0;
+		float decay = max(params.foam_decay_rate, 0.0);
+		float retention = exp(-decay * ticks);
+		float source_scale = decay > 0.0001
+			? (1.0 - retention) / (1.0 - exp(-decay)) : ticks;
+		foam = clamp(foam * retention, 0.0, 1.0);
 
 		float biasedJacobian = max(0.0, -(jacobian - params.foam_bias));
 
 		if (biasedJacobian > params.foam_threshold) {
-			foam += min(params.foam_add * biasedJacobian * 0.12, 0.25);
+			foam += min(params.foam_add * biasedJacobian * 0.12, 0.25) * source_scale;
 		}
 
 		imageStore(displacement_textures, ivec3(id.xy, i), vec4(displacement, clamp(foam, 0.0, 1.0)));

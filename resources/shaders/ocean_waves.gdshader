@@ -261,8 +261,8 @@ void fragment() {
 	// White slosh — FFT Jacobian foam sampled PER PIXEL from the two large
 	// cascades only. Per-vertex sampling showed triangle blotches, and the
 	// small cascades (16 m / 4 m) contribute per-texel speckle, not foam.
-	float jac_foam = textureLod(displacement_map, vec3(xz / length_scales.x, 0.0), 0.0).w * 0.75
-			+ textureLod(displacement_map, vec3(xz / length_scales.y, 1.0), 0.0).w * 0.45;
+	float jac_foam = textureLod(displacement_map, vec3(v_fft_xz / length_scales.x, 0.0), 0.0).w * 0.75
+			+ textureLod(displacement_map, vec3(v_fft_xz / length_scales.y, 1.0), 0.0).w * 0.45;
 	jac_foam = clamp(jac_foam, 0.0, 1.0);
 
 	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));

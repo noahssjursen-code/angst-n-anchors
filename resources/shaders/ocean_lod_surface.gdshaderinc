@@ -157,12 +157,12 @@ void fragment() {
 #if OCEAN_FOAM
 	float jacobian = textureLod(
 		displacement_map,
-		vec3(v_world_pos.xz / length_scales.x, 0.0),
+		vec3(v_fft_xz / length_scales.x, 0.0),
 		0.0
 	).w * 0.75;
 	jacobian += textureLod(
 		displacement_map,
-		vec3(v_world_pos.xz / length_scales.y, 1.0),
+		vec3(v_fft_xz / length_scales.y, 1.0),
 		0.0
 	).w * 0.45;
 	float foam = ocean_foam_coverage(v_world_pos.xz, wave_time, clamp(jacobian, 0.0, 1.0), pow(1.0 - clamp(normal_world.y, 0.0, 1.0), 1.15)) * foam_strength;

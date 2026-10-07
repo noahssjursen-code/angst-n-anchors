@@ -96,9 +96,15 @@ float ocean_foam_noise(vec2 p) {
 float ocean_foam_coverage(vec2 xz, float wt, float breaking, float steep) {
 	vec2 drift = xz + wt * vec2(0.16, -0.11);
 	float footprint = max(length(dFdx(xz)), length(dFdy(xz)));
-	float rafts = mix(0.5, ocean_foam_noise(drift * 2.3), 1.0 - smoothstep(0.12, 0.6, footprint));
+	// Break up the periodic FFT compression envelope with metre-scale rafts.
+	// Non-periodic world noise modulates coverage only, never the wave geometry.
+	vec2 warp = vec2(ocean_foam_noise(drift*.19), ocean_foam_noise(drift*.19+vec2(17.3,41.7)));
+	float patches = ocean_foam_noise(drift*.43+warp*1.7);
+	float patch_weight = 1.0-smoothstep(.5,3.0,footprint);
+	float rafts = mix(0.5, ocean_foam_noise(drift * 2.3+warp), 1.0 - smoothstep(0.12, 0.6, footprint));
 	float lace = mix(0.5, ocean_foam_noise(drift * 9.7 + vec2(rafts * 2.0)), 1.0 - smoothstep(0.03, 0.18, footprint));
-	float density = breaking + steep * 0.10 - rafts * 0.65 - lace * 0.30;
+	float density = breaking + steep * 0.10 - rafts * 0.45 - lace * 0.30
+		- (.1 + (patches-.5)*.42*patch_weight);
 	return smoothstep(0.24, 0.37, density);
 }
 

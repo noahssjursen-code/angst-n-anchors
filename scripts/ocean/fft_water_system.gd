@@ -71,6 +71,7 @@ var _last_short_wave := -1.0
 # bias 1.0 + tiny threshold = foam only where waves actually break.
 # (bias 2.0 made biasedJacobian ~1 EVERYWHERE -> uniform foam wash.)
 @export var foam_bias: float = 1.0
+## Legacy tuning is per nominal 60 Hz tick; assemble integrates elapsed time.
 @export var foam_decay_rate: float = 0.08
 @export var foam_add: float = 1.0
 @export var foam_threshold: float = 0.05
