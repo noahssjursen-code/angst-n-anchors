@@ -145,6 +145,30 @@ func review() -> void:
 		await get_tree().process_frame
 	assert(container.to_global(Vector3(0,container.lift_height_m(),0)).distance_to(crane.get_hook_global())<.0001)
 	assert(container.unit.to_dict()==identity)
+	# Rebuild a live loaded crane repeatedly: the old model must disappear while
+	# the same cargo survives under the new moving hook, with its pose retained.
+	for size in [.5,1.4,1.0]:
+		var old_hook := crane.get_hook()
+		var saved_pose := Vector3(crane.slew_degrees,crane.trolley_z_m,crane.hoist_length_m)
+		crane.model_scale=size
+		assert(crane.get_hook()!=old_hook)
+		assert(container.get_parent()==crane.get_hook())
+		assert(container.unit.to_dict()==identity)
+		assert(is_equal_approx(crane.slew_degrees,saved_pose.x))
+		assert(is_equal_approx(crane.trolley_z_m,clampf(saved_pose.y,crane.trolley_min_z_m,crane.trolley_max_z_m)))
+		assert(is_equal_approx(crane.hoist_length_m,saved_pose.z))
+		assert(crane._running_wheels.size()==4 and crane._feed_ropes.size()==2)
+		await get_tree().process_frame
+		assert(not is_instance_valid(old_hook),"Old crane rig survived replacement")
+		assert(is_instance_valid(container),"Rebuild deleted live freight")
+		assert(container.to_global(Vector3(0,container.lift_height_m(),0)).distance_to(crane.get_hook_global())<.0001)
+		crane.step(.1,command)
+	crane.reload_model()
+	crane.reload_model()
+	await get_tree().process_frame
+	assert(container.get_parent()==crane.get_hook() and container.unit.to_dict()==identity)
+	assert(crane.find_children("Model","ModelAssembler",false,false).size()==1,"Duplicate live crane models")
+	print("PROVISION LIVE REBUILD PASS: pose, imported motion rig, attached freight identity and repeated reload")
 	hook=crane.get_hook_global()
 	await shot("loaded",hook+Vector3(7,4,10),hook+Vector3(0,-1,0))
 	assert(crane.release_container_to_world(Vector3(4,0,4),self)==container)

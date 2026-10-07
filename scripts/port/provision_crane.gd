@@ -47,10 +47,13 @@ signal hoist_changed(length_m: float)
 @export var hoist_speed_m: float = 8.0
 @export var model_scale: float = 1.0:
 	set(v):
-		model_scale = maxf(v, 0.01)
+		var next_scale := maxf(v, 0.01)
+		if is_equal_approx(model_scale, next_scale):
+			return
+		model_scale = next_scale
 		scale = Vector3.ONE * model_scale
-		if _assembler != null and is_instance_valid(_assembler):
-			_assembler.absolute_scale = model_scale
+		if is_node_ready():
+			reload_model()
 
 var _assembler: Node3D
 var _pad: Node3D
@@ -76,6 +79,7 @@ const LOWER_SHEAVE_HEIGHT_M := 0.85
 var _talje_rail_y := -0.78
 var _attached_container: ContainerNode = null
 var _space_held := false
+var _has_loaded_model := false
 const GRAB_RADIUS_M := 5.0
 
 
@@ -85,6 +89,12 @@ func _ready() -> void:
 
 
 func reload_model() -> void:
+	var preserve_pose := _has_loaded_model
+	var saved_pose := Vector3(slew_degrees, trolley_z_m, hoist_length_m)
+	# Cargo belongs to gameplay, not to the replaceable model subtree. Keep its
+	# identity and grabbed state while rebuilding; do not release/re-grab it.
+	if is_instance_valid(_attached_container):
+		_attached_container.reparent(self, true)
 	_imported_hoist = false
 	_running_wheels.clear()
 	_head_sheaves.clear()
@@ -102,6 +112,7 @@ func reload_model() -> void:
 	_wire_mesh = null
 	_hook = null
 	if _assembler != null and is_instance_valid(_assembler):
+		remove_child(_assembler)
 		_assembler.queue_free()
 		_assembler = null
 	if model_path.is_empty() or not ResourceLoader.exists(model_path):
@@ -112,16 +123,15 @@ func reload_model() -> void:
 	_assembler.absolute_scale = model_scale
 	## Part meshes host their own StaticBody3D via MeshTransformer (pad/mast/boom…).
 	_assembler.build_part_colliders = true
-	add_child(_assembler)
 	_assembler.model_data_path = model_path
-	call_deferred("_bind_rig")
+	# Configure before entering the tree: its ready callback builds exactly once.
+	add_child(_assembler)
+	_bind_rig(preserve_pose, saved_pose)
 
 
-func _bind_rig() -> void:
+func _bind_rig(preserve_pose: bool = false, saved_pose: Vector3 = Vector3.ZERO) -> void:
 	if _assembler == null or not is_instance_valid(_assembler):
 		return
-	if _assembler.has_method("rebuild"):
-		_assembler.rebuild()
 	_pad = _part("pad")
 	_girder = _part("girder")
 	_cabin = _part("cabin")
@@ -138,9 +148,17 @@ func _bind_rig() -> void:
 		_install_imported_structure()
 		_install_imported_station()
 		_install_hoist_motion()
+	if preserve_pose:
+		slew_degrees = saved_pose.x
+		trolley_z_m = saved_pose.y
+		hoist_length_m = saved_pose.z
 	_apply_slew()
 	_apply_trolley()
 	_apply_hoist()
+	if is_instance_valid(_attached_container) and is_instance_valid(_hook):
+		_attached_container.reparent(_hook, true)
+		_tick_attached_container()
+	_has_loaded_model = true
 	model_loaded.emit(model_path)
 
 

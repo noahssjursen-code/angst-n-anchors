@@ -32,6 +32,26 @@ func review() -> void:
 		var mat:=StandardMaterial3D.new();mat.albedo_color=Color(.28,.32,.34);object.material_override=mat
 		add_child(object);object.position=Vector3(-3+i*3,box.size.y*.5,-3)
 	camera=Camera3D.new();add_child(camera);camera.current=true;camera.position=Vector3(7,4,12);camera.look_at(Vector3(0,1,0))
+	if OS.get_cmdline_user_args().has("--projection-review"):
+		RenderingServer.positional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_ULTRA)
+		lamp.shadow_normal_bias=.02
+		lamp.shadow_blur=1.0
+		for size in [.65,4.0,8.0,16.0]:
+			lamp.light_size=size
+			await capture("emitter-"+str(size))
+		get_tree().quit()
+		return
+	if OS.get_cmdline_user_args().has("--filter-review"):
+		print("DEFAULT FILTER ",ProjectSettings.get_setting("rendering/lights_and_shadows/positional_shadow/soft_shadow_filter_quality"))
+		for quality in [RenderingServer.SHADOW_QUALITY_SOFT_LOW,RenderingServer.SHADOW_QUALITY_SOFT_MEDIUM,RenderingServer.SHADOW_QUALITY_SOFT_ULTRA]:
+			RenderingServer.positional_soft_shadow_filter_set_quality(quality)
+			await capture("filter-"+str(quality))
+		lamp.shadow_normal_bias=.02
+		await capture("ultra-small-normal-bias")
+		get_viewport().use_taa=true
+		await capture("ultra-taa")
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--gi-review"):
 		await capture("gi-before")
 		for mesh in find_children("*","MeshInstance3D",true,false):
