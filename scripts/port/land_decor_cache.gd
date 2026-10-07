@@ -5,14 +5,13 @@ extends RefCounted
 
 const VARIANT_COUNT := 8
 
-static var _house_prototypes: Array[Node3D] = []
+# Resource-only descriptors: off-tree Nodes are not reference-counted and leak
+# their rendering instances when a static cache outlives the world.
+static var _house_prototypes: Array[Array] = []
 static var _initialized := false
 
 
 static func clear() -> void:
-	for proto in _house_prototypes:
-		if proto != null and is_instance_valid(proto):
-			proto.free()
 	_house_prototypes.clear()
 	_initialized = false
 
@@ -41,7 +40,7 @@ static func _mesh_from_primitive(primitive: PrimitiveMesh) -> ArrayMesh:
 	return st.commit()
 
 
-static func _bake_house(variant: int) -> Node3D:
+static func _bake_house(variant: int) -> Array[Dictionary]:
 	var tint := fmod(float(variant) * 0.17 + float(variant) * 0.11, 1.0)
 	var wall := Color(0.72, 0.28, 0.22).lerp(Color(0.55, 0.42, 0.32), tint)
 	var roof_col := Color(0.28, 0.22, 0.20).lerp(Color(0.38, 0.18, 0.14), 1.0 - tint)
@@ -66,15 +65,10 @@ static func _bake_house(variant: int) -> Node3D:
 			by_material[key] = {"mat": mat, "parts": [] as Array}
 		(by_material[key]["parts"] as Array).append(part)
 
-	var root := Node3D.new()
-	root.name = "HousePrototype"
+	var meshes: Array[Dictionary] = []
 	for bucket in by_material.values():
-		var mi := MeshInstance3D.new()
-		mi.mesh = _merge_parts(bucket["parts"] as Array)
-		mi.material_override = bucket["mat"]
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(mi)
-	return root
+		meshes.append({"mesh": _merge_parts(bucket["parts"] as Array), "material": bucket["mat"]})
+	return meshes
 
 
 static func _merge_parts(parts: Array) -> ArrayMesh:
@@ -110,15 +104,12 @@ static func _prism_mesh(size: Vector3) -> PrismMesh:
 	return mesh
 
 
-static func _stamp(prototype: Node3D) -> Node3D:
+static func _stamp(prototype: Array) -> Node3D:
 	var root := Node3D.new()
-	for child in prototype.get_children():
-		if child is MeshInstance3D:
-			var src := child as MeshInstance3D
-			var mi := MeshInstance3D.new()
-			mi.mesh = src.mesh
-			mi.material_override = src.material_override
-			mi.cast_shadow = src.cast_shadow
-			mi.transform = src.transform
-			root.add_child(mi)
+	for part: Dictionary in prototype:
+		var mi := MeshInstance3D.new()
+		mi.mesh = part["mesh"]
+		mi.material_override = part["material"]
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(mi)
 	return root

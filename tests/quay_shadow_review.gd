@@ -32,6 +32,19 @@ func review() -> void:
 		var mat:=StandardMaterial3D.new();mat.albedo_color=Color(.28,.32,.34);object.material_override=mat
 		add_child(object);object.position=Vector3(-3+i*3,box.size.y*.5,-3)
 	camera=Camera3D.new();add_child(camera);camera.current=true;camera.position=Vector3(7,4,12);camera.look_at(Vector3(0,1,0))
+	if OS.get_cmdline_user_args().has("--gi-review"):
+		await capture("gi-before")
+		for mesh in find_children("*","MeshInstance3D",true,false):
+			mesh.gi_mode=GeometryInstance3D.GI_MODE_STATIC
+		lamp.light_indirect_energy=1.0
+		env.sdfgi_min_cell_size=.25
+		env.sdfgi_cascades=4
+		env.sdfgi_enabled=true
+		for frame in 180:await get_tree().process_frame
+		await capture("gi-after")
+		print("GI DIAGNOSTIC COMPLETE")
+		get_tree().quit()
+		return
 	for variant in ["current","point","large","blur","no-shadow"]:
 		lamp.light_size=0.0 if variant=="point" else (2.0 if variant=="large" else .65)
 		lamp.shadow_blur=8.0 if variant=="blur" else 2.0
