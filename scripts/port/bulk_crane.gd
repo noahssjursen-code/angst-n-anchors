@@ -16,8 +16,8 @@ const WIRE_REST_LENGTH_M := 10.0
 const HOIST_CABIN_CLEARANCE_M := 0.35
 const PICKUP_RADIUS_BASE_M := 8.0
 const PICKUP_HEIGHT_TOLERANCE_BASE_M := 4.0
-const PICKUP_OPEN_THRESHOLD := 0.55
-const DROP_CLOSE_THRESHOLD := 0.12
+const PICKUP_CLOSED_THRESHOLD := 0.12
+const DROP_OPEN_THRESHOLD := 0.55
 const BUCKET_MOUTH_OFFSET_Y_M := -1.6
 
 signal bucket_fill_changed(lot: BulkCargoLot, capacity_tonnes_t: float)
@@ -93,7 +93,6 @@ var _wire_rest_length := WIRE_REST_LENGTH_M
 var _cabin_top_y_global := 0.0
 var _bucket_open_target := 0.0
 var _space_held := false
-var _drop_armed := false
 
 
 func _ready() -> void:
@@ -241,7 +240,13 @@ func _max_hoist_for_cabin_m() -> float:
 	if not is_inside_tree():
 		return hoist_max_m
 	var origin := _boom.to_global(_wire.position)
-	var down := (_boom.global_basis * _wire.basis * Vector3.DOWN).normalized()
+	# Cabin clearance only applies directly above the machinery. A grab working
+	# outboard must be able to reach a ship's hatch below the crane cab height.
+	var cab := get_slew_pivot_global()
+	if Vector2(origin.x - cab.x, origin.z - cab.z).length() > 5.0 * model_scale:
+		return hoist_max_m
+	# Hoist length is in rig-local metres; the basis includes model scale.
+	var down := _boom.global_basis * _wire.basis * Vector3.DOWN
 	if down.y >= -0.001:
 		return hoist_max_m
 	var limit_y := _cabin_top_y_global + HOIST_CABIN_CLEARANCE_M
@@ -449,7 +454,7 @@ func ik_bucket_to(delta: float, target: Vector3, hoist_mode: String = "track") -
 	var slew_err_deg := 0.0
 	if bucket_az.length() > 0.3 and target_az.length() > 0.3:
 		slew_err_deg = rad_to_deg(bucket_az.angle_to(target_az))
-		if absf(slew_err_deg) > 2.0:
+		if absf(slew_err_deg) > 0.2:
 			var slew_step := slew_speed_deg * delta
 			slew_degrees -= clampf(slew_err_deg, -slew_step, slew_step)
 
@@ -457,7 +462,7 @@ func ik_bucket_to(delta: float, target: Vector3, hoist_mode: String = "track") -
 	var bucket_reach := Vector2(bucket.x - hinge.x, bucket.z - hinge.z).length()
 	var target_reach := Vector2(target.x - hinge.x, target.z - hinge.z).length()
 	var reach_err := target_reach - bucket_reach
-	if absf(slew_err_deg) < 12.0 and absf(reach_err) > 1.25:
+	if absf(slew_err_deg) < 12.0 and absf(reach_err) > 0.15:
 		var boom_step := boom_speed_deg * delta * 0.55
 		var soft := clampf(absf(reach_err) / 8.0, 0.15, 1.0)
 		boom_angle_deg += clampf(-reach_err * 1.1 * soft, -boom_step, boom_step)
@@ -470,12 +475,16 @@ func ik_bucket_to(delta: float, target: Vector3, hoist_mode: String = "track") -
 			hoist_length_m = move_toward(hoist_length_m, raised, hoist_step)
 		"track":
 			var y_err := target.y - bucket.y
-			if y_err < -0.35:
-				hoist_length_m += hoist_step
-			elif y_err > 0.35:
-				hoist_length_m -= hoist_step
+			var world_per_m := absf((_boom.global_basis * _wire.basis * Vector3.DOWN).y)
+			if world_per_m > 0.001:
+				hoist_length_m = move_toward(hoist_length_m, hoist_length_m - y_err / world_per_m, hoist_step)
 		_:
 			pass
+
+
+## Cargo targets refer to the cutting mouth, not the suspension point above it.
+func ik_mouth_to(delta: float, target: Vector3, hoist_mode: String = "track") -> void:
+	ik_bucket_to(delta, target + get_bucket_global() - get_bucket_mouth_global(), hoist_mode)
 
 
 func bucket_distance_to(target: Vector3) -> float:
@@ -578,6 +587,8 @@ func is_bucket_at_target(tolerance: float = 0.04) -> bool:
 
 
 func step(delta: float, command: BulkCraneCommand = null) -> void:
+	if is_auto_active():
+		return
 	if command == null:
 		command = BulkCraneCommand.new()
 	if not is_zero_approx(command.slew_rate):
@@ -588,8 +599,9 @@ func step(delta: float, command: BulkCraneCommand = null) -> void:
 		hoist_length_m = hoist_length_m + command.hoist_rate * hoist_speed_m * delta
 	if command.bucket_target >= 0.0:
 		_bucket_open_target = clampf(command.bucket_target, 0.0, 1.0)
+	var previous_open := bucket_open
 	step_jaws(delta)
-	_tick_bulk_material(delta)
+	_tick_bulk_material(previous_open)
 
 
 func step_jaws(delta: float) -> void:
@@ -599,17 +611,17 @@ func step_jaws(delta: float) -> void:
 		bucket_open = move_toward(bucket_open, _bucket_open_target, bucket_speed * delta)
 
 
-func grab_from_mound(mound: OreMound) -> void:
-	if mound == null:
+func grab_from_mound(mound: OreMound, max_tonnes_t: float = INF) -> void:
+	if not is_instance_valid(mound) or not bucket_lot.is_empty():
 		return
 	var capacity_t := bucket_capacity_tonnes_t()
-	bucket_lot = BulkCargoLot.create(mound.commodity_id, capacity_t)
-	mound.take(capacity_t)
+	var taken := mound.take(minf(capacity_t, max_tonnes_t))
+	bucket_lot = BulkCargoLot.create(mound.commodity_id, taken)
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
 
 
 func grab_from_hold(hold: BulkHoldComponent) -> void:
-	if hold == null:
+	if not is_instance_valid(hold) or not bucket_lot.is_empty():
 		return
 	var capacity_t := bucket_capacity_tonnes_t()
 	var withdrawn := hold.withdraw_lot(capacity_t)
@@ -621,9 +633,7 @@ func grab_from_hold(hold: BulkHoldComponent) -> void:
 
 func force_release_at(world_pos: Vector3) -> void:
 	if bucket_lot.is_empty():
-		_drop_armed = false
 		return
-	_drop_armed = true
 	var dropped := bucket_lot.duplicate_lot()
 	var drop_parent := get_parent()
 	if drop_parent == null:
@@ -658,12 +668,16 @@ func _pickup_mound() -> OreMound:
 	return best
 
 
-func _tick_bulk_material(_delta: float) -> void:
+func _tick_bulk_material(previous_open: float) -> void:
 	if not simulate_bulk_material:
 		return
-	_try_pickup_from_mound()
-	_try_pickup_from_hold()
-	_try_drop_material()
+	# One scoop per closing stroke, one release per opening stroke. A closed
+	# grab moved through a pile cannot silently refill or replace its payload.
+	if previous_open > PICKUP_CLOSED_THRESHOLD and bucket_open <= PICKUP_CLOSED_THRESHOLD:
+		_try_pickup_from_mound()
+		_try_pickup_from_hold()
+	elif previous_open < DROP_OPEN_THRESHOLD and bucket_open >= DROP_OPEN_THRESHOLD:
+		_try_drop_material()
 
 
 func bucket_capacity_tonnes_t() -> float:
@@ -675,13 +689,7 @@ func get_bucket_lot() -> BulkCargoLot:
 
 
 func _try_pickup_from_mound() -> void:
-	var capacity_t := bucket_capacity_tonnes_t()
-	if bucket_open < PICKUP_OPEN_THRESHOLD:
-		return
-	if (
-		not bucket_lot.is_empty()
-		and bucket_lot.tonnes_t >= capacity_t - BulkCargoLot.TONNES_EPS
-	):
+	if not bucket_lot.is_empty():
 		return
 	var mound := _pickup_mound()
 	if mound == null:
@@ -692,19 +700,11 @@ func _try_pickup_from_mound() -> void:
 		return
 	if absf(mouth.y - pick.y) > PICKUP_HEIGHT_TOLERANCE_BASE_M * bucket_scale:
 		return
-	bucket_lot = BulkCargoLot.create(mound.commodity_id, capacity_t)
-	mound.take(capacity_t)
-	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+	grab_from_mound(mound)
 
 
 func _try_pickup_from_hold() -> void:
-	var capacity_t := bucket_capacity_tonnes_t()
-	if bucket_open < PICKUP_OPEN_THRESHOLD:
-		return
-	if (
-		not bucket_lot.is_empty()
-		and bucket_lot.tonnes_t >= capacity_t - BulkCargoLot.TONNES_EPS
-	):
+	if not bucket_lot.is_empty():
 		return
 	var mouth := get_bucket_mouth_global()
 	var hold := BulkHoldComponent.find_filled_hold_at(mouth)
@@ -715,27 +715,12 @@ func _try_pickup_from_hold() -> void:
 		return
 	if absf(mouth.y - aim.y) > PICKUP_HEIGHT_TOLERANCE_BASE_M * bucket_scale:
 		return
-	var need_t := capacity_t - bucket_lot.tonnes_t
-	var withdrawn := hold.withdraw_lot(need_t)
-	if withdrawn.is_empty():
-		return
-	if bucket_lot.is_empty():
-		bucket_lot = withdrawn.duplicate_lot()
-	else:
-		bucket_lot.tonnes_t += withdrawn.tonnes_t
-	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+	grab_from_hold(hold)
 
 
 func _try_drop_material() -> void:
 	if bucket_lot.is_empty():
-		_drop_armed = false
 		return
-	if bucket_open > DROP_CLOSE_THRESHOLD:
-		_drop_armed = false
-		return
-	if _drop_armed:
-		return
-	_drop_armed = true
 	var dropped := bucket_lot.duplicate_lot()
 	var mouth := get_bucket_mouth_global()
 	var drop_parent := get_parent()

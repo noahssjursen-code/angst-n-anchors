@@ -40,7 +40,7 @@
     "res://resources/models/parts/provision_structure/trolley_rails_4m.glb": "e87a0d78affc1c3cfe3884774556a406e58dd87015f8f448a2700211ab4faf67",
     "res://resources/models/parts/provision_structure/trolley_rails_5m.glb": "698b037d5e1960798aabf5a2c5d045c0bd3dfbd7074ce551c059a5c37166dfab",
     "res://scripts/core/impostor_warmup.gd": "dff400e64ca3edb83466c8d2fbcc063ee9c9aa6b80669addd76b045128a91b89",
-    "res://scripts/port/bulk_crane.gd": "75a5bd054a239fee5a236b28b491c1fdd1ace4c1a867ef4ba2c52b7e0f65b7f0",
+    "res://scripts/port/bulk_crane.gd": "72e99ed52fe8a1bb054d10323884ad88353ff745a9ad550b0b7f61596767f03e",
     "res://scripts/port/provision_crane.gd": "446697c3b6aa69c28381674a9f1c96e1a6aebf6f8b955bd934c4c2304307dc2f"
   }
 }

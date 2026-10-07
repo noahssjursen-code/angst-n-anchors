@@ -4,6 +4,7 @@ extends QuayEquipmentJob
 ## QuayEquipmentJob adapter for BulkCrane auto load/unload.
 
 var _crane: BulkCrane
+var last_failure := ""
 
 
 func bind_crane(crane: BulkCrane) -> void:
@@ -14,6 +15,33 @@ func bind_crane(crane: BulkCrane) -> void:
 			op.job_finished.connect(_on_auto_job_finished)
 		if not op.job_stopped.is_connected(_on_auto_job_stopped):
 			op.job_stopped.connect(_on_auto_job_stopped)
+		if not op.job_failed.is_connected(_on_auto_job_failed):
+			op.job_failed.connect(_on_auto_job_failed)
+		if not op.phase_changed.is_connected(_on_phase_changed):
+			op.phase_changed.connect(_on_phase_changed)
+
+
+func _on_phase_changed(_phase: int) -> void:
+	status_changed.emit()
+
+
+func progress_label() -> String:
+	var op := _crane.get_auto_operator() if is_instance_valid(_crane) else null
+	return op.get_progress_label() if op != null else "idle"
+
+
+func _on_auto_job_failed(reason: String) -> void:
+	last_failure = reason
+	notify_job_stopped()
+	status_changed.emit()
+
+
+func start_job(ship: BoatBody, mode: String, commodity_id: String = "", context: Dictionary = {}) -> bool:
+	# Repeated panel clicks cannot replace a running job's authority context.
+	if is_job_active():
+		return false
+	last_failure = ""
+	return super.start_job(ship, mode, commodity_id, context)
 
 
 func _on_auto_job_finished(_operation: Variant = null, _cycles: int = 0) -> void:
@@ -83,6 +111,8 @@ func _has_loadable_hold(ship: BoatBody) -> bool:
 
 
 func _has_unloadable_hold(ship: BoatBody) -> bool:
+	if not _crane.get_bucket_lot().is_empty():
+		return true # Resume discharging a stopped final scoop from an empty hold.
 	for hold in ship.get_bulk_holds():
 		if hold.cargo_accessible and not hold.state.is_empty():
 			return true
@@ -90,6 +120,8 @@ func _has_unloadable_hold(ship: BoatBody) -> bool:
 
 
 func _default_load_commodity(ship: BoatBody) -> String:
+	if not _crane.get_bucket_lot().is_empty():
+		return _crane.get_bucket_lot().commodity_id
 	for hold in ship.get_bulk_holds():
 		if not hold.state.is_empty():
 			return hold.state.commodity_id
@@ -107,6 +139,8 @@ func _nearest_mound(commodity_id: String) -> OreMound:
 
 
 func serve_hint(ship: BoatBody, mode: String) -> String:
+	if not last_failure.is_empty():
+		return last_failure
 	if _crane == null or not is_instance_valid(_crane):
 		return "No crane on this tool"
 	if ship == null or not is_instance_valid(ship):

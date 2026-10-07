@@ -24,10 +24,6 @@ const ELLIPSE_SPEED := 0.18 ## fraction of arc per second
 const NEAR_M := 4.0
 const WORK_S := 0.55
 const TIMEOUT_S := 16.0
-## Lower phases used to wait TIMEOUT_S/2 (8s) when 3D near-miss failed on deep holds.
-const LOWER_TIMEOUT_S := 5.0
-const LOWER_VERT_READY_M := 3.2
-const LOWER_VERT_SOFT_M := 5.5
 const DUMP_OPEN_FRAC := 0.5
 const ELLIPSE_GIZMO_SEGS := 24
 const AIM_SMOOTH := 4.0 ## higher = snappier smoothed aim
@@ -36,6 +32,7 @@ signal job_started(operation: Operation, commodity_id: String)
 signal cycle_completed(operation: Operation, cycle_index: int)
 signal job_finished(operation: Operation, cycles_completed: int)
 signal job_stopped()
+signal job_failed(reason: String)
 signal phase_changed(phase: Phase)
 
 @export var max_cycles := 0
@@ -115,7 +112,22 @@ func get_status_line() -> String:
 	]
 
 
+func get_progress_label() -> String:
+	if not _active:
+		return "idle"
+	return "%s · %s · grab %d" % [
+		"Loading" if operation == Operation.LOAD else "Unloading", _phase_label(), _cycles + 1,
+	]
+
+
 func stop() -> void:
+	var was_active := _active
+	_clear_operation()
+	if was_active:
+		job_stopped.emit()
+
+
+func _clear_operation() -> void:
 	_active = false
 	operation = Operation.NONE
 	_ship = null
@@ -125,7 +137,6 @@ func stop() -> void:
 	_t = 0.0
 	_set_phase(Phase.IDLE)
 	_update_gizmos()
-	job_stopped.emit()
 
 
 func start_load(
@@ -150,6 +161,12 @@ func _process(delta: float) -> void:
 	if not _active or _crane == null:
 		_update_gizmos()
 		return
+	if not is_instance_valid(_ship) or not is_instance_valid(_hold) or not is_instance_valid(_mound):
+		_fail("Crane target is no longer available.")
+		return
+	if not _hold.cargo_accessible:
+		_fail("The cargo hatch is closed. Open it before restarting.")
+		return
 	_timer += delta
 	_tick(delta)
 	_update_gizmos()
@@ -162,11 +179,14 @@ func _begin(
 		mound: OreMound,
 		hold: BulkHoldComponent,
 ) -> bool:
-	if _crane == null or ship == null or _crane.get_bucket() == null:
+	if _active or _crane == null or ship == null or _crane.get_bucket() == null:
 		return false
-	stop()
+	_clear_operation()
 	_ship = ship
 	_commodity_id = commodity_id.strip_edges()
+	var payload := _crane.get_bucket_lot()
+	if _commodity_id.is_empty() and not payload.is_empty():
+		_commodity_id = payload.commodity_id
 	_mound = mound
 	_hold = hold
 	_cycles = 0
@@ -182,7 +202,14 @@ func _begin(
 	else:
 		if _hold == null:
 			_hold = _best_unload_hold(_ship, _commodity_id)
+		# The last scoop may already have emptied its hold when Stop was pressed.
+		if _hold == null and not payload.is_empty():
+			for candidate in _ship.get_bulk_holds():
+				if candidate.cargo_accessible and _crane.can_reach_point(candidate.get_crane_aim_global()):
+					_hold = candidate
+					break
 		if _hold == null:
+			_clear_operation()
 			return false
 		if _commodity_id.is_empty():
 			_commodity_id = _hold.state.commodity_id
@@ -190,13 +217,22 @@ func _begin(
 			_mound = _crane.find_nearest_ore_mound(_commodity_id)
 
 	if _hold == null or _mound == null or not _hold.cargo_accessible:
+		_clear_operation()
+		return false
+	if not _crane.can_reach_point(_mound.pickup_global()) or not _crane.can_reach_point(_hold_aim()):
+		_clear_operation()
+		return false
+	if not payload.is_empty() and payload.commodity_id != _commodity_id:
+		_clear_operation()
 		return false
 
 	_clear_hold_gizmos()
 	_t = 0.0
 	_aim_initialized = false
 	_active = true
-	_set_phase(Phase.TO_A)
+	# A stopped loaded grab retains its lot; restart carries it to the discharge
+	# instead of collecting a second payload and losing inventory.
+	_set_phase(Phase.TO_A if payload.is_empty() else Phase.ARC_TO_B)
 	job_started.emit(operation, _commodity_id)
 	return true
 
@@ -266,7 +302,7 @@ func _tick(delta: float) -> void:
 			_t = move_toward(_t, 0.0, ellipse_speed * delta * 1.4)
 			var aim := _update_smooth_aim(_guide_point(_t), delta)
 			_crane.set_bucket_jaws_target(1.0)
-			_crane.ik_bucket_to(delta, aim, "raise")
+			_crane.ik_mouth_to(delta, aim, "raise")
 			_crane.step_jaws(delta)
 			if (
 				(_t <= 0.02 and _crane.is_bucket_over(point_a(), NEAR_M))
@@ -278,7 +314,7 @@ func _tick(delta: float) -> void:
 		Phase.LOWER_A:
 			## Lower open bucket onto the stockpile / hold.
 			_crane.set_bucket_jaws_target(1.0)
-			_crane.ik_bucket_to(delta, point_a(), "track")
+			_crane.ik_mouth_to(delta, point_a(), "track")
 			_crane.step_jaws(delta)
 			if _lower_ready(point_a()):
 				_set_phase(Phase.GRAB_A)
@@ -286,11 +322,11 @@ func _tick(delta: float) -> void:
 		Phase.GRAB_A:
 			## Close jaws, then take cargo once shut.
 			_crane.set_bucket_jaws_target(0.0)
-			_crane.ik_bucket_to(delta, point_a(), "hold")
+			_crane.ik_mouth_to(delta, point_a(), "track")
 			_crane.step_jaws(delta)
 			if not _did_act and (_crane.is_bucket_at_target(0.08) or _timer >= WORK_S + 1.0):
 				if operation == Operation.LOAD:
-					_crane.grab_from_mound(_mound)
+					_crane.grab_from_mound(_mound, _hold.state.available_tonnes_t())
 				else:
 					_crane.grab_from_hold(_hold)
 				_did_act = true
@@ -302,9 +338,9 @@ func _tick(delta: float) -> void:
 		Phase.RAISE_A:
 			## Lift loaded grab — keep closed.
 			_crane.set_bucket_jaws_target(0.0)
-			_crane.ik_bucket_to(delta, _guide_point(0.0), "raise")
+			_crane.ik_mouth_to(delta, _guide_point(0.0), "raise")
 			_crane.step_jaws(delta)
-			if _timer >= WORK_S or _crane.is_bucket_over(point_a(), NEAR_M * 1.5):
+			if _crane.hoist_length_m <= _crane.hoist_min_m + 1.35:
 				_set_phase(Phase.ARC_TO_B)
 
 		Phase.ARC_TO_B:
@@ -312,7 +348,7 @@ func _tick(delta: float) -> void:
 			_t = move_toward(_t, 1.0, ellipse_speed * delta)
 			var aim_b := _update_smooth_aim(_guide_point(_t), delta)
 			_crane.set_bucket_jaws_target(0.0)
-			_crane.ik_bucket_to(delta, aim_b, "raise")
+			_crane.ik_mouth_to(delta, aim_b, "raise")
 			_crane.step_jaws(delta)
 			if _t >= 0.995 and (
 				_crane.is_bucket_over(point_b(), NEAR_M) or _timer >= TIMEOUT_S
@@ -323,7 +359,7 @@ func _tick(delta: float) -> void:
 		Phase.LOWER_B:
 			## Lower closed bucket over the drop target.
 			_crane.set_bucket_jaws_target(0.0)
-			_crane.ik_bucket_to(delta, point_b(), "track")
+			_crane.ik_mouth_to(delta, point_b(), "track")
 			_crane.step_jaws(delta)
 			if _lower_ready(point_b()):
 				_set_phase(Phase.DUMP_B)
@@ -331,15 +367,14 @@ func _tick(delta: float) -> void:
 		Phase.DUMP_B:
 			## Open jaws and release — dump as soon as shells are half open.
 			_crane.set_bucket_jaws_target(1.0)
-			_crane.ik_bucket_to(delta, point_b(), "hold")
+			_crane.ik_mouth_to(delta, point_b(), "track")
 			_crane.step_jaws(delta)
 			if not _did_act and (
 				_crane.bucket_open >= DUMP_OPEN_FRAC
 				or _crane.is_bucket_at_target(0.08)
 				or _timer >= WORK_S + 0.35
 			):
-				var release := _crane.get_bucket_mouth_global() if operation == Operation.LOAD and _hold is ImportedBulkHold else point_b()
-				_crane.force_release_at(release)
+				_crane.force_release_at(_crane.get_bucket_mouth_global())
 				_did_act = true
 			if _did_act and (_crane.get_bucket_lot().is_empty() or _timer >= WORK_S + 0.6):
 				_set_phase(Phase.RAISE_B)
@@ -347,9 +382,9 @@ func _tick(delta: float) -> void:
 		Phase.RAISE_B:
 			## Lift empty grab — keep open for next scoop.
 			_crane.set_bucket_jaws_target(1.0)
-			_crane.ik_bucket_to(delta, _guide_point(1.0), "raise")
+			_crane.ik_mouth_to(delta, _guide_point(1.0), "raise")
 			_crane.step_jaws(delta)
-			if _timer >= WORK_S:
+			if _crane.hoist_length_m <= _crane.hoist_min_m + 1.35:
 				_set_phase(Phase.ARC_TO_A)
 
 		Phase.ARC_TO_A:
@@ -357,7 +392,7 @@ func _tick(delta: float) -> void:
 			_t = move_toward(_t, 0.0, ellipse_speed * delta)
 			var aim_a := _update_smooth_aim(_guide_point(_t), delta)
 			_crane.set_bucket_jaws_target(1.0)
-			_crane.ik_bucket_to(delta, aim_a, "raise")
+			_crane.ik_mouth_to(delta, aim_a, "raise")
 			_crane.step_jaws(delta)
 			if _t <= 0.005 and (
 				_crane.is_bucket_over(point_a(), NEAR_M * 1.2) or _timer >= TIMEOUT_S
@@ -381,38 +416,27 @@ func _tick(delta: float) -> void:
 ## is already true at travel height when ARC_TO_B finishes.
 func _lower_ready(target: Vector3) -> bool:
 	if _crane == null:
-		return _timer >= LOWER_TIMEOUT_S
-	if _hold is ImportedBulkHold and ((_phase == Phase.LOWER_B and operation == Operation.LOAD) or (_phase == Phase.LOWER_A and operation == Operation.UNLOAD)):
-		# Never complete a compact imported hold operation by timing out and spawning
-		# the payload at a target point the actual grab has not reached.
-		if _hold.cargo_accessible and _hold.contains_grab_mouth(_crane.get_bucket_mouth_global()): return true
-		if _timer > TIMEOUT_S: stop()
 		return false
-	if _crane.is_bucket_near(target, NEAR_M):
+	var mouth := _crane.get_bucket_mouth_global()
+	var at_hold := (_phase == Phase.LOWER_B and operation == Operation.LOAD) or (_phase == Phase.LOWER_A and operation == Operation.UNLOAD)
+	var inside := not at_hold or not _hold is ImportedBulkHold or (_hold as ImportedBulkHold).contains_grab_mouth(mouth)
+	if inside and mouth.distance_to(target) <= 0.6:
 		return true
-	var bucket := _crane.get_bucket_global()
-	var horiz := Vector2(target.x - bucket.x, target.z - bucket.z).length()
-	var above := bucket.y - target.y
-	if horiz <= NEAR_M * 1.35 and above <= LOWER_VERT_READY_M and above >= -2.5:
-		return true
-	## Soft: near-low after a real lower attempt.
-	if horiz <= NEAR_M * 1.5 and above <= LOWER_VERT_SOFT_M and _timer >= 1.4:
-		return true
-	## As low as the wire allows while still over the hatch.
-	if (
-		horiz <= NEAR_M * 1.5
-		and _timer >= 1.0
-		and _crane.hoist_length_m >= _crane.get_effective_hoist_max_m() - 0.35
-	):
-		return true
-	return _timer >= LOWER_TIMEOUT_S
+	if _timer >= TIMEOUT_S:
+		_fail("Grab cannot reach the cargo target. Reposition the ship or use a nearer crane.")
+	return false
 
 
 func _finish() -> void:
 	var op := operation
 	var n := _cycles
-	stop()
+	_clear_operation()
 	job_finished.emit(op, n)
+
+
+func _fail(reason: String) -> void:
+	_clear_operation()
+	job_failed.emit(reason)
 
 
 func _can_continue() -> bool:

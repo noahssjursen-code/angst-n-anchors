@@ -14,6 +14,7 @@ const PANEL_SCRIPT := preload("res://scripts/port/crane_operator_panel.gd")
 var _harbour: HarbourController
 var _panel: Control
 var _panel_layer: CanvasLayer
+var _bound_equipment: QuayEquipmentJob
 
 
 func configure(harbour: HarbourController, berth: String, equipment: String = "") -> void:
@@ -79,9 +80,32 @@ func _bind_harbour_signals() -> void:
 		hc.ship_plugged.connect(_on_harbour_changed)
 	if not hc.ship_unplugged.is_connected(_on_harbour_changed):
 		hc.ship_unplugged.connect(_on_harbour_changed)
+	_bind_equipment_signals(_this_equipment(hc))
+
+
+func _bind_equipment_signals(equip: QuayEquipmentJob) -> void:
+	if equip == _bound_equipment:
+		return
+	if is_instance_valid(_bound_equipment):
+		_bound_equipment.job_started.disconnect(_on_job_changed)
+		_bound_equipment.job_completed.disconnect(_on_job_changed)
+		_bound_equipment.job_stopped.disconnect(_on_job_changed)
+		_bound_equipment.status_changed.disconnect(_on_job_changed)
+	_bound_equipment = equip
+	if equip != null:
+		equip.job_started.connect(_on_job_changed)
+		equip.job_completed.connect(_on_job_changed)
+		equip.job_stopped.connect(_on_job_changed)
+		equip.status_changed.connect(_on_job_changed)
+
+
+func _on_job_changed(_context: Variant = null, _report: Variant = null) -> void:
+	if _panel != null and _panel.visible:
+		_refresh_panel()
 
 
 func _unbind_harbour_signals() -> void:
+	_bind_equipment_signals(null)
 	if _harbour == null or not is_instance_valid(_harbour):
 		return
 	if _harbour.ship_plugged.is_connected(_on_harbour_changed):
@@ -143,8 +167,11 @@ func _refresh_panel() -> void:
 	if hc != null:
 		ship = hc.moored_ship(berth_id)
 		equip = _this_equipment(hc)
+		_bind_equipment_signals(equip)
 		if equip != null and equip.is_job_active():
 			job_line = "%s · %s" % [equip.job_mode(), HarbourController.ship_id_of(equip.served_ship())]
+			if equip.has_method("progress_label"):
+				job_line = str(equip.call("progress_label"))
 		if ship == null:
 			hint = "No ship plugged at this berth"
 		elif equip == null:
@@ -153,7 +180,11 @@ func _refresh_panel() -> void:
 			can_load = equip.can_serve(ship, QuayEquipmentJob.MODE_LOAD)
 			can_unload = equip.can_serve(ship, QuayEquipmentJob.MODE_UNLOAD)
 			if equip.is_job_active():
+				can_load = false
+				can_unload = false
 				hint = ""
+			elif equip is BulkCraneEquipmentJob and not (equip as BulkCraneEquipmentJob).last_failure.is_empty():
+				hint = (equip as BulkCraneEquipmentJob).last_failure
 			elif not can_load and not can_unload:
 				if equip.has_method("serve_hint"):
 					hint = str(equip.call("serve_hint", ship, QuayEquipmentJob.MODE_LOAD))
