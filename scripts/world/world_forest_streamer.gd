@@ -85,6 +85,9 @@ func get_debug_stats() -> Dictionary:
 		instances += int((value as Dictionary).get("instances", 0))
 	return {
 		"world_canopy_pending": _distant.pending() if is_instance_valid(_distant) else 0,
+		"world_canopy_cache_hit": _distant.cache_hit if is_instance_valid(_distant) else false,
+		"world_canopy_prepare_ms": _distant.prepare_ms if is_instance_valid(_distant) else 0,
+		"world_canopy_ready_ms": _distant.ready_ms if is_instance_valid(_distant) else 0,
 		"world_canopy_trees": _distant.trees if is_instance_valid(_distant) else 0,
 		"world_canopy_peak_ms": _distant.peak_ms if is_instance_valid(_distant) else 0,
 		"loaded": _chunks.size(),

@@ -69,9 +69,11 @@ func review() -> void:
 	if OS.get_cmdline_user_args().has("--sea-level"): views = [2100.0,2500.0,3500.0]
 	for height in views:
 		camera.position=target+(Vector3(20,height,30) if height == 3 else Vector3(120,height,180))
-		if OS.get_cmdline_user_args().has("--far-forest"):
+		if OS.get_cmdline_user_args().has("--far-forest") or OS.get_cmdline_user_args().has("--sea-level"):
 			camera.position = target + Vector3(height,120,height*.25)
-		if OS.get_cmdline_user_args().has("--sea-level"): camera.position.y = 8.0
+		if OS.get_cmdline_user_args().has("--sea-level"):
+			camera.position.y = 8.0
+			assert(layout.sample_signed_distance(Vector2(camera.position.x,camera.position.z))>0,"Offshore review camera must be over water")
 		camera.look_at(target+Vector3(0,5,0))
 		await get_tree().create_timer(8).timeout
 		var terrain := world.get_node("WorldTerrainStreamer")

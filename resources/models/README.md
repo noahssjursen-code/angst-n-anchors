@@ -1589,6 +1589,16 @@ Cancellation is mutex-protected and joined at exit. Initial generation happens
 in the background; completion is exposed in world_canopy_pending telemetry.
 The test40km world has1,749,103 distant crowns, about80MiB of raw GPU transforms;
 not free memory. This is a whole-world persistent layer, not additional detailed
-models/collisions. Consider a versioned visual cache for faster repeated startup.
+models/collisions. DistantForestCache stores the latest world's four-float tree
+placements (XYZ + scale) in the OS cache directory, separately for game/playtest.
+The cache is disposable: never put it in captain saves or version control.
+Its key includes layout checksum/seed/size, coverage bytes, copied clear zones,
+spacing/sink and a placement version. Bump DistantForestCache.VERSION when
+species/placement logic changes. Checksum corruption, size/schema failure or
+write failure falls back to regeneration. Atomic replacement keeps one latest
+world per mode, capped at64MiB; no cache deletion is needed to join another world.
+CPU placement data uses16 bytes/tree; GPU transforms still use48 bytes/tree.
+world_canopy_cache_hit/prepare_ms/ready_ms distinguish preparation from full
+main-thread upload completion. A boot-finished event is not canopy completion.
 Review coastal_distance_review with --forest-only --far-forest --whole-forest;
 add --sea-level for offshore views. All runs require --shipyard-playtest.

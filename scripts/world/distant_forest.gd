@@ -5,6 +5,13 @@ extends Node3D
 ## scene nodes, GPU resources or the main-thread ForestField zone cache.
 ## Main-thread uploads combine 4x4 coverage cells per species for culling.
 const STEP := 9.0
+const CACHE = preload("res://scripts/world/distant_forest_cache.gd")
+var cache_path := ""
+var cache_key := ""
+var cache_hit := false
+var prepare_ms := 0
+var started_ms := 0
+var ready_ms := 0
 var layout: Object
 var jobs: Array[Vector2i] = []
 var coverage: Image
@@ -23,12 +30,22 @@ func _exit_tree() -> void:
 	cancel_lock.lock();cancelled=true;cancel_lock.unlock()
 	if worker != null: worker.wait_to_finish();worker=null
 func generate() -> void:
+	var started := Time.get_ticks_msec()
+	batches = CACHE.read(cache_path, cache_key)
+	cache_hit = not batches.is_empty()
+	if cache_hit:
+		jobs.clear()
+		prepare_ms = Time.get_ticks_msec() - started
+		return
 	for cell in jobs:
 		cancel_lock.lock();var stop:=cancelled;cancel_lock.unlock()
-		if stop: break
+		if stop: return
 		build_cell(cell)
 	jobs.clear()
+	CACHE.write(cache_path, cache_key, batches)
+	prepare_ms = Time.get_ticks_msec() - started
 func configure(source: Object) -> void:
+	started_ms=Time.get_ticks_msec()
 	layout=source
 	coverage=ForestField.coverage_texture().get_image()
 	cell_m=layout.world_size_m/coverage.get_width()
@@ -44,6 +61,8 @@ func configure(source: Object) -> void:
 	var center:=Vector2.ZERO if camera==null else Vector2(camera.global_position.x,camera.global_position.z)
 	jobs.sort_custom(func(a:Vector2i,b:Vector2i): return point(a).distance_squared_to(center)<point(b).distance_squared_to(center))
 	zones=ForestField._flatten_zones.duplicate(true)
+	cache_path=CACHE.default_path()
+	cache_key=CACHE.identity(layout.layout_checksum,layout.seed,layout.world_size_m,coverage.get_data(),zones,STEP,WorldTerrainStreamer.TERRAIN_SINK_M)
 	worker=Thread.new();worker.start(generate)
 func point(cell: Vector2i) -> Vector2:
 	return Vector2(cell)*cell_m-Vector2.ONE*layout.half_extent_m
@@ -66,9 +85,10 @@ func _process(_delta:float) -> void:
 	while not uploads.is_empty() and Time.get_ticks_usec()-start<2000:
 		upload_batch(uploads.pop_front())
 	peak_ms=maxf(peak_ms,(Time.get_ticks_usec()-start)/1000.0)
+	if uploads.is_empty(): ready_ms=Time.get_ticks_msec()-started_ms
 func build_cell(cell:Vector2i) -> void:
 	var key := Vector2i(cell.x/4,cell.y/4)
-	if not batches.has(key): batches[key]=[[],[],[],[]]
+	if not batches.has(key): batches[key]=[PackedFloat32Array(),PackedFloat32Array(),PackedFloat32Array(),PackedFloat32Array()]
 	var groups: Array = batches[key]
 	var origin:=point(cell)
 	var local_zones: Array = []
@@ -88,14 +108,19 @@ func build_cell(cell:Vector2i) -> void:
 			if height<1.2: continue
 			var species:=WorldForestStreamer.coastal_species(layout,p)
 			var scale:=lerpf(.8,1.35,WorldForestStreamer._hash01(x,y,cell.y,cell.x))
-			groups[species].append(Transform3D(Basis.IDENTITY.scaled(Vector3(scale*1.8,scale,scale*1.8)),Vector3(p.x,height,p.y)))
+			# Placement has no rotation: keep four floats instead of Variant transforms.
+			groups[species].append_array(PackedFloat32Array([p.x,height,p.y,scale]))
 func upload_batch(key:Vector2i) -> void:
 	var groups: Array = batches[key]
 	for species in 4:
 		if groups[species].is_empty(): continue
 		var mm:=MultiMesh.new();mm.transform_format=MultiMesh.TRANSFORM_3D
-		mm.mesh=meshes[species];mm.instance_count=groups[species].size()
-		for i in mm.instance_count: mm.set_instance_transform(i,groups[species][i])
+		mm.mesh=meshes[species];mm.instance_count=groups[species].size()/4
+		var data: PackedFloat32Array = groups[species]
+		for i in mm.instance_count:
+			var base:=i*4
+			var scale:=data[base+3]
+			mm.set_instance_transform(i,Transform3D(Basis.IDENTITY.scaled(Vector3(scale*1.8,scale,scale*1.8)),Vector3(data[base],data[base+1],data[base+2])))
 		var node:=MultiMeshInstance3D.new();node.multimesh=mm
 		node.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(node)
