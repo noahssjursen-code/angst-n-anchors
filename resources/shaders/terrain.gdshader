@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode cull_back, diffuse_burley, specular_disabled;
+render_mode cull_back, diffuse_burley;
 
 // Mainland surface. Detail comes from runtime-baked maps (TerrainSurfaceMaps),
 // blended by height, slope, and coastal weight (COLOR.a).
@@ -48,6 +48,10 @@ void fragment() {
 	vec3 grass_s = _triplanar(grass_map, world_pos, n, grass_scale);
 	vec3 lichen_s = _triplanar(lichen_map, world_pos, n, lichen_scale);
 	vec3 macro_s = texture(macro_map, world_pos.xz * macro_scale).rgb;
+	vec3 rock_micro = _triplanar(rock_map, world_pos, n, 0.28);
+	vec3 organic_micro = texture(grass_map, world_pos.xz * 0.45).rgb;
+	float view_distance = length(VERTEX);
+	float relief_visibility = 1.0 - smoothstep(35.0, 130.0, view_distance);
 
 	// Norwegian coastal palette: blue-grey gneiss, dark wet stone, muted heath.
 	// Values stay deliberately low; daylight and fog provide the highlights.
@@ -60,6 +64,7 @@ void fragment() {
 	rock = mix(rock, rock * 0.58, rock_s.g * 0.50); // dark fissures
 	float strata = sin(h * 0.052 + world_pos.x * 0.0022 - world_pos.z * 0.0014 + macro_s.b * 5.0);
 	rock *= mix(0.88, 1.07, strata * 0.5 + 0.5);
+	rock *= mix(0.82, 1.16, rock_micro.r);
 
 	vec3 lichen = mix(vec3(0.30, 0.29, 0.16), vec3(0.43, 0.39, 0.20), lichen_s.b);
 	lichen = mix(lichen, rock, 1.0 - smoothstep(0.35, 0.75, lichen_s.r));
@@ -112,7 +117,11 @@ void fragment() {
 	forest_w *= (1.0 - cliff * 0.85) * (1.0 - coast_w * 0.7)
 		* (1.0 - snow_w);
 	vec3 canopy = vec3(0.022, 0.048, 0.026);
-	albedo = mix(albedo, canopy, clamp(forest_w * 0.88, 0.0, 0.86));
+	float far_canopy = smoothstep(600.0, 1300.0, view_distance);
+	vec3 litter = mix(vec3(0.045,0.032,0.019), vec3(0.115,0.086,0.042), organic_micro.g);
+	litter = mix(litter, moss * mix(0.75,1.15,organic_micro.r), smoothstep(0.4,0.7,moss_s.r) * moisture);
+	albedo = mix(albedo, litter, clamp(forest_w * soil * (1.0-far_canopy),0.0,0.88));
+	albedo = mix(albedo, canopy, clamp(forest_w * 0.88 * far_canopy, 0.0, 0.86));
 
 	albedo = mix(albedo, snow, clamp(snow_w, 0.0, 1.0));
 
@@ -121,6 +130,18 @@ void fragment() {
 	albedo = clamp(albedo, vec3(0.015), vec3(0.78));
 
 	ALBEDO = albedo;
-	ROUGHNESS = mix(0.96, 0.72, heath_w * 0.22 + snow_w * 0.5 + wet_edge * 0.35);
+	ROUGHNESS = mix(0.94, 0.36, wet_edge) + (rock_micro.b - 0.5) * 0.08;
+	SPECULAR = 0.35;
 	ALBEDO *= mix(1.0, 0.68, max(shore_face, cliff) * 0.7);
+	// Surface-gradient bump follows the existing mesh normal on every slope,
+	// including cliffs; it doesn't alter geometry, shoreline or collision.
+	float relief = mix(rock_micro.r * 0.004, organic_micro.r * 0.002, soil);
+	vec3 dpdx = dFdx(world_pos);
+	vec3 dpdy = dFdy(world_pos);
+	vec3 r1 = cross(dpdy,n);
+	vec3 r2 = cross(n,dpdx);
+	float det = dot(dpdx,r1);
+	vec3 gradient = sign(det) * (dFdx(relief)*r1 + dFdy(relief)*r2);
+	vec3 bumped = normalize(max(abs(det),0.000001)*n - gradient*relief_visibility);
+	NORMAL = normalize((VIEW_MATRIX*vec4(bumped,0.0)).xyz);
 }

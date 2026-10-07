@@ -1,26 +1,36 @@
 extends SceneTree
-
 const MAPS := preload("res://scripts/world/terrain_surface_maps.gd")
 const SHADER := preload("res://resources/shaders/terrain.gdshader")
 
-
 func _initialize() -> void:
-	var rock: ImageTexture = MAPS.bake_rock_map(42)
-	var moss: ImageTexture = MAPS.bake_moss_map(42)
-	var grass: ImageTexture = MAPS.bake_grass_map(42)
-	var lichen: ImageTexture = MAPS.bake_lichen_map(42)
-	var macro: ImageTexture = MAPS.bake_macro_map(42)
-	assert(rock.get_width() == MAPS.MAP_SIZE)
-	assert(moss.get_height() == MAPS.MAP_SIZE)
-	assert(grass.get_image() != null)
-	assert(lichen.get_image().get_pixel(10, 10).a > 0.0 or true)
-	var mat := ShaderMaterial.new()
-	mat.shader = SHADER
-	MAPS.bind_to_material(mat, 90210)
-	assert(mat.get_shader_parameter("rock_map") != null)
-	assert(mat.get_shader_parameter("grass_map") != null)
-	assert(mat.get_shader_parameter("macro_map") != null)
-	var again: ImageTexture = MAPS.bake_rock_map(42)
-	assert(rock.get_image().get_pixel(64, 64) == again.get_image().get_pixel(64, 64))
-	print("TerrainSurfaceMaps tests: bake + bind ok")
+	var start := Time.get_ticks_msec()
+	var maps := [MAPS.bake_rock_map(42), MAPS.bake_moss_map(42), MAPS.bake_grass_map(42), MAPS.bake_lichen_map(42), MAPS.bake_macro_map(42)]
+	for texture in maps:
+		var img: Image = texture.get_image()
+		assert(img.get_width() == MAPS.MAP_SIZE and img.has_mipmaps())
+		# Across a periodic boundary, adjacent texels must be as continuous as
+		# adjacent interior texels. Do not demand duplicate edge texels.
+		for horizontal in [true, false]:
+			var seam := 0.0
+			var interior := 0.0
+			for i in MAPS.MAP_SIZE:
+				seam += difference(img.get_pixel(0,i) if horizontal else img.get_pixel(i,0), img.get_pixel(255,i) if horizontal else img.get_pixel(i,255))
+				for j in [1,2,253,254]:
+					interior += difference(img.get_pixel(j,i) if horizontal else img.get_pixel(i,j),img.get_pixel(j-1,i) if horizontal else img.get_pixel(i,j-1)) / 4.0
+			assert(seam < interior * 1.8 + .02, "Texture seam exceeds local gradient")
+	assert(maps[0].get_image().get_data() == MAPS.bake_rock_map(42).get_image().get_data())
+	var first := ShaderMaterial.new(); first.shader = SHADER
+	var second := ShaderMaterial.new(); second.shader = SHADER
+	MAPS.bind_to_material(first,42); MAPS.bind_to_material(second,42)
+	for name in ["rock_map","moss_map","grass_map","lichen_map","macro_map"]:
+		assert(first.get_shader_parameter(name) == second.get_shader_parameter(name), "Repeated seed rebaked maps")
+	var original: ImageTexture = first.get_shader_parameter("rock_map")
+	MAPS.bind_to_material(second,43)
+	assert(original != second.get_shader_parameter("rock_map"))
+	assert(original.get_image().get_data() != second.get_shader_parameter("rock_map").get_image().get_data())
+	assert(first.get_shader_parameter("rock_map") == original, "New seed changed existing world material")
+	print("TerrainSurfaceMaps PASS: periodic edges, mipmaps, deterministic data, shared cache and seed isolation; ms=",Time.get_ticks_msec()-start)
 	quit()
+
+func difference(a: Color,b: Color) -> float:
+	return absf(a.r-b.r)+absf(a.g-b.g)+absf(a.b-b.b)

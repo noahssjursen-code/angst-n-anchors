@@ -6,14 +6,21 @@ extends RefCounted
 ## MP clients stay deterministic for a given bake seed.
 
 const MAP_SIZE := 256
+static var _cached_seed := -2147483648
+static var _cached_maps: Dictionary = {}
 
 
 static func bind_to_material(material: ShaderMaterial, bake_seed: int = 90210) -> void:
-	material.set_shader_parameter("rock_map", bake_rock_map(bake_seed))
-	material.set_shader_parameter("moss_map", bake_moss_map(bake_seed ^ 0x4d4f5353))
-	material.set_shader_parameter("grass_map", bake_grass_map(bake_seed ^ 0x47525353))
-	material.set_shader_parameter("lichen_map", bake_lichen_map(bake_seed ^ 0x4c494348))
-	material.set_shader_parameter("macro_map", bake_macro_map(bake_seed ^ 0x4d414352))
+	if _cached_maps.is_empty() or _cached_seed != bake_seed:
+		_cached_seed = bake_seed
+		_cached_maps = {
+			"rock_map": bake_rock_map(bake_seed),
+			"moss_map": bake_moss_map(bake_seed ^ 0x4d4f5353),
+			"grass_map": bake_grass_map(bake_seed ^ 0x47525353),
+			"lichen_map": bake_lichen_map(bake_seed ^ 0x4c494348),
+			"macro_map": bake_macro_map(bake_seed ^ 0x4d414352),
+		}
+	for name in _cached_maps: material.set_shader_parameter(name, _cached_maps[name])
 
 
 static func bake_rock_map(bake_seed: int) -> ImageTexture:
@@ -81,15 +88,19 @@ static func _bake_rgb(
 ) -> ImageTexture:
 	var image := Image.create(MAP_SIZE, MAP_SIZE, false, Image.FORMAT_RGB8)
 	var denom := float(MAP_SIZE)
+	var circle := PackedVector2Array()
+	for i in MAP_SIZE:
+		var angle := TAU * float(i) / denom
+		circle.append(Vector2(cos(angle), sin(angle)))
 	for y in range(MAP_SIZE):
 		for x in range(MAP_SIZE):
-			var u := float(x) / denom
-			var v := float(y) / denom
-			# Seamless-ish sample: noise is not toroidal, but high-res tiling is
-			# broken up further in-shader by macro UV offsets.
-			var r := clampf(r_noise.get_noise_2d(u * 512.0, v * 512.0) * 0.5 + 0.5, 0.0, 1.0)
-			var g := clampf(g_noise.get_noise_2d(u * 512.0, v * 512.0) * 0.5 + 0.5, 0.0, 1.0)
-			var b := clampf(b_noise.get_noise_2d(u * 512.0, v * 512.0) * 0.5 + 0.5, 0.0, 1.0)
+			# A 3D torus is periodic in both texture axes, including derivatives.
+			# No cross-faded tile borders or world-visible noise discontinuity.
+			var radius := 150.0 + 81.0 * circle[y].x
+			var p := Vector3(radius * circle[x].x, radius * circle[x].y, 81.0 * circle[y].y)
+			var r := clampf(r_noise.get_noise_3d(p.x,p.y,p.z) * 0.5 + 0.5, 0.0, 1.0)
+			var g := clampf(g_noise.get_noise_3d(p.x,p.y,p.z) * 0.5 + 0.5, 0.0, 1.0)
+			var b := clampf(b_noise.get_noise_3d(p.x,p.y,p.z) * 0.5 + 0.5, 0.0, 1.0)
 			if invert_g:
 				g = 1.0 - g
 			image.set_pixel(x, y, Color(r, g, b))
