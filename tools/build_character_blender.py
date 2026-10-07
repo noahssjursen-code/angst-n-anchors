@@ -4,6 +4,8 @@ sys.dont_write_bytecode = True
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mariner_geometry import *
+from mariner_refinement import refine
+refine(objects)
 
 # One rig, shared bind transforms. Weighted continuous body and modular clothing.
 arm_data=bpy.data.armatures.new('MarinerSkeleton'); rig=bpy.data.objects.new('MarinerRig',arm_data)
@@ -133,6 +135,9 @@ for o in objects:
     mod=o.modifiers.new('Mariner skin','ARMATURE'); mod.object=rig
     o.parent=rig
 
+from mariner_refinement import refine_weights
+refine_weights(objects)
+
 # Correct the hand mesh AND its rest bones together. The neutral hand orientation
 # belongs in the bind pose, not in a 90-degree animation twist through a sleeve.
 hand_bind={}
@@ -141,10 +146,15 @@ for side,s in [('L',1),('R',-1)]:
     axis=(wrist-Vector((s*.32,.005,1.15))).normalized()
     hand_bind[side]=(wrist,Quaternion(axis,s*math.pi/2))
 hands=bpy.data.objects['Hands']
+for v in hands.data.shape_keys.key_blocks['Basis'].data:
+    wrist,rotation=hand_bind['L' if v.co.x>=0 else 'R']
+    v.co=wrist+rotation@(v.co-wrist)
+# Morphs must be evaluated in the corrected bind space shared by the cuffs.
+# Rotating an already widened hand around the old wrist displaces it sideways.
 for key in hands.data.shape_keys.key_blocks:
-    for v in key.data:
-        wrist,rotation=hand_bind['L' if v.co.x>=0 else 'R']
-        v.co=wrist+rotation@(v.co-wrist)
+    if key.name=='Basis':continue
+    for i,v in enumerate(key.data):
+        v.co=morph(hands.data.shape_keys.key_blocks['Basis'].data[i].co,key.name)
 for i,v in enumerate(hands.data.vertices):v.co=hands.data.shape_keys.key_blocks['Basis'].data[i].co
 bpy.context.view_layer.objects.active=rig
 bpy.ops.object.mode_set(mode='EDIT')

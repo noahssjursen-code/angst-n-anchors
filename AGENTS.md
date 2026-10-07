@@ -438,6 +438,11 @@ identity creation, appearance serialization and network contracts remain usable.
 Old saved appearance identifiers are inert migration data, not asset definitions.
 Follow resources/models/characters/README.md for the angular reference style,
 shared skeleton, independent morphs, material colours and clothing coverage.
+Noah rejected downloaded character and clothing replacements on 7 October.
+Use the original in-house Blender mariner. All old animation clips were replaced;
+keep arms on fixed-length local rotation tracks, with no keyed wrist/elbow
+translations or limb scale. Do not restore the discarded animation or experimental
+deck-balance modifier. Verify animated poses and maximum morphs in Godot.
 Run tests/blender_character_test.tscn and tests/captain_onboarding_test.tscn to
 verify the imported character and identity flow; use the existing
 --shipyard-playtest isolation flag when running these scenes to avoid live saves.

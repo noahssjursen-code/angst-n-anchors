@@ -20,8 +20,8 @@
     "triangles": 1448
   },
   "Hands": {
-    "vertices": 5224,
-    "triangles": 10368
+    "vertices": 7698,
+    "triangles": 15356
   },
   "Head": {
     "vertices": 1116,
@@ -40,20 +40,20 @@
     "triangles": 776
   },
   "Top_Sweater": {
-    "vertices": 61686,
-    "triangles": 123368
+    "vertices": 17273,
+    "triangles": 34542
   },
   "Top_Trim": {
     "vertices": 196,
     "triangles": 388
   },
   "Trousers_Work": {
-    "vertices": 66476,
-    "triangles": 132952
+    "vertices": 2755,
+    "triangles": 5440
   },
   "Base_Shorts": {
-    "vertices": 22864,
-    "triangles": 45724
+    "vertices": 4117,
+    "triangles": 8230
   },
   "Footwear_Boots": {
     "vertices": 1624,

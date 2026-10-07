@@ -19,8 +19,8 @@ func set_locomotion(speed_m_s: float, delta: float) -> void:
 	else:
 		var run_threshold := 1.9 if _state == &"run" else 2.3
 		_state = &"run" if _speed > run_threshold else &"walk"
-	# Nominal authored speeds: walk 1 m/s, run 3.75 m/s. Preserve game physics.
-	_rate = 1.0 if _state == &"idle" else clampf(_speed / (3.75 if _state == &"run" else 1.0), .35, 2.3)
+	# Ground travel of the new clips: 1 m / 1 s, and (0.6 / .38) m / .7 s.
+	_rate = 1.0 if _state == &"idle" else clampf(_speed / (2.255639 if _state == &"run" else 1.0), .35, 2.3)
 	refresh_rig()
 func set_walk_distance(distance_m: float) -> void:
 	_state = &"walk"

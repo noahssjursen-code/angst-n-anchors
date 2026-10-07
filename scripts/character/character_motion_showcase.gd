@@ -34,7 +34,13 @@ func _ready() -> void:
 		actor.position.x = (i-1)*1.35
 		actor.rotation.y = PI-.48
 		add_child(actor)
-		actor.apply_appearance(CharacterCatalog.appearance_preset("sailor"))
+		var look := CharacterCatalog.appearance_preset("dock_worker" if OS.get_cmdline_user_args().has("--heavy") else "sailor")
+		if OS.get_cmdline_user_args().has("--heavy"):
+			look.build = 1.0
+			look.belly = 1.0
+			look.frame = 1.0
+			look.age = 80
+		actor.apply_appearance(look)
 		actor.play_motion(clips[i])
 		actors.append(actor)
 		var rig_lines := MeshInstance3D.new()
