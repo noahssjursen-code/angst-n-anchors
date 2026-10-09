@@ -2,7 +2,7 @@ class_name DistantForestCache
 extends RefCounted
 ## Disposable presentation data, never a world/captain save. One latest-world
 ## file per mode bounds disk use; failed reads/writes simply regenerate trees.
-const VERSION := 2 # Coastal vegetation follows the same setback as nearby trees.
+const VERSION := 3 # Rebuild roots/density on the continuous coastal backshore.
 const MAX_BYTES := 64 * 1024 * 1024
 
 static func default_path() -> String:

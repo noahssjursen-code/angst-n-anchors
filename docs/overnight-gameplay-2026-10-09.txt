@@ -668,3 +668,30 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
   and https://riksantikvaren.no/eksempelsamling/by-og-stedsutvikling/gjenoppbygging-av-naust-i-stekka/
 - Correction: prior haze entry's01:39 heading was approximate; haze commit was
   already pushed/verified at01:32. No change to the08:00 Oslo overnight cutoff.
+2026-10-10 01:57 Oslo - Continuous backshore, preserved harbour sites
+- Removed the shelf/backshore branch discontinuity that created a continuous
+  8-26m cliff ring. Physical terrain now joins the shelf over180m and fades the
+  residual detail at360m. This intentionally changes local backshore heights;
+  sea level, coastline SDF, underwater shelf and upland mountains are unchanged.
+- Kept the historical height acceptance surface exclusively for seeded port
+  selection. No generation-version change, world reroll or captain migration.
+  Compared uncached expansions for210 ports across3 seeds and30/40km sizes:
+  identities, chart/trade records and entire berth plans match. The first
+  comparison used the expansion cache; caught that weak test and reran uncached.
+-7013 shelf joins: old maximum24.7063m jump across2cm, new maximum0.000407m.
+  WorldTerrainStreamer, shore clipping (2836points/0bad), ForestField/streamer
+  and actual root contact regression pass.7862 roots, maximum triangle-height
+  error0.000107m. Disposable distant-forest cache bumped v2->v3 for new roots;
+  captain/company saves untouched.
+- Actual world review before: compact-world-1791589598-311. Initial after
+  compact-world-1791589688-438 captured before canopy regeneration finished;
+  rejected as incomplete. Final compact-world-1791589860-371 explicitly waits
+  for near/far forest, all3 harbour/channel/coast views inspected. Archives in
+  C:/Users/noahs/Pictures/machinescreenshots. Root review forest-root-1791589897-645.
+  Final report has no failures, no pending forest/terrain.1600x900 vsync60:
+  median16.662-16.684ms,p9516.806-16.821ms,GPU4.744-4.840ms. No speedup claim.
+  Logs read: shore-continuity-uncached, shore-terrain-contract,
+  shore-clip-regression, shore-forest-contract, shore-root-regression, shore-final.
+- The broad low coastal shelf still exists; this removes the artificial vertical
+  ledge, not every remaining terrain/art limitation. Remaining next: ferry
+  passage navigation/stock, inhabited coastal scenery, continued atmosphere.
