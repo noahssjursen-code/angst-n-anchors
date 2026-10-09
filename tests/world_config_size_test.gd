@@ -10,12 +10,13 @@ func _initialize() -> void:
 	GENERATOR.clear_cache()
 	assert(is_equal_approx(WORLD_CONFIG.preset_size_m("small"), 15000.0), "small preset")
 	assert(is_equal_approx(WORLD_CONFIG.preset_size_m("standard"), 40000.0), "standard preset")
+	assert(is_equal_approx(WORLD_CONFIG.preset_size_m("compact"), 30000.0), "75 percent compact preset")
 	assert(is_equal_approx(WORLD_CONFIG.preset_size_m("large"), 100000.0), "large preset")
 	assert(WORLD_CONFIG.validate_size_m(5000.0) >= WORLD_CONFIG.MIN_SIZE_M, "clamp min")
 	assert(WORLD_CONFIG.validate_size_m(200000.0) <= WORLD_CONFIG.MAX_SIZE_M, "clamp max")
 
 	## Full bake for small + standard; large only resolves config (513² is heavy for CI).
-	for size in [15000.0, 40000.0]:
+	for size in [15000.0, 30000.0, 40000.0]:
 		var layout: WorldLayout = GENERATOR.generate(42, WORLD_CONFIG.ARCHETYPE_PATH, size)
 		assert(layout != null, "layout for %.0f" % size)
 		assert(is_equal_approx(layout.world_size_m, size), "size stamped %.0f" % size)

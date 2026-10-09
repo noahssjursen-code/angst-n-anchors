@@ -93,8 +93,12 @@ static func apply_player_world_context(player: PlayerData) -> void:
 		weather_version = CURRENT_WEATHER_VERSION
 		ctx["weather_generation_version"] = weather_version
 		player.world_context = ctx
-	var world_size_m := float(ctx.get("world_size_m", -1.0))
 	var preset_id := str(ctx.get("world_preset", ctx.get("map_world_preset", "")))
+	# Loading an older captain after previewing a compact world must not inherit
+	# the preview's dimensions. Historical captains without dimensions used 40 km.
+	if preset_id.is_empty():
+		preset_id = "standard"
+	var world_size_m := float(ctx.get("world_size_m", WorldConfig.preset_size_m(preset_id)))
 	apply_seed(
 		seed_val,
 		int(ctx.get("generation_version", 0)),

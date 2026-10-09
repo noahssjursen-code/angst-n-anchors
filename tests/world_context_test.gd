@@ -7,6 +7,11 @@ const PORT_DEFINITION := preload("res://scripts/port/port_definition.gd")
 func _initialize() -> void:
 	assert(WORLD_CONTEXT.matches({}, {"seed": 42}), "legacy saves adopt current world")
 	var current := {"seed": 42, "generation_version": 1, "layout_checksum": "abc"}
+	var standard := {"seed": 42, "generation_version": 8, "layout_checksum": "", "world_size_m": 40000.0}
+	var compact := standard.duplicate()
+	compact.world_size_m = 30000.0
+	assert(not WORLD_CONTEXT.matches(standard, compact), "dimensions reject mismatched coordinates before checksum is ready")
+	assert(WORLD_CONTEXT.matches(compact, compact), "compact world matches itself")
 	assert(WORLD_CONTEXT.matches(current, current), "identical world contexts match")
 	assert(not WORLD_CONTEXT.matches(
 		{"seed": 43, "generation_version": 1, "layout_checksum": "def"}, current

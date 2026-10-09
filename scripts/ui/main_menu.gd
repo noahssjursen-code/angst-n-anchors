@@ -372,6 +372,7 @@ func _on_creator_confirmed(display_name: String, appearance: CharacterAppearance
 	if _creating_new:
 		_company_setup.open_for_captain(_pending_name)
 		_show_page(Page.COMPANY_SETUP)
+		_company_setup.show_world_size_choice(not _multiplayer_flow)
 	else:
 		_show_page(Page.SINGLEPLAYER)
 
@@ -388,6 +389,8 @@ func _on_company_confirmed(company_name: String, brand_color: Color, starter_ves
 	_pending_company_name = company_name
 	_pending_brand_color = brand_color
 	_pending_starter_vessel = starter_vessel
+	if not _multiplayer_flow:
+		GameSettings.apply_world_size_preset(_company_setup.selected_world_preset())
 	# Brand colours are part of the shared appearance record so future company
 	# uniforms render identically for the player, hired NPCs and remote clients.
 	if _pending_appearance != null:

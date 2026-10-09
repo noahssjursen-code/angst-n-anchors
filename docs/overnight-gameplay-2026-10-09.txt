@@ -481,3 +481,30 @@ approach claim. Existing ocean/locomotion and multiplayer remain untouched.
   Pictures/machinescreenshots/engine-packages-final-20261010-001046/.
 - Logs feeder-high-output-final.log, feeder-engine-final-review.log and
   feeder-repower-editor.log are clean. No rough-weather speed claim.
+2026-10-10 00:34 Oslo - Optional 75-percent world, including terrain generation
+- Noah authorized a compact-world experiment including terrain. Added Compact
+  trial (30x30km) to new single-player company setup; standard stays40x40km and
+  existing captains preserve their own geography. Ships/ports retain physical size.
+  Actual terrain, coastlines, forest bounds, chart and ports use the smaller layout.
+- Six layouts/three seeds:840 checks passed,35 ports each, full physical approach
+  and footprint checks, nearest-port and home-to-all routes valid. Main seed
+  nearest-port median15kn passage6.0->3.3min; home-to-all29.6->28.6min. Smaller
+  map does NOT solve every long voyage. Other seeds/details:docs/compact-world-trial.txt.
+- Actual new-company selection/home-chart confirmation/live world/scratch save
+  reload passed.16 final checks; preview/live checksum identical. Legacy captain
+  with omitted size now explicitly restores40km after a compact preview; explicit
+  unequal sizes reject coordinate restore even before checksum is present.
+- Existing9 v8 field/checksum baselines unchanged. Config/context tests passed.
+  Daytime captures and reports read/inspected:compact-world-1791585011-287(final),
+  compact-world-1791584840-358(40km),compact-world-1791584539-93(metrics), all in
+  Pictures/machinescreenshots. Final engine logs clean. About10ms median wall
+  frames in review. Detailed performance and limits are in the experiment doc.
+- Initial review captured before distant streaming completed and an8km-high view
+  was unusable. Fixture now follows the observer and drains terrain work. Elevated
+  views still expose pre-existing ocean coverage boundaries; do not claim those
+  as accepted art or change the already-accepted ocean for this size experiment.
+- Noah reported destination mooring, then clarified he had parked incorrectly.
+  No mooring changes made. Earlier tests attach lines directly, not through the
+  newer helm reach check; only investigate that if a reproducible issue returns.
+- Unrelated UI/editor working-copy changes preserved. Only the new world selector
+  and size-restoration changes are staged from shared dirty files.

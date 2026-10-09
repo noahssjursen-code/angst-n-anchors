@@ -12,6 +12,11 @@ static func matches(saved: Dictionary, current: Dictionary) -> bool:
 		return false
 	if int(saved.get("generation_version", 0)) != int(current.get("generation_version", 0)):
 		return false
+	# A preview may not have its checksum yet. Explicitly different dimensions
+	# must still reject coordinate restoration; missing legacy sizes remain valid.
+	if saved.has("world_size_m") and current.has("world_size_m"):
+		if not is_equal_approx(float(saved.world_size_m), float(current.world_size_m)):
+			return false
 	if saved.has("weather_generation_version") and current.has("weather_generation_version"):
 		if int(saved["weather_generation_version"]) != int(current["weather_generation_version"]):
 			return false
