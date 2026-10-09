@@ -5,6 +5,8 @@ extends Node3D
 const DIRECTORY := "res://resources/models/parts/passenger_terminal/"
 var guard_joints: Dictionary={}
 var berth: QuayBerthSlot
+var shore_connection := false
+var shore_rise := 0.0
 
 func _ready() -> void:
 	if get_child_count()>0:return
@@ -20,7 +22,7 @@ func _ready() -> void:
 	for z in [-14.0,16.0]:place("passenger_berth_fender",Vector3(-6,0,z),90)
 	for x in [-7.5,-4.5,-1.5,1.5,4.5,7.5]:
 		place("terminal_entry_3m" if absf(x)<2 else "terminal_glazed_bay_3m",Vector3(x,0,-30.5))
-		place("terminal_solid_bay_3m",Vector3(x,0,-39.5))
+		place("terminal_entry_3m" if shore_connection and absf(x)<2 else "terminal_solid_bay_3m",Vector3(x,0,-39.5),180)
 		place("terminal_roof_3x10m",Vector3(x,3.3,-35))
 		place("terminal_canopy_3m",Vector3(x,0,-28.5))
 	place("terminal_canopy_post",Vector3(9,0,-26.9))
@@ -36,6 +38,10 @@ func _ready() -> void:
 	for x in [-4.3,4.3]:place("passenger_berth_fender",Vector3(x,0,-19.0))
 	var landing:=Marker3D.new();landing.name="PassengerLanding";landing.position=Vector3(0,0,-20);add_child(landing)
 	landing.set_meta("landing_size",Vector2(5.5,2.0))
+	if shore_connection:
+		var run := sqrt(36.0-shore_rise*shore_rise)
+		var approach := place("terminal_shore_ramp_6m",Vector3(0,shore_rise*.5,-43-run*.5))
+		approach.rotation.x=asin(shore_rise/6.0)
 
 ## Explicit opt-in: isolated terminals don't silently register as world ports.
 func register_berth(harbour: HarbourController, station_id: String = "passenger") -> QuayBerthSlot:
@@ -64,7 +70,7 @@ func guard(at: Vector3, yaw: float=0) -> void:
 		guard_joints[joint]=true
 		place("passenger_pier_guard_post",joint)
 
-func place(asset: String, at: Vector3, yaw: float=0) -> void:
+func place(asset: String, at: Vector3, yaw: float=0) -> Node3D:
 	var visual:Node3D=(load(DIRECTORY+asset+".glb") as PackedScene).instantiate()
 	visual.position=at;visual.rotation_degrees.y=yaw;add_child(visual)
 	SurfaceMaterialLibrary.apply(visual,"passenger_terminal")
@@ -78,3 +84,4 @@ func place(asset: String, at: Vector3, yaw: float=0) -> void:
 			if parent is Node3D:transform=parent.transform*transform
 			parent=parent.get_parent()
 		collider.transform=transform;body.add_child(collider)
+	return visual

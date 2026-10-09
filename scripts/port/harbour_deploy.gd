@@ -37,6 +37,8 @@ static func terminal_families_for_record(record: Dictionary) -> PackedStringArra
 	for part: Dictionary in layout.get("parts", []):
 		ids.append(str(part.get("asset_id", "")))
 	var families := PackedStringArray()
+	if ids.has("ferry_bow_ramp_2m") and ids.has("ferry_seating_row_10"):
+		families.append("passenger")
 	if ImportedVesselLayout.has_capability(layout, "fishing"):
 		families.append("fishing")
 	if ids.has("container_bed_20ft") or ids.has("cargo_securing_bed_4m"):

@@ -94,6 +94,11 @@ func _rebuild() -> void:
 		for slot in _graph.open_slots():
 			if _should_stamp_open_slot(slot):
 				_stamp_open_slot(slot)
+	# Add an independent passenger pier only where the unchanged quay layout
+	# leaves safe space. Models are built only for streamed local-game ports.
+	if _harbour != null and not Engine.is_editor_hint() and not PlayerSession.is_remote_voyage():
+		var site := PassengerPortSites.plan(_graph,global_transform,LandField.get_layout())
+		PassengerPortSites.install(self,_harbour,site)
 
 
 func _port_id() -> String:

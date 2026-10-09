@@ -21,7 +21,13 @@ func bind(player: PlayerData, company: CompanyService) -> void:
 func register_route(id: String, origin: QuayBerthSlot, destination: QuayBerthSlot,
 		passengers: int, fare_marks: int) -> void:
 	assert(not id.is_empty() and origin != destination and passengers > 0 and fare_marks > 0)
-	_routes[id] = {"origin":weakref(origin), "destination":weakref(destination),
+	register_route_ids(id,origin.berth_id,destination.berth_id,passengers,fare_marks)
+
+## Routes are data and remain bookable while the distant port is streamed out.
+## Only trusted world configuration calls this; clients choose an existing ID.
+func register_route_ids(id: String, origin: String, destination: String, passengers: int, fare_marks: int) -> void:
+	assert(not id.is_empty() and not origin.is_empty() and not destination.is_empty() and origin!=destination and passengers>0 and fare_marks>0)
+	_routes[id] = {"origin":origin, "destination":destination,
 		"count":passengers, "fare":fare_marks}
 
 func records() -> Array:
@@ -52,11 +58,7 @@ func book(route_id: String, ship: ImportedDraftVessel, request_id: String) -> Di
 	if not active_for(ship).is_empty(): return _error("vessel_busy", "Finish or cancel this vessel's sailing first.")
 	if not _routes.has(route_id): return _error("route_missing", "This passenger route is unavailable.")
 	var route: Dictionary = _routes[route_id]
-	var origin := (route.origin as WeakRef).get_ref() as QuayBerthSlot
-	var destination := (route.destination as WeakRef).get_ref() as QuayBerthSlot
-	if not is_instance_valid(origin) or not is_instance_valid(destination):
-		return _error("terminal_unavailable", "Both passenger terminals must be available.")
-	if not _secured(ship, origin.berth_id): return _error("wrong_terminal", "Secure both lines at the departure terminal.")
+	if not _secured(ship, str(route.origin)): return _error("wrong_terminal", "Secure both lines at the departure terminal.")
 	if PassengerAccommodation.ramp(ship) == null or PassengerAccommodation.boarding_door(ship) == null:
 		return _error("boarding_missing", "Fit a passenger ramp and saloon entrance.")
 	var seats := _seats(ship)
@@ -70,7 +72,7 @@ func book(route_id: String, ship: ImportedDraftVessel, request_id: String) -> Di
 		positions[key] = [local.x, local.y, local.z]
 		yaws[key] = (ship.global_basis.inverse()*(seats[key] as Node3D).global_basis).get_euler().y
 	var item := {"id":request_id, "route_id":route_id, "vessel_uid":uid,
-		"origin_berth":origin.berth_id, "destination_berth":destination.berth_id,
+		"origin_berth":route.origin, "destination_berth":route.destination,
 		"total":selected.size(), "onboard":0, "landed":0, "returned":0,
 		"seat_ids":selected, "seat_positions":positions, "seat_yaws":yaws, "fare_marks":int(route.fare),
 		"phase":"boarding", "paid_marks":0}

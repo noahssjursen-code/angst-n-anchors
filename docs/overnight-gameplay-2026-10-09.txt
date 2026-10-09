@@ -390,3 +390,34 @@ approach claim. Existing ocean/locomotion and multiplayer remain untouched.
   to account for the menu theme's uppercase button text.
 - Main-menu changes are scoped to the new action and preview guard. Preserve the
   unrelated existing UI rebuild and other working-copy changes.
+2026-10-09 23:47 Oslo - Passenger terminals in streamed single-player ports
+- Added deterministic additive siting against existing quay geometry and water
+  depth. Seed424242 has six suitable locations out of35; full terminals are
+  instantiated only when those local ports stream in. Cargo layout/graph and
+  world terrain/checksum stay unchanged. No destination scene needed to book a
+  route: passenger routes now store durable berth IDs instead of weak scene refs.
+- New original Blender6m accessible shore bridge, matching approved deck/metal
+  finishes and physical collisions. Landward waiting-room doors connect it to
+  the boarding apron. Ferry equipment prefers the passenger berth on deployment.
+- Actual world review passed at port2, port24 and curved port8: deployment,
+  secured bow-ramp alignment, real player walking across shore bridge, through
+  waiting room and onto ferry, and full240-seat manifests. All35 graph snapshots
+  remain unchanged. Report/captures: Pictures/machinescreenshots/ferry-world-1791581554-777/.
+- Inspected shore connection and overview captures. The earlier missing terrain
+  came from capturing before near terrain completed streaming; final test waits
+  for terrain readiness and shows land correctly. No terrain change was made.
+- Initial fixture failures: camera stayed behind so port streaming did not move;
+  then reused vessel UID retained its old berth claim. Fixed test camera, unique
+  vessel IDs, and actual ramp-stow/berth-release cleanup. Final report has zero
+  failures and clean engine log. Tests are fixtures, not proof of terminal NPC UI.
+- Full-world1920x1080 exterior240-passenger comparison: port2 GPU3.812 ->3.993ms,
+  port24 3.151 ->3.323ms, port8 2.390 ->2.680ms (median). Frame medians around
+  10-11ms while streaming. These are isolated world-fixture measurements, not
+  a promise for all gameplay or interior views.
+- Existing passenger_journey_test rerun passed partial manifest persistence,
+  boarding/door/ramp gates, delivery, exact-once fare and cancellation.
+  Evidence: Pictures/machinescreenshots/passenger-journey-1791582137-511/report.json.
+  harbour_service_routing_test also passed (headless, isolated).
+- Still unfinished: production passenger NPC offers/boarding controls and the
+  full passenger journey through that UI. Next user steering is cargo offers
+  filling current vessel capacity (Northline40 currently gets only6).
