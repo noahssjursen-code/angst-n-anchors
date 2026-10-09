@@ -97,13 +97,28 @@ Shipyard **Drafts → Larger vessels → Northline 40** opens an editable copy.
 The corresponding draft is `examples/container_feeder_40_draft.json`.
 
 The original Blender assets and repeatable recipes live under `_source/feeder_88`.
-`build_feeder.py` exports the hull, 1500/2100 kW engine visual, 2.6 m propeller,
+`build_feeder.py` exports the hull, original 1500/2100 kW engine visual, 2.6 m propeller,
 3 m rudder, support, funnel, signal mast, liferaft cases, windlass and anchors.
 It reuses the existing exact perimeter miters, cabin, stair, surface and interior
 parts. `arrangement.py` produces a placement recipe; `tests/feeder_authoring.tscn`
 loads, validates, saves and reloads it through the actual Shipyard editor.
 The 477 placements remain separate, recolourable construction parts.
 All new surface names resolve to the approved marine material library.
+
+Northline now uses the 5600 kW high-output package requested for 15-16 knot
+operation. `build_high_output_engine.py` authors its larger separate V12 model,
+reusing the original construction vocabulary and approved engine finishes.
+The game package weighs 32 t, burns 1344 L/h at full output, drives the existing
+shaft at 220 rpm and has deliberately reduced astern thrust for docking control.
+This is a fictional gameplay tune, not manufacturer-certified machinery.
+The hull resistance model is unchanged. The hull's original 11.2 t machinery
+allowance remains the mass reference, so the upgrade adds 20.8 t rather than
+silently changing the hull or double-counting the engine.
+
+Old `feeder_1500` factory-engine IDs resolve to `feeder_5600` when deployed;
+owned fitout, identity, paint and cargo records are not replaced. Explicitly
+chosen `feeder_2100` packages remain available and unchanged. The engine inspector
+now frames actual model bounds, including this engine and twin catamaran packages.
 
 Layout/proportion reference: Damen's Combi Freighter 3850,
 https://www.damen.com/vessels/cargo/multi-purpose-cargo-vessels/combi-freighter-3850
@@ -122,8 +137,9 @@ captain record round-trip, forty real containers adding 800 t, real-controller
 stairs and bridge entry (`container_feeder_test`, renderer required), gangway
 traversal on both sides (`ship_gangway_test --vessel=container_feeder_40 --rotated`),
 starter/harbour regressions and all-stock longitudinal handling. Free-floating
-`container_feeder_handling` measured 12.4/12.3 kn empty/laden and 42.2/55.6 s
-stopping from 7.8 kn. These are controlled flat-water results, not a sea trial.
+`container_feeder_handling` enforces 15-16 kn empty/laden for the new package,
+checks coasting, astern, full-speed stopping and turning. Its original 1500 kW
+baseline was 12.4/12.3 kn. These are controlled flat-water results, not a sea trial.
 `fleet_world_journey --vessel=container_feeder_40 --cycles=1 --speed=8` completed
 real generated-port deployment, a production cargo-agent offer of forty containers,
 arrival/mooring, unloading and exact-once payment. Eligible offers now use actual

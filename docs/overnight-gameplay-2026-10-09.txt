@@ -443,3 +443,41 @@ approach claim. Existing ocean/locomotion and multiplayer remain untouched.
   the existing unplug_ship. Final test and full journey have no failures.
 - User reports12.4kn Northline speed. This matches earlier1500kW free-floating
   results, not yet evidence of a regression. Comparing existing2100kW package.
+2026-10-10 00:14 Oslo - Next-pass user direction: shorter voyages
+- Noah finds a22-minute autopilot channel crossing uninteresting compared with
+  loading and harbour manoeuvres. Wants world/distances made smaller in the NEXT
+  pass; later onboard food/sleep/cleaning tasks may justify longer passages.
+- Proposed nearby-port passages of3-6minutes, preserving full-size approach and
+  turning room, with longer voyages optional. This is a proposed target, not a
+  measured or implemented world redesign. Do not silently rescale current-world
+  coordinates: plan an explicit compatible world/save migration first.
+- Finish the active Northline machinery request before that next pass.
+2026-10-10 00:15 Oslo - Northline factory machinery upgrade
+- Noah chose15-16kn rather than retaining12-14kn coaster tuning. The existing
+  2100kW option measured13.12/13.03kn empty/heavy: insufficient for that request.
+- Added original larger Blender V12 package with approved finishes,5600kW,
+  32t machinery,1344L/h full-output fuel consumption and220rpm shaft. Stock,
+  editable draft and reproducible authoring recipe select it. No hull resistance,
+  ocean, locomotion, world geography or multiplayer changes.
+- Original feeder_1500 factory IDs resolve in memory to the new package, including
+  existing owned boats on next deployment. No captain save was opened/rewritten;
+  layouts, names, paint and cargo retained. Explicit2100kW choices stay unchanged.
+  Preserve the original11.2t engine allowance: added machinery mass20.8t.
+- First full-output run reached15.38/15.28kn but astern was excessive at11.95kn
+  empty. Corrected only this package's reverse multiplier to0.28; generic imported
+  packages keep0.65. Runtime engine refits apply the same reverse setting.
+- FINAL free-floating Jolt report feeder-handling-1791583965-539.json read: both
+  cases passed. Empty/heavy(40x20t actual units):15.38/15.28kn; coast30s to
+  10.55/11.20kn; full-speed crash stop54.12/73.92s over202/277m; stopping from
+  7.8kn29.23/39.33s; astern after60s7.48/5.41kn. Turning/roll checks passed.
+  Acceptance now enforces15-16kn, finite full-speed stopping and controlled astern,
+  rather than the previous broad5-17kn cruise threshold. Flat water, no weather.
+- Actual Shipyard save/reload preserved477placements and selected machinery;
+  inspected Pictures/machinescreenshots/feeder-editor-1791583865-337.png.
+- All engine packages passed power/fuel/reverse/compatibility/JSON checks plus
+  old-ID resolution, unchanged old layout and correct added mass. Inspector used
+  a three-hull lookup that failed on feeder/ferry; now frames actual model bounds.
+  Rendered all packages both sides; inspected new engine front/rear captures in
+  Pictures/machinescreenshots/engine-packages-final-20261010-001046/.
+- Logs feeder-high-output-final.log, feeder-engine-final-review.log and
+  feeder-repower-editor.log are clean. No rough-weather speed claim.

@@ -2,7 +2,7 @@
   "brick_layout": {
     "active_floor": 0.0,
     "cell_offset": 0.0,
-    "engine_preset": "feeder_1500",
+    "engine_preset": "feeder_5600",
     "format": "imported_models",
     "hull": "hull_88x14",
     "hull_colors": {
@@ -6630,5 +6630,5 @@
   "id": "container_feeder_40",
   "name": "Northline 40 · Container Feeder",
   "price_marks": 98000,
-  "shaft_power_kw": 1500
+  "shaft_power_kw": 5600.0
 }

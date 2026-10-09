@@ -170,3 +170,10 @@ online account or a change to normal purchase/authority rules.
 Verification: tests/development_captain_test.tscn -- --shipyard-playtest exercises
 the real title button, isolated creation, disk roundtrip, reload/new-stock grants,
 customization retention and byte-for-byte protection of another captain's save.
+
+Northline factory-engine balance update (10 October 2026): the old
+`feeder_1500` layout identifier remains valid and resolves to the new
+`feeder_5600` package in MarineEngineCatalog. This is an in-memory component
+replacement on deployment, with no save-file rewrite, new vessel grant, or
+replacement of layout/paint/cargo data. Authored stock now records the new ID.
+Explicit `feeder_2100` choices remain unchanged. No save version bump is needed.

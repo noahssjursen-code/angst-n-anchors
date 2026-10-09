@@ -82,6 +82,6 @@ for side,aid in [(-1,'nav_port'),(1,'nav_starboard')]:add(aid,side*6.05,11.7,35.
 add('nav_stern',0,7.3,43.7)
 add('mast_lantern',0,17.0,36.8)
 add('mast_lantern',0,5.6,-40.5)
-d=dict(version=1,hull='hull_88x14',parts=parts,hull_colors=dict(upper=[.09,.19,.23],lower=[.29,.08,.055],deck=[.25,.30,.28]),engine_preset='feeder_1500',rising_bow=False,active_floor=0,cell_offset=0,show_all_floors=True)
+d=dict(version=1,hull='hull_88x14',parts=parts,hull_colors=dict(upper=[.09,.19,.23],lower=[.29,.08,.055],deck=[.25,.30,.28]),engine_preset='feeder_5600',rising_bow=False,active_floor=0,cell_offset=0,show_all_floors=True)
 (ROOT/'examples/container_feeder_40_recipe.json').write_text(json.dumps(d,indent=2)+'\n')
 print('FEEDER RECIPE',len(parts),'editable placements, 40 ISO positions')

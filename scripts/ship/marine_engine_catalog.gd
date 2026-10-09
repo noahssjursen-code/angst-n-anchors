@@ -13,6 +13,10 @@ static func options(hull_id: String) -> Array[Dictionary]:
 	return result
 
 static func resolve(hull_id: String, id: String = "") -> Dictionary:
+	# Northline's original factory package was repowered at Noah's request.
+	# Resolve old saves in memory; never replace their authored layout or identity.
+	if hull_id == "hull_88x14" and id == "feeder_1500":
+		id = "feeder_5600"
 	for spec in options(hull_id):
 		if spec.id == id or (id.is_empty() and spec.get("default",false)): return spec
 	return {}
@@ -22,12 +26,14 @@ static func apply(profile: HullPhysicsProfile, hull_id: String, id: String) -> v
 	assert(not spec.is_empty())
 	# Default hull displacement already includes the standard machinery package.
 	# Upgrades add only the real difference, keeping hull/ballast mass unchanged.
-	profile.design_displacement_t += (float(spec.mass_kg)-float(resolve(hull_id).mass_kg))/1000.0
+	var reference := resolve(hull_id)
+	profile.design_displacement_t += (float(spec.mass_kg)-float(reference.get("hull_reference_mass_kg", reference.mass_kg)))/1000.0
 	profile.engine_mass_kg = spec.mass_kg
 	profile.engine_position = MOUNTS[hull_id] + Vector3(0,.7,0)
 	profile.shaft_power_kw = spec.power_kw
 	profile.bollard_thrust_n = float(spec.power_kw)*1000.0*profile.propulsive_efficiency/5.0
 	profile.fuel_burn_l_per_sec_full = float(spec.fuel_lph)/3600.0
+	profile.reverse_multiplier = float(spec.get("reverse_multiplier", 0.65))
 	profile.calibrate_longitudinal_mass_center()
 
 static func visual(hull_id: String, id: String = "") -> Node3D:

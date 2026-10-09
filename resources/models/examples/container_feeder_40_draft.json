@@ -1,7 +1,7 @@
 {
 	"active_floor": 0,
 	"cell_offset": 0,
-	"engine_preset": "feeder_1500",
+	"engine_preset": "feeder_5600",
 	"hull": "hull_88x14",
 	"hull_colors": {
 		"deck": [

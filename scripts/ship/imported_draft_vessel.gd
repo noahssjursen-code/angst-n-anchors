@@ -33,7 +33,6 @@ func configure(snapshot: Dictionary) -> void:
 	physics_profile.roll_gyradius_fraction = .40
 	physics_profile.pitch_gyradius_fraction = .32
 	physics_profile.heave_damping_ratio = 1.0
-	physics_profile.reverse_multiplier = 0.65
 	physics_profile.harbour_drag_rate = 0.055
 	physics_profile.astern_drag_multiplier = 3.0
 	# Explicit hydrodynamics owns resistance. Godot's default 0.1/s plus the
@@ -145,12 +144,13 @@ func apply_brick_layout(layout: Dictionary) -> void:
 	if layout.get("engine_preset","") != draft.get("engine_preset",""):
 		var base := CatalogHullVessel.make_physics_profile(ImportedHullCatalog.ENTRIES[_hull_id])
 		MarineEngineCatalog.apply(base,_hull_id,str(layout.get("engine_preset","")))
-		for field in ["design_displacement_t","engine_mass_kg","engine_position","shaft_power_kw","bollard_thrust_n","fuel_burn_l_per_sec_full","hull_center_of_mass"]:
+		for field in ["design_displacement_t","engine_mass_kg","engine_position","shaft_power_kw","bollard_thrust_n","fuel_burn_l_per_sec_full","reverse_multiplier","hull_center_of_mass"]:
 			physics_profile.set(field,base.get(field))
 		var prop := get_node("PropulsionComponent") as PropulsionComponent
 		prop.shaft_power_kw = base.shaft_power_kw
 		prop.max_thrust = base.bollard_thrust_n
 		prop.fuel_burn_l_per_sec_full = base.fuel_burn_l_per_sec_full
+		prop.reverse_multiplier = base.reverse_multiplier
 		_refresh_mass()
 	if is_instance_valid(_walk_deck):
 		_walk_deck.collision_layer = 0
