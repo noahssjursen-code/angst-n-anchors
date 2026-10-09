@@ -28,7 +28,7 @@ const TP_MAX_PITCH := deg_to_rad(72.0)
 @export var strafe_tilt_angle: float = 0.0
 @export var head_bob_frequency: float = 10.0
 @export var head_bob_amplitude: float = 0.012
-@export var walk_speed_ref: float = 1.8
+@export var walk_speed_ref: float = 2.0
 
 var _player: CharacterBody3D = null
 var _camera: Camera3D = null
@@ -37,6 +37,7 @@ var _body_mesh: NpcBase = null
 var _mode: CameraMode = CameraMode.FIRST_PERSON
 var _orbit_yaw: float = 0.0
 var _orbit_pitch: float = deg_to_rad(18.0)
+var _look_yaw: float = 0.0
 var _fp_pitch: float = 0.0
 var _bob_time: float = 0.0
 var _camera_y_offset: float = 0.0
@@ -54,6 +55,7 @@ func bind(player: CharacterBody3D, camera: Camera3D, body_mesh: NpcBase = null) 
 	_body_mesh = body_mesh
 	_mode = default_mode
 	_orbit_yaw = player.rotation.y
+	_look_yaw = player.rotation.y
 	_orbit_pitch = deg_to_rad(18.0)
 	_fp_pitch = 0.0
 	if _camera != null:
@@ -63,6 +65,18 @@ func bind(player: CharacterBody3D, camera: Camera3D, body_mesh: NpcBase = null) 
 
 func get_mode() -> CameraMode:
 	return _mode
+
+
+## Horizontal aim. The body twist chain reads this; the feet yaw lags behind it.
+func get_look_yaw() -> float:
+	if _mode == CameraMode.THIRD_PERSON:
+		return _orbit_yaw
+	return _look_yaw
+
+
+func shift_look_yaw(delta: float) -> void:
+	_look_yaw += delta
+	_orbit_yaw += delta
 
 
 func is_third_person() -> bool:
@@ -89,11 +103,8 @@ func get_flat_basis() -> Basis:
 	if _player == null:
 		return Basis.IDENTITY
 	if _mode == CameraMode.FIRST_PERSON:
-		var fwd := -_player.global_transform.basis.z
-		fwd.y = 0.0
-		if fwd.length_squared() < 0.0001:
-			return _player.global_transform.basis
-		return Basis.looking_at(fwd.normalized(), Vector3.UP)
+		# Walk where the camera looks. The body yaw trails the look by design.
+		return Basis(Vector3.UP, _look_yaw)
 
 	var offset := _orbit_offset(_orbit_yaw, _orbit_pitch, 1.0)
 	var fwd := Vector3(-offset.x, 0.0, -offset.z)
@@ -121,7 +132,7 @@ func handle_input(event: InputEvent) -> bool:
 			if Input.is_action_pressed("player_freelook"):
 				_free_yaw = clampf(_free_yaw - event.relative.x * sens, -1.4, 1.4)
 			else:
-				_player.rotate_y(-event.relative.x * sens)
+				_look_yaw -= event.relative.x * sens
 			_fp_pitch = clampf(_fp_pitch - dy, -FP_MAX_PITCH, FP_MAX_PITCH)
 		return true
 
@@ -183,7 +194,7 @@ func _update_first_person(
 ) -> void:
 	var bob_offset := 0.0
 	if on_floor and flat_speed > 1.0:
-		_bob_time += delta * head_bob_frequency * (flat_speed / walk_speed_ref)
+		_bob_time += delta * head_bob_frequency * clampf(flat_speed / walk_speed_ref, 0.0, 2.0)
 		bob_offset = sin(_bob_time) * head_bob_amplitude
 	else:
 		_bob_time = lerpf(_bob_time, 0.0, delta * 5.0)
@@ -195,7 +206,7 @@ func _update_first_person(
 	if not Input.is_action_pressed("player_freelook"):
 		_free_yaw = lerp_angle(_free_yaw, 0.0, 1.0 - exp(-10.0 * delta))
 	_camera.position = Vector3(0.0, fp_height + bob_offset + _camera_y_offset + _step_offset, -.23)
-	_camera.rotation.y = _free_yaw
+	_camera.rotation.y = wrapf(_look_yaw - _player.rotation.y, -PI, PI) + _free_yaw
 	_camera.rotation.x = _fp_pitch
 
 	var strafe_tilt := 0.0
@@ -234,12 +245,12 @@ func _collision_distance(pivot: Vector3, desired_distance: float) -> float:
 func _toggle_mode() -> void:
 	if _mode == CameraMode.THIRD_PERSON:
 		_mode = CameraMode.FIRST_PERSON
-		_player.rotation.y = _orbit_yaw
+		_look_yaw = _orbit_yaw
 		_fp_pitch = -_orbit_pitch
 		_free_yaw = 0.0
 	else:
 		_mode = CameraMode.THIRD_PERSON
-		_orbit_yaw = _player.rotation.y + _free_yaw
+		_orbit_yaw = _look_yaw + _free_yaw
 		_orbit_pitch = clampf(-_fp_pitch, TP_MIN_PITCH, TP_MAX_PITCH)
 	_apply_mode()
 	mode_changed.emit(_mode)
@@ -250,7 +261,7 @@ func _apply_mode() -> void:
 	if _camera == null:
 		return
 	if _mode == CameraMode.FIRST_PERSON:
-		_camera.rotation = Vector3.ZERO
+		_camera.rotation = Vector3(_fp_pitch, wrapf(_look_yaw - _player.rotation.y, -PI, PI), 0.0)
 		_camera.position = Vector3(0.0, fp_height, 0.0)
 	else:
 		_update_third_person()

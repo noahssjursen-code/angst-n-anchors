@@ -35,6 +35,33 @@ trouser topology and weights; it does not replace the character with a new body.
   loop (2.256 m/s). CharacterAnimator smooths speed, uses transition hysteresis,
   crossfades and adjusts playback rate. Ambient NPCs seek by travelled distance.
   Physics and game movement speeds are unchanged; playback is capped at 2.3x.
+- The local player now uses `CharacterLegIK` instead of those walk/run clips
+  (8 October). The modifier reconstructs controlled bones from bind, solves
+  fixed-length legs to support-local contacts and swings arms with FK. Idle
+  finger detail remains separate; NPC/preview clip behavior is unchanged.
+  Gait follows actual controller displacement after deck carry, with full strides
+  and a running duty cycle at high speeds. Touchdown remains phase-coupled when
+  speed changes. World-aligned floor detection on tilted decks must not interrupt
+  the gait: use the supporting deck normal. Ship acceleration is sampled once per
+  physics tick; zero-time reposes are idempotent. Pace responds smoothly to uphill,
+  downhill and cross-deck slope, with counterbalance and effort lean. Land movement
+  uses 2.0 m/s walking and 3.6 m/s jogging. First-person retreat/side-step pace is
+  reduced to fit controlled placements; third-person travel retains forward pace.
+  Boots roll about heel/forefoot support, holding their heading while planted.
+  The following foot may close toward the leading foot during a side-step;
+  constraining both targets to opposite halves of the moving pelvis causes splits.
+  Keep pelvis/torso/arm timing coordinated, body drop bounded and turning coupled
+  to actual foot clearance. Measure sole contact rather than ankle drift during
+  heel/toe roll. See `docs/player-ik-sealegs-pass.txt` for the latest review evidence.
+  F6 `tests/player_gait_test.tscn -- --shipyard-playtest` gives the unobstructed
+  plane review; `--deck-only --rough --quick --film` records balance/walk/run on
+  larger waves. PNG writes run after measurement on a worker so review export
+  cannot freeze the final motion label. `--no-captures` is for timing regressions.
+  `--walk-preview --film` isolates normal-speed forward walking and start/stop;
+  keep rapid-input stress runs separate from that visual preview. Normal walking
+  keeps a supporting foot while the other swings. Sharp turns brake until the
+  body aligns, and the torso responds to deck-relative acceleration with delayed
+  lean. Longer forward steps must not increase backward/lateral reach into splits.
 - Review `scenes/showcases/character_motion_showcase.tscn` in motion. Studio
   playback control supports pausing and slow motion; press J in the motion review
   to display the actual moving skeleton. `animation_contract.json`

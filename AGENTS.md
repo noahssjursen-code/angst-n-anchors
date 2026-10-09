@@ -440,9 +440,17 @@ Follow resources/models/characters/README.md for the angular reference style,
 shared skeleton, independent morphs, material colours and clothing coverage.
 Noah rejected downloaded character and clothing replacements on 7 October.
 Use the original in-house Blender mariner. All old animation clips were replaced;
-keep arms on fixed-length local rotation tracks, with no keyed wrist/elbow
-translations or limb scale. Do not restore the discarded animation or experimental
-deck-balance modifier. Verify animated poses and maximum morphs in Godot.
+keep arms on fixed-length rotations, with no keyed wrist/elbow translations or
+limb scale. On 8 October Noah requested repair of the new runtime IK and sealegs:
+CharacterLegIK owns the local player's locomotion and balance. Do not replace it
+with the discarded clips or the rejected downloaded models. Planted contacts live
+in their support frame; gait follows actual deck-relative travel. Use deck-normal
+ground contact and physics-tick acceleration; zero-time skeleton updates must not
+advance gait or snap smoothing. Uphill/downhill/cross-deck pace follows the actual
+slope, recovering as it levels. Keep the clear plane in tests/player_gait_test.tscn
+for visual motion review (Noah explicitly prefers it to obstructed ship views).
+Archive captures without blocking the main thread on bulk PNG writes.
+Verify animated poses and maximum morphs in Godot.
 Run tests/blender_character_test.tscn and tests/captain_onboarding_test.tscn to
 verify the imported character and identity flow; use the existing
 --shipyard-playtest isolation flag when running these scenes to avoid live saves.

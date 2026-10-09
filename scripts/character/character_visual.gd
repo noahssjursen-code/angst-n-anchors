@@ -4,6 +4,7 @@ extends Node3D
 
 ## One imported Blender skeleton shared by body, clothes and accessories.
 const MODEL = preload("res://resources/models/characters/mariner.glb")
+const LEG_IK := preload("res://scripts/character/character_leg_ik.gd")
 var appearance := CharacterAppearance.default_appearance()
 var skeleton: Skeleton3D
 var animation_player: AnimationPlayer
@@ -12,6 +13,8 @@ var _meshes: Array[MeshInstance3D] = []
 var _decorated := true
 var _local_first_person := false
 var _anchors: Dictionary = {}
+var _balance_ik := false
+var ik: SkeletonModifier3D
 
 func _ready() -> void:
 	rebuild()
@@ -45,6 +48,32 @@ func rebuild() -> void:
 			_anchors[side] = anchor
 	apply_appearance(appearance)
 	play_motion(&"idle")
+	if _balance_ik:
+		_attach_balance_ik()
+
+
+func enable_balance_ik() -> void:
+	_balance_ik = true
+	_attach_balance_ik()
+
+
+func uses_balance_ik() -> bool:
+	return _balance_ik and ik != null and is_instance_valid(ik)
+
+
+func _attach_balance_ik() -> void:
+	if skeleton == null:
+		return
+	if ik != null and is_instance_valid(ik):
+		ik.queue_free()
+	ik = LEG_IK.new()
+	ik.name = "BalanceIK"
+	skeleton.add_child(ik)
+	# Pose after the player has mounted to this frame's deck, not on the previous one.
+	skeleton.process_priority = 8
+	if animation_player != null:
+		animation_player.process_priority = 8
+		animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE
 
 func apply_appearance(value: CharacterAppearance) -> void:
 	appearance = value.duplicate() if value != null else CharacterAppearance.default_appearance()

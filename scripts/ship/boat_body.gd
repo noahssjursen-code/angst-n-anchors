@@ -320,6 +320,9 @@ func clear_mooring_integrate() -> void:
 
 
 func _ready() -> void:
+	# Deck collider and anyone standing on it must see this hull pose before they move.
+	process_priority = -20
+	process_physics_priority = -20
 	linear_damp  = linear_damp_coeff
 	angular_damp = angular_damp_coeff
 
@@ -383,7 +386,16 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_sync_walk_deck_transform()
 
 
+func _process(_delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
+	# Give the manual player mount the same hull pose before its render update.
+	_sync_walk_deck_transform()
+
+
 func _physics_process(_delta: float) -> void:
+	if not Engine.is_editor_hint():
+		_sync_walk_deck_transform()
 	if Engine.is_editor_hint():
 		var missing_single := _transformer == null or not is_instance_valid(_transformer)
 		if _model_assembler == null and missing_single:

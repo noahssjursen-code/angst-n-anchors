@@ -1,0 +1,135 @@
+8 October 2026 — player IK / sealegs repair
+
+Noah's direction: keep the incoming IK approach and the accepted land motion;
+repair tiny steps, upper-body wave jitter and interrupted deck walking. Use the
+clear test plane for visual judgment. Walking on steep waves should slow with
+the deck and recover as it levels, with corresponding body lean.
+
+Incoming state was uncommitted work from another agent. Incorporated the related
+CharacterVisual / player / camera / hull-order wiring. Left unrelated mooring,
+gangway, boat-controller, tutorial, HUD and texture-import edits unstaged.
+Original Blender mariner geometry and all captain data remain unchanged.
+
+Causes and repair
+- Previous gait moved a foot only ~.17 m per cycle at 4.5 m/s. Contacts were rebuilt
+  relative to the body during walking, so it shuffled and slid rather than planted.
+- New gait uses actual displacement after deck carry, support-local planted feet,
+  full strides, a running duty cycle and fixed-length two-bone leg solves.
+  Touchdown is phase-coupled so wave-driven speed changes cannot desynchronize it.
+  Controlled bones reconstruct from bind on every solve; no iterative pose drift.
+- Tilted-deck movement discarded tangent Y and classified ground using world up.
+  This produced false airborne frames (29/120 in a prior sprint pass), repeatedly
+  interrupting the gait. Controller up/snap and velocity now follow deck normal.
+- Acceleration was differenced at render rate and zero-delta reposes snapped the
+  lean filter. Sample deck acceleration at physics rate, use exponential damping,
+  and make extra zero-time poses idempotent. Removed the redundant manual advance.
+- Add slope-sensitive pace for uphill effort, downhill restraint and crossfall.
+  It responds to actual deck orientation/direction, not a synthetic sine clock.
+  Smoothly restores pace as the deck levels. Hips/spine/chest lean with effort and
+  counterbalance. Land pace retains incoming 4.5 / 8.5 m/s settings.
+- External teleports release stale support attachment instead of being pulled
+  back to the old deck. Ship-relative jumping and recovery remain supported.
+- Review PNG compression blocked the main thread and appeared hung on "fast".
+  Readbacks stay in memory during measurement; a worker saves afterward while
+  the UI displays an explicit saving state and continues to render.
+
+Verification (actual Godot 4.6.1 D3D12, isolated captain saves)
+- player_gait_test: all 14 land/moving-plane cases pass. Idle, precision, walk,
+  fast, sprint, backwards and strafe; no false airborne samples in any case.
+  Both feet step, full stride excursion, original limb offsets retained.
+- Rough plane: ~17 degree pitch / ~13 degree roll plus 6 m/s translation; balance,
+  walking and fast pace pass at 60 and 144 FPS. Zero-time repeat pose is identical.
+  Rough fast test pace varies ~30–82% as slope changes. Standing pelvis delta is
+  ~1.4 mm/frame at 60 FPS, versus the old snapping at extra pose updates.
+- 30 FPS final rough/F6 isolation check recorded separately.
+- player_maritime_test passed walking/jogging, moving/turning deck carry, jump
+  carry, recovery, view switches, first-person body, free look and seat clearance.
+  Actual trawler/coaster carry/jump checks passed before Noah requested returning
+  to the clearer plane for visual review. Final visual fixture contains no ships.
+- Scoped whitespace check clean; unrelated existing mooring_post EOF whitespace
+  remains outside this change.
+
+Evidence
+Latest visual sequence:
+C:/Users/noahs/Pictures/machinescreenshots/gait-1791492457-084/
+  wave-aware-gait.gif, wave-walk-contact-sheet.png, source frames and measurements
+All 14 final measurements:
+C:/Users/noahs/Pictures/machinescreenshots/gait-1791492544-989/measurements.json
+Logs: task workspace work/gait-final-all.log, gait-rough-final-film.log,
+gait-rough-144fps.log, gait-f6-isolation-30fps.log, ik-maritime-regression-2.log.
+Earlier failed/diagnostic captures are retained with unique names for comparison.
+
+Review boundaries
+The local player uses runtime IK; NPC/creator preview clips are unchanged.
+This is a constrained animation system, not a full-body dynamics simulation.
+Maximum ankle reach clamp error during the rough fast transition was ~9.3 cm;
+regular walking cases ~3 cm. Do not report mathematical zero-slip foot contact
+or final art acceptance. Broad stair/uneven-terrain and two-client replication
+are not covered by this pass. No downloaded models or new character geometry.
+
+9 October 2026 — land gait rejected / research redirect
+Noah reports all land locomotion is wrong. The above 8 October results describe
+that earlier checkpoint, not acceptance of today's walking. Current controller
+pace is 2.0 m/s walk and 3.6 m/s jog; the 4.5 / 8.5 figures above are historical.
+Further experiments improved contact checks but did not establish natural gait.
+Read docs/player-gait-research.txt before further motion changes: primary-source
+findings, code diagnosis, review order and the current verification boundary.
+
+9 October 2026 — longer walking strides, planted turns and upper-body momentum
+Noah asked for fuller steps, less crabbing through turns, a supporting foot
+throughout walking, and momentum in the upper body. He then said the motion was
+looking much better. Production movement was held at that checkpoint. A later
+mixed-input stress-test window was mistaken for the normal walking preview;
+that test has ended. --walk-preview now shows only normal walking/start/stop,
+with playback capped at 60 FPS. Announce stress-test windows before launching.
+
+Changes
+- Predict landing from the future pelvis position, including angular travel;
+  stop triggering premature pickup during an otherwise reachable forward step.
+  Normal walk remains 2.0 m/s, with about .83 m foot excursion instead of .68 m.
+  Reverse and deliberate side steps retain shorter anatomical reach.
+- Boot rotates around heel/forefoot contact; planted heading stays on the
+  support. Continuous weight transfer, modest pelvis rotation and opposing arms.
+- Walking transfers support before lifting the other foot, including recovery
+  and turning placements. Jogging flight and intentional jumps remain distinct.
+- Sharp changes of direction brake while the feet/body turn, then accelerate
+  along the new heading. Normal grounded travel is limited to a 25-degree cone
+  around the body. First-person deliberate lateral input remains available at
+  a controlled pace. The same rule applies on deck.
+- Torso reacts to support-relative acceleration and speed with a critically
+  damped lean; neck/head partially stabilize. Starting leans into effort,
+  braking counterbalances, and steady ship velocity does not fake walking.
+- Preserve fixed bone lengths, original geometry, support-local contacts,
+  deck-relative jumping, save contracts and existing NPC/creator clips.
+
+Verification
+- Forward/backward/both strafes/precision/jog on land and rough moving plane:
+  numerical contact/stride checks passed in gait-inertia-all-verified.log.
+  Final stronger torso impulse does not change the legs; final film run also
+  passed all 14 gait cases and land/deck corner checks. Its first torso assertion
+  read the idle pose before render-time IK; corrected the test to read the solve.
+- Corrected torso test passes: peak forward lean 6.88 degrees, steady 5.74,
+  braking -1.17, maximum pitch change .42 degrees/frame at 60 FPS. Zero
+  unsupported walking frames during starts/stops. Log gait-final-momentum-check.
+- Final plain walking preview passes: .831 m foot excursion, five pickups in
+  two seconds, zero simultaneous swinging feet, ~2.5 mm sole creep and ~5.1 mm
+  maximum sole-height error. Log gait-normal-walking-preview.log.
+- 90/-90/180-degree turns on land and rough deck: no sustained fast crabbing,
+  no simultaneous foot lifts, completes the requested heading within 1.1 degrees.
+- Mixed opposing inputs/circles/jumps: zero crossing frames, minimum ankle
+  clearance >11 cm, fixed joints, valid jump/landing on land and deck. These
+  numerical guards do not certify natural appearance of every rapid transition.
+- Imported rig/morph/coverage/save regression passes (42 bones).
+- Controller carry/jump/camera regression passed earlier in this pass; not rerun
+  after the last turning change. Final tests above use the actual controller.
+
+Evidence (all captures archived under Noah's required folder)
+C:/Users/noahs/Pictures/machinescreenshots/gait-1791566532-823/
+  normal-walk-start-stop.gif, normal-walk-cycle.gif, original PNGs and measurements
+C:/Users/noahs/Pictures/machinescreenshots/gait-1791566043-528/measurements.json
+C:/Users/noahs/Pictures/machinescreenshots/gait-1791566229-768/measurements.json
+C:/Users/noahs/Pictures/machinescreenshots/gait-1791566281-296/measurements.json
+The large film export in gait-1791566136-523 was interrupted; only its existing
+PNGs are evidence. Do not claim its missing movement images were inspected.
+Logs live in the task workspace work/ folder. Runtime IK at maximum combined
+morph, arbitrary uneven terrain/stairs and two-client motion still need review.
