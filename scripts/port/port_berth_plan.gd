@@ -429,7 +429,39 @@ static func _place_quays(
 			"lanes": ["dock", "crane", "cargo", "road"],
 			"seaward_clear_m": local_clear,
 		})
+	_resolve_loading_faces(out, size)
 	return out
+
+
+## A curved/short waterfront can compress snapped roots below their requested
+## comb spacing. Keep the existing piers and IDs, but put loading on the clear
+## side when the alternating side would place a ship inside its neighbour.
+static func _resolve_loading_faces(stations: Array, size: int) -> void:
+	var required_gap := PortSizing.design_hull_beam_m(size) + 5.0
+	for station: Dictionary in stations:
+		var preferred := float(station.get("berth_side", 1.0))
+		if _loading_face_gap(station, stations, preferred) >= required_gap:
+			continue
+		if _loading_face_gap(station, stations, -preferred) >= required_gap:
+			station["berth_side"] = -preferred
+
+
+static func _loading_face_gap(station: Dictionary, stations: Array, side: float) -> float:
+	var raw: Array = station.direction
+	var forward := Vector2(float(raw[0]),float(raw[1])).normalized()
+	# Same local +X as the visualizer's yaw atan2(direction.x, direction.y).
+	var across := Vector2(forward.y,-forward.x) * side
+	var root := Vector2(float(station.origin[0]),float(station.origin[1]))
+	var gap := INF
+	for neighbour: Dictionary in stations:
+		if str(neighbour.id) == str(station.id): continue
+		var delta := Vector2(float(neighbour.origin[0]),float(neighbour.origin[1])) - root
+		var lateral := delta.dot(across)
+		if lateral <= 0.0: continue
+		var start := delta.dot(forward)
+		if start >= float(station.length_m) or start + float(neighbour.length_m) <= 0.0: continue
+		gap = minf(gap, lateral - (float(station.width_m)+float(neighbour.width_m))*.5)
+	return gap
 
 
 static func _quay_list_contains_family(quay_list: Array, family: String) -> bool:

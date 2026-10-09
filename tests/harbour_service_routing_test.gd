@@ -7,6 +7,7 @@ class StagingReach extends QuayEquipmentJob:
 		return true
 
 func _test_harbourmaster_deployment() -> void:
+	_test_loading_faces()
 	var harbour := HarbourController.new()
 	harbour.setup("routing")
 	var slots: Array[QuayBerthSlot] = []
@@ -122,3 +123,24 @@ func _test_staging(ship: BoatBody, offer: Dictionary) -> void:
 		yard.clear_all()
 	harbour.unregister_equipment(equipment.equipment_id())
 	equipment.queue_free()
+
+func _test_loading_faces() -> void:
+	# Reproduced seed 424242 / port-10: the 72 m fish pier's alternating
+	# loading face pointed into a provisions pier only ~4 m beyond its edge.
+	var tight: Array = [
+		{"id":"containers","direction":[-.1472593,-.989098],"origin":[-.15758,-79.98505],"length_m":66.93,"width_m":36.,"berth_side":1.},
+		{"id":"fish","direction":[-.1472593,-.989098],"origin":[83.1945,-85.54586],"length_m":66.96,"width_m":72.,"berth_side":-1.},
+		{"id":"provisions","direction":[-.1472593,-.989098],"origin":[138.54575,-108.7027],"length_m":65.4,"width_m":36.,"berth_side":1.},
+	]
+	var before := tight.duplicate(true)
+	check(PortBerthPlan._loading_face_gap(tight[1],tight,-1.0) < 5.0, "fixture reproduces blocked fishing face")
+	PortBerthPlan._resolve_loading_faces(tight,3)
+	check(tight[1].berth_side == 1.0 and tight[2].berth_side == -1.0, "blocked loading faces must use open water")
+	for i in tight.size():
+		check(PortBerthPlan._loading_face_gap(tight[i],tight,float(tight[i].berth_side)) >= PortSizing.design_hull_beam_m(3)+5.0, "resolved berth faces have hull clearance")
+		var after: Dictionary = tight[i].duplicate(true)
+		after.berth_side = before[i].berth_side
+		check(after == before[i], "loading-face repair must preserve pier geometry and identity")
+	var resolved := tight.duplicate(true)
+	PortBerthPlan._resolve_loading_faces(tight,3)
+	check(tight == resolved, "loading-face resolution is stable")

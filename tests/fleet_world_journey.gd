@@ -272,6 +272,8 @@ func journey(entry: Dictionary) -> void:
 	var expected := slot.global_transform * slot.ship_dock_local(ship.get_half_beam_m())
 	check(absf(ship.global_basis.z.normalized().dot(expected.basis.z.normalized())) > .99, "ship lies along quay")
 	check(get_tree().get_nodes_in_group(PlayerVessel.GROUP).size() == 1, "one active vessel")
+	await get_tree().physics_frame
+	check_spawn_clearance()
 	await capture("deployed")
 	for trip in cycles:
 		if fishing:
@@ -463,3 +465,25 @@ func fish_trip(record: Dictionary, mc: MooringComponent, trip: int) -> bool:
 	check(PlayerSession.data.marks > marks, "fish landing pays captain")
 	await capture("landed-"+str(trip))
 	return true
+
+
+func check_spawn_clearance() -> void:
+	# Probe the hull's middle at deck level, excluding the vessel's own fittings.
+	# A berth-face distance alone cannot detect an adjacent pad crossing the hull.
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(ship.beam_m * .8, 1.0, ship.length_m * .75)
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = ship.global_transform * Transform3D(Basis.IDENTITY,Vector3(0,ship.depth_m-.5,0))
+	query.collision_mask = 1
+	var excluded: Array[RID] = [ship.get_rid()]
+	for node in ship.find_children("*","CollisionObject3D",true,false): excluded.append(node.get_rid())
+	query.exclude = excluded
+	var obstructions: Array = []
+	for hit in get_world_3d().direct_space_state.intersect_shape(query,32):
+		var collider := hit.collider as Node
+		if collider != null: obstructions.append(str(collider.get_path()))
+	if not obstructions.is_empty():
+		var plot := ship.get_parent() as PortPlot
+		current["obstructed_port_plan"] = plot._layout_graph.initial_attributes.get("berth_plan",{})
+	check(obstructions.is_empty(), "hull clears neighbouring port collisions", {"obstructions":obstructions})

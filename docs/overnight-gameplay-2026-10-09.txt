@@ -16,8 +16,8 @@ Order
 2. Inspect full gameplay loop with real production services: purchase/deploy,
    boarding, freight booking/cancellation, load, moor, unload/pay, save/reload.
    Read every report and fix demonstrated failures. Keep tests lean and fast.
-3. Verify two-client authority for cabin doors/mooring and relevant new vessel
-   interactions where feasible; record honest limits. Avoid parallel services.
+3. Noah said at approximately 21:17 local on 9 October to leave multiplayer
+   alone. Do not resume multiplayer implementation or network tests.
 4. Review performance/visual fitout in actual play; improve concrete deficiencies
    found during these journeys rather than broad rewrites or gratuitous changes.
 At cutoff record pushed commits, checks, screenshots and remaining gaps here.
@@ -120,3 +120,69 @@ wrong for the 98,000 Northline 40. Fund that test through an explicit test ledge
 credit and retain the insufficient-funds case; do not lower the ship's price or
 increase starting capital to make a test pass. Do not use remote_realtime_join_smoke
 as an isolated test: it targets the production server and an existing captain.
+
+9 October approximately 21:25 local — storage lifecycle and blocked fish berth
+Extended the existing fleet_world_journey locally with --lifecycle-only. It buys
+through the actual shipwright service (explicit 200,000 test ledger capital),
+checks out-of-range rejection, canonical debit, complete fitout and recovery
+archive, retries without double charging, deploys, stores/releases occupancy,
+writes a real scratch captain file, reloads and redeploys the same UUID/design.
+Both save roots are redirected before any writes. Captain saves are untouched.
+All five catalog vessels passed 190 checks in 47.13 s at 1600x900:
+fleet-journeys-1791572853-557/report.json; captures reviewed for each vessel.
+Initial lifecycle failures were harness defects: wrong deploy payload key, then
+checking deferred mooring too early. Corrected; no production purchasing or
+storage change was needed. voyage_ui_test now funds expensive stock explicitly,
+retains insufficient-funds rejection and avoids indexing an empty purchase;
+46 checks pass (rendered). This test is preexisting untracked UI work.
+
+Visual review exposed a real issue the old berth-face check missed: seed 424242,
+port-10's fishing berth placed the trawler inside the neighbouring provisions
+pier. Reproduced collision with QuayPier/PierCollision, reports 1791573251-752
+and 1791573364-101. A separate initial probe run 1791573197-455 had a harness
+property error and is explicitly marked invalid_test_runtime_error, not a pass.
+The requested 82 m comb spacing became about 58 m after snapping onto the short
+curved face. A 72 m fish pier beside a 36 m provisions pier left only ~4 m of
+water on the alternating loading side. PortBerthPlan now checks actual neighbour
+edges and longitudinal overlap, switching to the opposite loading face only
+when it offers design-beam clearance plus 5 m. Pier geometry, port positions,
+IDs, terrain and saved vessel records stay unchanged. Bollards, equipment and
+ship placement all use that same resolved face. This does not claim to repair a
+site that has insufficient clearance on both sides.
+
+Added the measured case to harbour_service_routing_test; all routing, deployment,
+doors and staging checks pass. The older port_trade_profile_test stopped at its
+preexisting obsolete apron service-prop assertion (line 142), before the new
+case; no unrelated production decoration was changed to satisfy it. Its hung
+test process was stopped. The focused case was moved to the maintained routing
+test. fleet_world_journey now probes the middle hull volume against neighbouring
+port collisions, excluding its own fittings. Final rendered all-stock lifecycle
+passes 195 checks, zero failures and no engine errors/warnings:
+fleet-journeys-1791573589-5/report.json. Corrected trawler image:
+fishing_trawler-stored-reloaded-redeployed.png. A complete trawler trip after the
+face change passes 26 checks in 19.03 s, including destination lines, physical
+500 kg landing and 120 marks payment: fleet-journeys-1791573667-595/report.json.
+Inspected the new berth and unloading images. Captures are all under
+C:/Users/noahs/Pictures/machinescreenshots/ with these unique folder names.
+
+Scope: lifecycle-only purchase/storage harness additions and voyage_ui_test
+funding remain in the working copy beside the preexisting uncommitted UI/service
+rebuild they require. Do not sweep that unrelated rebuild into a commit. The
+scoped shipping change is the loading-face fix, its routing regression, and the
+shared world-journey collision check. New local baseline of the journey before
+this batch is work/fleet-before-lifecycle.gd.
+
+Multiplayer stopped at Noah's explicit request. Before that request, the existing
+22-scenario service suite passed on a disposable loopback Go server/PostgreSQL
+instance (work/mp-night-isolated-report.json). It used independent in-process
+clients, not two rendered game processes. A first run could not bootstrap under
+the playtest guard; its remaining 21 scenarios were skipped, not gameplay bugs.
+Temporary network harness/guard changes have been removed; no multiplayer source
+changes are included. Test server process and auto-remove database container are
+stopped; user's running server on 8080 was untouched. Automation prompt updated
+to exclude multiplayer and preserve the 08:00 cutoff/30-minute cadence.
+
+Next single-player work: inspect real boarding and freight cancellation/rebooking
+at varied generated ports, especially layout pockets and equipment reach. Northline
+construction, forty-unit delivery, accepted movement and ocean need no repeat pass.
+Do not restart network work. Preserve the unrelated UI work and all captain saves.
