@@ -32,6 +32,7 @@ uniform vec3  cloud_light     : source_color          = vec3(1.00, 0.98, 0.96);
 uniform vec3  cloud_dark      : source_color          = vec3(0.44, 0.46, 0.52);
 uniform float cloud_altitude  : hint_range(0.0, 1.0) = 0.28;
 uniform float cloud_thickness : hint_range(0.0, 1.0) = 0.22;
+uniform float rain_amount : hint_range(0.0, 1.0) = 0.0;
 
 // --- Storm darkening ---
 uniform float storm_intensity : hint_range(0.0, 1.0) = 0.0;
@@ -118,7 +119,11 @@ float volume_density(vec3 p, float footprint) {
     float rounded_top = h * h * .12;
     float shape = broad - detail * .20 - rounded_top;
     float envelope = smoothstep(0.0,.12,h) * (1.0-smoothstep(.7,1.0,h));
-    return smoothstep(threshold, threshold+.11, shape) * envelope;
+    float cumulus = smoothstep(threshold, threshold+.11, shape);
+    // Steady precipitation has a connected lower cloud deck, not isolated
+    // fair-weather puffs. Keep broad density variation within the rain bank.
+    float rain_deck = smoothstep(.10, .55, rain_amount) * (.035 + .22 * smoothstep(.38,.68,broad));
+    return max(cumulus, rain_deck) * envelope;
 }
 
 vec4 cloud_layer(vec3 dir, vec2 screen_uv) {
@@ -148,7 +153,7 @@ vec4 cloud_layer(vec3 dir, vec2 screen_uv) {
             float opacity = 1.0-exp(-density*step_length*18.0);
             float h = clamp((p.y-base)/(top-base),0.0,1.0);
             vec3 ambient = mix(cloud_dark,cloud_light,.08+h*.3);
-            vec3 direct = mix(moon_color*.045, sun_color*.65,daylight_factor);
+            vec3 direct = mix(moon_color*.045, sun_color*.65,daylight_factor) * mix(1.0,.4,rain_amount);
             vec3 light = ambient*.65 + direct*illumination*(.65+sun_facing*.6);
             // Aerial perspective softens remote banks without outlining them.
             light = mix(light,sky_gradient(dir),1.0-exp(-max(distance-3.0,0.0)*.13));

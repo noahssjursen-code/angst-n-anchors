@@ -9,6 +9,7 @@ func _run() -> void:
 	_test_weighted_pairings()
 	_test_determinism_and_continuity()
 	_test_decoupled_dimensions()
+	_test_rain_cloud_support()
 	_test_lightning_events()
 	_test_chart_and_route_parity()
 	_test_weather_version_context()
@@ -30,8 +31,8 @@ func _test_weighted_pairings() -> void:
 			var convection := str(ids.get("convection", "none"))
 			var wind := str(ids.get("wind", ""))
 			var fog := str(ids.get("fog", ""))
-			if sky == "clear":
-				assert(rain != "heavy_rain")
+			if sky in ["clear", "light_cloud"]:
+				assert(rain == "none", "fair sky must not select rain")
 				assert(convection == "none")
 			if convection != "none":
 				assert(sky in ["broken", "overcast"])
@@ -102,6 +103,41 @@ func _test_decoupled_dimensions() -> void:
 	assert(absf(harbour.precipitation - base.precipitation) < 0.05)
 	assert(absf(harbour.cloud_cover - base.cloud_cover) < 0.25)
 	assert(absf(harbour.visibility - base.visibility) < 0.2)
+
+
+func _test_rain_cloud_support() -> void:
+	# Presentation must stay coherent through arrival/departure of a rain cell,
+	# including manual invalid combinations and repeated smoothing.
+	var lighting := WeatherLightingState.new()
+	var clear := WeatherState.new()
+	clear.cloud_cover = 0.08
+	clear.precipitation = 0.8
+	lighting.apply_weather_state(clear)
+	assert(is_zero_approx(lighting.rain_amount))
+	var wet := WeatherState.new()
+	wet.cloud_cover = 0.9
+	wet.precipitation = 0.8
+	for iteration in 90:
+		lighting.blend_towards(wet if iteration < 45 else clear, 0.08)
+		assert(lighting.precipitation <= clampf((lighting.cloud_cover - 0.4) / 0.5, 0.0, 1.0) + 0.00001)
+	lighting.free()
+	WeatherField.world_seed = 44331
+	WeatherFrontField.initialize(44331)
+	var dry_samples := 0
+	var wet_samples := 0
+	for hour in [0.0, 7.0, 13.9, 14.1, 31.0]:
+		for x in range(-10, 11):
+			for z in range(-10, 11):
+				var sample := WeatherComposer.sample_chart(Vector3(x * 1733.0, 0.0, z * 2117.0), hour)
+				assert(sample.precipitation <= clampf((sample.cloud_cover - 0.4) / 0.5, 0.0, 1.0) + 0.00001)
+				if sample.cloud_cover < 0.4:
+					assert(is_zero_approx(sample.precipitation))
+				if sample.precipitation > 0.45:
+					wet_samples += 1
+				if sample.precipitation < 0.01:
+					dry_samples += 1
+	assert(wet_samples > 0 and dry_samples > 0, "coherence must retain both rain and dry weather")
+	print("Rain support sweep: 2205 samples, %s wet / %s dry" % [wet_samples, dry_samples])
 
 
 func _test_lightning_events() -> void:

@@ -656,10 +656,10 @@ func _apply_weather_lighting() -> void:
 	var direct_light := float(solar["direct_light"])
 	var fog_t     := 1.0 - vis
 
-	_apply_sun(solar, daylight, direct_light, cloud, storm)
+	_apply_sun(solar, daylight, direct_light, cloud, storm, rain)
 	_apply_exposure(daylight, cloud, storm, fog_t)
 	_apply_fog(solar, fog_t, daylight, cloud, storm)
-	_apply_sky_shader(solar, daylight, cloud, storm)
+	_apply_sky_shader(solar, daylight, cloud, storm, rain)
 	_apply_ocean_shader(solar, daylight, cloud, rain, sea, air_wind, storm, fog_t)
 	_apply_screen_effects(daylight, cloud, rain, storm, fog_t)
 	Palette.set_wetness(smoothstep(0.08, 0.72, rain))
@@ -673,16 +673,17 @@ func _apply_weather_lighting() -> void:
 		_fft_system.sync_weather(sea, storm, WaveSurface.short_wave_factor, wind_angle)
 
 
-func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: float, storm: float) -> void:
+func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: float, storm: float, rain: float = 0.0) -> void:
 	var sun_dir: Vector3 = solar["sun_direction"]
 	var moon_dir: Vector3 = solar["moon_direction"]
 	var low_sun := _low_sun_factor(solar)
-	# Overcast removes hard sunlight, but retaining a broad key keeps hulls,
-	# terrain and cranes three-dimensional instead of uniformly grey.
+	# Rain banks attenuate the hard key. The separate sky fill keeps shaded
+	# surfaces readable without casting sunny shadows through heavy overcast.
 	var sun_energy := (
 		1.70 * direct_light
 		* lerpf(1.0, 0.50, cloud)
 		* lerpf(1.0, 0.78, storm)
+		* lerpf(1.0, 0.28, smoothstep(0.05, 0.65, rain))
 	)
 	if _sun != null:
 		# Sunrise +X (east), noon +Z (south), sunset −X (west).
@@ -716,6 +717,7 @@ func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: 
 			lerpf(0.14, 0.36, daylight * daylight)
 			* lerpf(1.0, 0.94, cloud)
 			* lerpf(1.0, 0.92, storm)
+			* lerpf(1.0, 1.40, rain * daylight)
 		)
 		_environment.ambient_light_color = (
 			Color(0.78, 0.86, 1.0)
@@ -781,7 +783,7 @@ func _apply_fog(solar: Dictionary, fog_t: float, daylight: float, cloud: float, 
 
 
 
-func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: float) -> void:
+func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: float, rain: float = 0.0) -> void:
 	if _sky_shader_material == null:
 		return
 	var low_sun := _low_sun_factor(solar)
@@ -813,6 +815,8 @@ func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: 
 		.lerp(Color(0.78, 0.45, 0.30), low_sun * 0.30)
 	)
 	var cloud_dark := Color(0.045, 0.055, 0.075).lerp(Color(0.31, 0.34, 0.39), daylight)
+	cloud_lit = cloud_lit.lerp(Color(0.06, 0.075, 0.10).lerp(Color(0.48, 0.52, 0.56), daylight), rain * 0.70)
+	cloud_dark = cloud_dark.lerp(Color(0.025, 0.03, 0.045).lerp(Color(0.19, 0.22, 0.25), daylight), rain)
 
 	# Inverse of scripted daylight curve — brightest stars at full night; clouds/storm occlude Milky-Way fantasies cheaply.
 	var star_vis := pow(clampf(1.0 - daylight, 0.0, 1.0), 0.78)
@@ -829,6 +833,9 @@ func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: 
 	_sky_shader_material.set_shader_parameter("cloud_light",       Vector3(cloud_lit.r, cloud_lit.g, cloud_lit.b))
 	_sky_shader_material.set_shader_parameter("cloud_dark",        Vector3(cloud_dark.r, cloud_dark.g, cloud_dark.b))
 	_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
+	_sky_shader_material.set_shader_parameter("rain_amount", rain)
+	_sky_shader_material.set_shader_parameter("cloud_altitude", lerpf(0.28, 0.03, rain))
+	_sky_shader_material.set_shader_parameter("cloud_thickness", lerpf(0.22, 0.78, rain))
 	_sky_shader_material.set_shader_parameter("sun_color",         Vector3(sun_col.r,  sun_col.g,  sun_col.b))
 	_sky_shader_material.set_shader_parameter("star_visibility",   clampf(star_vis, 0.0, 1.0))
 	_sky_shader_material.set_shader_parameter("daylight_factor",   daylight)

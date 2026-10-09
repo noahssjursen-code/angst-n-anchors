@@ -43,13 +43,14 @@
   },
   "compatibility": {
     "sky|precipitation": {
-      "clear|drizzle": 0.05,
+      "clear|drizzle": 0.0,
       "clear|rain": 0.0,
       "clear|heavy_rain": 0.0,
-      "light_cloud|rain": 0.25,
-      "light_cloud|heavy_rain": 0.04,
+      "light_cloud|drizzle": 0.0,
+      "light_cloud|rain": 0.0,
+      "light_cloud|heavy_rain": 0.0,
       "broken|rain": 1.3,
-      "broken|heavy_rain": 0.75,
+      "broken|heavy_rain": 0.0,
       "overcast|drizzle": 1.35,
       "overcast|rain": 1.7,
       "overcast|heavy_rain": 1.55

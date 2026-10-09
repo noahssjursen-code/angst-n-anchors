@@ -627,3 +627,44 @@ approach claim. Existing ocean/locomotion and multiplayer remain untouched.
   RainField currently renders fixed, unshaded42cm boxes with an excessive wind
   ratio. Inspect/update coherence, sky lighting and actual rain appearance.
   Then resume remaining ferry itinerary/persistence/stock and wider atmosphere.
+Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
+- Corrected the weather compatibility table: clear/light cloud now select dry,
+  broken cloud cannot select heavy rain. Shared idempotent cloud-support cap is
+  applied after cell blending, fronts and presentation smoothing. Dry overcast,
+  dry gale and fog without rain remain possible. No ocean or locomotion edits.
+- Rain uses lit, soft alpha quads aligned to its actual fall/wind velocity;
+  terminal fall speed, physical wind drift, near-camera fade and depth softening
+  replace fullbright rigid boxes. 6000-drop ceiling is 12000 triangles versus
+  the previous 1800 boxes/21600 triangles. Does not add indoor roof occlusion or
+  surface splash simulation; those are honest remaining VFX limitations.
+- Precipitating skies acquire a lower/deeper rain bank, darker undersides and
+  reduced direct sunlight, with more diffuse ambient support. First candidate
+  made a uniform grey dome; rejected and adjusted to retain broad bank variation.
+- WeatherComposer contract passes: 2205 field/front samples (275 wet/1196 dry),
+  invalid sunny rain, fade-in/out, deterministic/chart parity and independent
+  fog/wind/convection checks. WorldLightingGrade passes. Logs in workspace work/
+  rain-contract.log and rain-lighting-contract.log were read.
+- Actual 1600x900 production-renderer/model review: before rain-1791589064-6884;
+  rejected first after rain-1791589229-7356; refined rain-1791589320-5944;
+  final runtime density rain-1791589394-5793. All archived under machinescreenshots.
+  Inspected sunny/cloudy dry, drizzle, rain, wind-driven rain and night lamp
+  response. Final report verifies emission off for dry/invalid sunny states.
+  Wall-clock median16.65-16.68ms/p9516.86-17.03ms at vsync60; no GPU savings claim.
+  Earlier review incorrectly sampled fixed simulation delta and restart() forced
+  emission true; both review errors corrected before final captures/report.
+  Existing showcase shutdown RID/ObjectDB leaks occur both before/after; no
+  runtime script/shader failures. Do not call these runs entirely error-free.
+- Reference: Met Office low/mid-level cloud and rain/showers descriptions:
+  https://weather.metoffice.gov.uk/learn-about/weather/types-of-weather/clouds/low-level-clouds
+  https://weather.metoffice.gov.uk/learn-about/weather/types-of-weather/rain/rain-and-showers
+- User added inhabited coastal scenery (houses/towns) and continuous shoreline
+  cliff inspection. Automation updated to retain these priorities. The ledge
+  is the previously identified shelf/backshore height discontinuity (8-26m),
+  not low ocean height. Investigate a narrow continuous join while retaining
+  deterministic port grading/identities and captain saves; test actual ports,
+  forest roots and collision. Do not raise sea level or reroll existing worlds.
+  Then finish remaining ferry navigation/stock and settlements. Riksantikvaren
+  settlement references: https://riksantikvaren.no/kystens-kulturmiljo/naust-og-sjohus-sjoen-som-ressurs/
+  and https://riksantikvaren.no/eksempelsamling/by-og-stedsutvikling/gjenoppbygging-av-naust-i-stekka/
+- Correction: prior haze entry's01:39 heading was approximate; haze commit was
+  already pushed/verified at01:32. No change to the08:00 Oslo overnight cutoff.

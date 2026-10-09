@@ -127,7 +127,7 @@ var cloud_coverage: float:
 
 ## Rain visual amount 0–1: only appears past the first 30% precipitation.
 var rain_amount: float:
-	get: return smoothstep(0.18, 1.0, precipitation)
+	get: return smoothstep(0.18, 1.0, WeatherSample.supported_precipitation(precipitation, cloud_cover))
 
 ## Thunder / lightning 0–1: driven by the *combined* storminess of the
 ## weather. Heavy rain alone (calm-air thunderstorm) ramps it up, but a
@@ -253,7 +253,7 @@ func apply_weather_state(next: WeatherState, emit_epsilon: float = 0.0) -> void:
 		return
 	_suppress_emit      = true
 	_suppress_wave_sync = true
-	precipitation  = next.precipitation
+	precipitation  = WeatherSample.supported_precipitation(next.precipitation, next.cloud_cover)
 	wind_force     = next.wind_force
 	wind_speed_ms  = next.wind_speed_ms
 	visibility     = next.visibility
