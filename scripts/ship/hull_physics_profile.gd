@@ -15,6 +15,10 @@ extends Resource
 @export_range(5, 32, 1) var station_count: int = 10
 @export var water_density: float = 1025.0
 @export var hull_form: Dictionary = {}
+## Zero for a monohull. Twin hulls share one mass contract, with separate lift
+## strips and an aggregate station table used only for equilibrium/mass queries.
+@export var demihull_beam_m: float = 0.0
+@export var demihull_spacing_m: float = 0.0
 
 @export_group("Mass distribution")
 @export var hull_center_of_mass: Vector3 = Vector3.ZERO
@@ -82,15 +86,33 @@ func validate() -> PackedStringArray:
 
 
 func make_stations() -> HullStations:
+	if demihull_beam_m > 0.0:
+		var aggregate := make_demihull_stations()
+		for station: Dictionary in aggregate.stations:
+			for i in station.section.size():
+				station.section[i].y *= 2.0
+		for field in ["displacement_volume_m3", "design_displacement_m3"]:
+			aggregate.set(field, float(aggregate.get(field)) * 2.0)
+		aggregate.beam_m = beam_m
+		return aggregate
+	return _stations_for(beam_m, design_displacement_t)
+
+
+func make_demihull_stations() -> HullStations:
+	assert(demihull_beam_m > 0.0 and demihull_spacing_m > demihull_beam_m)
+	return _stations_for(demihull_beam_m, design_displacement_t * 0.5)
+
+
+func _stations_for(section_beam: float, displacement: float) -> HullStations:
 	var errors := validate()
 	assert(errors.is_empty(), "Invalid HullPhysicsProfile: %s" % "; ".join(errors))
 	if not hull_form.is_empty():
 		return HullStations.from_form(
 			length_m,
-			beam_m,
+			section_beam,
 			depth_m,
 			design_draft_m,
-			design_displacement_t,
+			displacement,
 			hull_form,
 			water_density,
 			length_m * bow_taper_fraction,
@@ -98,10 +120,10 @@ func make_stations() -> HullStations:
 		)
 	return HullStations.from_design(
 		length_m,
-		beam_m,
+		section_beam,
 		depth_m,
 		design_draft_m,
-		design_displacement_t,
+		displacement,
 		water_density,
 		bow_taper_fraction,
 		station_count

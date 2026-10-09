@@ -2,6 +2,7 @@ class_name ImportedHullCatalog
 extends RefCounted
 ## Authoring/playtest platforms only; not the owned-fleet hull registry.
 const ENTRIES := {
+	"catamaran_36x11": {"label":"36.5 × 11 m catamaran", "loa_m":36.5, "beam_m":11.0, "depth_m":3.2, "draft_m":1.55, "displacement_t":160.0, "demihull_beam_m":2.4, "demihull_spacing_m":8.6, "split_hull_collision":true, "default_shaft_power_kw":3600.0, "fuel_l":6000.0, "mounts":"mounts_cat36.json", "rising":false, "mooring_inset":4.80, "mooring_guide":5.34, "mooring_stations":[-14.0,16.0], "reference_z":15.0, "material_context":"composite_ferry", "angular_damping":.25, "physics":{"harbour_drag_rate":.035,"hull_speed_fn":.72,"wave_making_peak_coeff":.0021,"frictional_coeff":.0025,"form_factor":1.06,"lateral_drag_coeff":2.4,"yaw_drag_coeff":8.0,"hull_center_of_mass":Vector3(0,2.4,0),"propeller_position":Vector3(0,1.05,18.50),"rudder_position":Vector3(0,1.65,19.05),"rudder_area_m2":2.0,"max_rudder_angle_deg":25.0,"tunnel_thruster_force_n":24000.0,"wind_frontal_area_m2":55.0,"wind_lateral_area_m2":150.0,"wind_center_of_effort":Vector3(0,4.5,0)}},
 	"hull_88x14": {"label":"88 × 14 m", "loa_m":88.0, "beam_m":14.0, "depth_m":5.6, "draft_m":3.3, "displacement_t":1850.0, "form":"full_bodied", "default_shaft_power_kw":1500.0, "fuel_l":26000.0, "mounts":"mounts_88m.json", "rising":false, "mooring_inset":6.30, "mooring_guide":6.84, "mooring_stations":[-31.0,42.0], "reference_z":33.5, "container_beds":{"lanes":[-4.5,-1.5,1.5,4.5], "first_bay":-29.25, "bay_pitch":6.5, "bay_count":10}, "angular_damping":.22, "physics":{"harbour_drag_rate":.012,"hull_speed_fn":.30,"wave_making_peak_coeff":.012, "propeller_position":Vector3(0,2,42.42), "rudder_position":Vector3(0,2.3,43.78), "rudder_area_m2":5.6, "tunnel_thruster_force_n":110000.0, "wind_frontal_area_m2":110.0, "wind_lateral_area_m2":360.0, "wind_center_of_effort":Vector3(0,7,3)}},
 	"trawler_hull_14m": {"label":"14 × 5 m", "loa_m":14.0, "beam_m":5.0, "depth_m":2.92, "draft_m":1.6, "displacement_t":58.0, "default_shaft_power_kw":300.0, "fuel_l":600.0, "mounts":"mounts_14m.json", "rising":true, "mooring_inset":1.95, "mooring_guide":2.34, "mooring_stations":[-2.8,6.0], "reference_z":2.4},
 	"hull_24x8": {"label":"24 × 8 m", "loa_m":24.0, "beam_m":8.0, "depth_m":3.6, "draft_m":2.0, "displacement_t":180.0, "default_shaft_power_kw":700.0, "fuel_l":1800.0, "mounts":"mounts_24m.json", "rising":false, "mooring_inset":3.45, "mooring_guide":3.84, "mooring_stations":[-5.1,10.8], "reference_z":7.0, "coaming":"hold_coaming_5x8", "hatch":"hatch_cover_5x4", "hatch_stations":[-2.0,2.0]},
@@ -21,7 +22,7 @@ static func outline(id: String) -> Dictionary:
 static func instantiate(id: String) -> Node3D:
 	var hull := (load(directory(id) + id + ".glb") as PackedScene).instantiate() as Node3D
 	hull.add_child(ShipDriveVisual.new(ENTRIES[id]["mounts"]))
-	SurfaceMaterialLibrary.apply(hull, "hull")
+	SurfaceMaterialLibrary.apply(hull, str(ENTRIES[id].get("material_context", "hull")))
 	return hull
 
 static func make_grid(id: String) -> DeckGrid:

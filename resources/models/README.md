@@ -1,5 +1,41 @@
 # Imported 3D models
 
+## Coastal Express passenger ferry — construction in progress (9 October 2026)
+
+`examples/coastal_express_recipe.json` is the editable first construction of a
+36.5 × 11 m catamaran, with 240 authored passenger-seat sockets, raised bridge,
+glazed saloon, bow ramp, luggage racks and two shaft/rudder assemblies. It is
+**not yet sale-ready stock or a working passenger service**. The research and
+remaining build order are in `docs/passenger-ferry-research-2026-10-09.txt` and
+`docs/overnight-gameplay-2026-10-09.txt`. This is an original arrangement, not a
+claim to reproduce Fjordbris's exact machinery or certified passenger capacity.
+
+`_source/coastal_express/build_ferry.py`, `build_terminal.py` and `arrangement.py`
+produce separate `.blend`/`.glb` modules and the recipe. The terminal is an
+isolated pile-supported pier with an 18 × 9 m waiting room, canopy, seating and
+information pylons; generated ports are unchanged. All surfaces reuse approved
+maps. The new `composite_enamel` finish uses Paint004 without steel corrosion.
+Cabin paint, hull regions and seat upholstery remain independently recolourable.
+
+The imported physics profile now supports two offset buoyancy strips with a
+matching aggregate displacement table for spawn/equilibrium. Split convex hull
+collision leaves the tunnel open; the existing walking mesh handles the deck.
+The original two-engine game package has 3600 kW total power and one shared
+throttle, with both shafts/rudders presented from existing control state.
+Independent differential-thrust control is not implemented. Monohulls retain
+their existing one-strip/one-shaft path.
+
+Review: `scenes/showcases/coastal_express_showcase.tscn -- --shipyard-playtest
+--capture` archives eight actual Godot views. `tests/coastal_express_test.tscn`
+checks the recipe, twin-hull volume/collision, flat-water handling and retained
+monohull contract. Add `--editor-roundtrip` for actual Shipyard save/reload;
+add `--access` in a rendered run for real-player pier/ramp/door/aisle/stair access.
+Use isolated runs; do not overwrite captain data or add this to stock prematurely.
+
+Outstanding: wave-following ramp deployment and berth interlock, side boarding,
+toilets/kiosk and final interior detail, nighttime fixtures, passenger manifests,
+fare settlement, route/terminal integration and saved voyage restoration.
+
 ## Northline 40 container feeder (9 October 2026)
 
 `resources/data/vessels/prebuilt/container_feeder_40.json` is an editable format-3

@@ -8,9 +8,16 @@ var moving_colliders: Array[Dictionary] = []
 var assembler := ImportedShipPartsEditor.new()
 var engine_visual: Node3D
 var engine_coupling: Node3D
+var engine_couplings: Array[Node] = []
 var gangway: ShipGangway
 
 func configure(snapshot: Dictionary) -> void:
+	# The assembly helper is a Node. Give it a lifetime owner even when this
+	# vessel is created/freed outside the tree (previews and validation).
+	if assembler.get_parent() == null:
+		assembler.name = "PartsAssembler"
+		assembler.process_mode = Node.PROCESS_MODE_DISABLED
+		add_child(assembler)
 	draft = snapshot.duplicate(true)
 	name = "PlaytestBoat"
 	mesh_data_path = ""
@@ -37,6 +44,8 @@ func configure(snapshot: Dictionary) -> void:
 	physics_profile.wave_making_peak_coeff = {"trawler_hull_14m":.011,"hull_24x8":.007,"hull_32x10":.0065}.get(hull_id, .0065)
 	for property: String in platform.get("physics", {}):
 		physics_profile.set(property, platform.physics[property])
+	if physics_profile.demihull_beam_m > 0.0:
+		physics_profile.calibrate_longitudinal_mass_center()
 	angular_damp_coeff = float(platform.get("angular_damping", .9))
 	process_physics_priority = -10
 	length_m = platform.loa_m
@@ -54,6 +63,21 @@ func configure(snapshot: Dictionary) -> void:
 	ModelPaint.apply(hull, snapshot.get("hull_colors", {}))
 	add_child(hull)
 	_add_systems(physics_profile, hull_stations, length_m, depth_m, displacement_t)
+	if physics_profile.demihull_beam_m > 0.0:
+		var demi := physics_profile.make_demihull_stations()
+		var port := get_node("StripBuoyancyComponent") as StripBuoyancyComponent
+		port.hull_stations = demi
+		port.hull_center_x_m = -physics_profile.demihull_spacing_m * 0.5
+		port.damping_mass_fraction = 0.5
+		var starboard := StripBuoyancyComponent.new()
+		starboard.name = "StripBuoyancyStarboard"
+		starboard.hull_stations = demi
+		starboard.hull_center_x_m = -port.hull_center_x_m
+		starboard.damping_mass_fraction = 0.5
+		add_child(starboard)
+		var hydro := get_node("HydrodynamicsComponent") as HydrodynamicsComponent
+		hydro.hull_stations = demi
+		hydro.wetted_area_multiplier = 2.0
 	_add_mooring_fittings(hull_id, float(ImportedHullCatalog.outline(hull_id).deck_y))
 	_assemble_parts()
 	gangway = ShipGangway.new()
@@ -70,18 +94,25 @@ func configure(snapshot: Dictionary) -> void:
 	camera.follow_height = length_m * .64
 	camera.min_distance = 4.0
 	camera.look_height_offset = 3.5
-	# Dynamic hull uses a convex shape; walking uses the actual imported triangles below.
-	var hull_points := PackedVector3Array()
+	# Authored collision groups keep a catamaran tunnel open. Existing monohulls
+	# retain their single convex; walking still uses imported triangles below.
+	var groups: Dictionary = {}
 	for mesh: MeshInstance3D in hull.find_children("*", "MeshInstance3D", true, false):
 		if mesh.has_meta("stern_gear_visual"): continue
+		var group := "Hull"
+		if platform.get("split_hull_collision", false):
+			group = str(mesh.name).get_slice("__", 0)
+		if not groups.has(group): groups[group] = PackedVector3Array()
 		var transform := _relative_transform(mesh)
 		for point in assembler._deformed_faces(mesh):
-			hull_points.append(transform * point)
-	var shape := ConvexPolygonShape3D.new()
-	shape.points = hull_points
-	var collision := CollisionShape3D.new()
-	collision.shape = shape
-	add_child(collision)
+			groups[group].append(transform * point)
+	for group: String in groups:
+		var shape := ConvexPolygonShape3D.new()
+		shape.points = groups[group]
+		var collision := CollisionShape3D.new()
+		collision.name = "HullCollision" + group
+		collision.shape = shape
+		add_child(collision)
 
 func deck_grid() -> DeckGrid:
 	return ImportedHullCatalog.make_grid(_hull_id)
@@ -97,12 +128,14 @@ func _install_engine() -> void:
 	engine_visual.position = MarineEngineCatalog.MOUNTS[_hull_id]
 	add_child(engine_visual)
 	engine_coupling = engine_visual.find_child("CouplingRotor",true,false)
+	engine_couplings = engine_visual.find_children("CouplingRotor", "Node3D", true, false)
 	(get_node("HullVisual/DriveGear") as ShipDriveVisual).max_rpm = float(spec.shaft_rpm)
 
 func _process(delta: float) -> void:
 	if not is_instance_valid(engine_coupling): return
 	var gear := get_node("HullVisual/DriveGear") as ShipDriveVisual
-	engine_coupling.rotation.z = wrapf(engine_coupling.rotation.z+gear.signed_rpm*TAU/60.0*delta,-PI,PI)
+	for coupling: Node3D in engine_couplings:
+		coupling.rotation.z = wrapf(coupling.rotation.z+gear.signed_rpm*TAU/60.0*delta,-PI,PI)
 
 func apply_brick_layout(layout: Dictionary) -> void:
 	if not ImportedVesselLayout.valid(layout, _hull_id): return

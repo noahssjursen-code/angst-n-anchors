@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "hull": "catamaran_36x11",
+  "units": "metres",
+  "visual_max_rpm": 420,
+  "max_rudder_degrees": 25,
+  "assets": {
+    "propeller": "ferry_propeller_1450"
+  },
+  "shafts": [
+    {
+      "support": [
+        -4.3,
+        1.05,
+        18.0
+      ],
+      "propeller": [
+        -4.3,
+        1.05,
+        18.5
+      ],
+      "rudder": [
+        -4.3,
+        1.65,
+        19.05
+      ]
+    },
+    {
+      "support": [
+        4.3,
+        1.05,
+        18.0
+      ],
+      "propeller": [
+        4.3,
+        1.05,
+        18.5
+      ],
+      "rudder": [
+        4.3,
+        1.65,
+        19.05
+      ]
+    }
+  ]
+}

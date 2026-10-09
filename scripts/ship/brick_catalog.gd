@@ -6,6 +6,13 @@ static var _imported: Dictionary = {}
 
 static func imported_entries() -> Dictionary:
 	if _imported.is_empty():
+		var ferry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/parts/passenger_ferry/manifest.json"))
+		for raw: Dictionary in ferry.assets:
+			var entry := raw.duplicate(true)
+			entry.display = str(entry.id).replace("_", " ").capitalize()
+			entry.tags = ["structure", "ship_only", "imported"]
+			entry.color = ModelPaint.DEFAULTS.wall
+			_imported[entry.id] = entry
 		for path in ["res://resources/models/parts/feeder_outfit/manifest.json","res://resources/models/parts/feeder_perimeter/manifest.json","res://resources/models/cargo/manifest.json","res://resources/models/parts/starter_outfit/manifest.json","res://resources/models/parts/ventilation_kit/manifest.json","res://resources/models/parts/access_kit/manifest.json","res://resources/models/parts/trawl_rig/manifest.json","res://resources/models/parts/lighting_kit/manifest.json","res://resources/models/parts/coaster_kit/manifest.json", "res://resources/models/parts/coaster_perimeter/manifest.json","res://resources/models/parts/bulk_kit/manifest.json", "res://resources/models/parts/cargo_kit/manifest.json", "res://resources/models/parts/cargo_perimeter/manifest.json", "res://resources/models/parts/fishing_kit/manifest.json", "res://resources/models/parts/trawler_rails/manifest.json", "res://resources/models/parts/wheelhouse/manifest.json", "res://resources/models/parts/surface_tiles/manifest.json", "res://resources/models/parts/interior/manifest.json"]:
 			var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 			for raw in data["assets"]:
@@ -20,7 +27,7 @@ static func imported_entries() -> Dictionary:
 	return _imported
 static func ids() -> Array[String]:
 	# Palette families; exact asset variants remain addressable for placement and saves.
-	return ["feeder_funnel", "feeder_signal_mast", "feeder_liferaft", "feeder_windlass", "feeder_stowed_anchor", "cargo_deck_5x8", "container_bed_20ft", "marine_exhaust_stack", "deck_stair_wide_220cm", "rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "deck_stair_220cm", "deck_bracket_2m", "deck_mushroom_vent", "wall_vent_louvre", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight", "trawl_winch", "trawl_gantry_4m", "insulated_catch_tank", "hold_coaming_5x8", "hatch_cover_5x4", "bulk_divider_5m", "deck_floodlight", "nav_port", "nav_starboard", "nav_stern", "mast_lantern"]
+	return ["ferry_saloon_bay_225cm", "ferry_saloon_roof_225cm", "ferry_saloon_roof_open_225cm", "ferry_saloon_front", "ferry_end_header", "ferry_seating_row_10", "ferry_bridge_front", "ferry_bridge_side_2m", "ferry_bridge_roof", "ferry_bridge_stair_270cm", "ferry_bridge_stair_trunk", "ferry_luggage_rack", "ferry_bow_ramp_2m", "ferry_rubbing_strake_225cm", "ferry_radar_mast", "feeder_funnel", "feeder_signal_mast", "feeder_liferaft", "feeder_windlass", "feeder_stowed_anchor", "cargo_deck_5x8", "container_bed_20ft", "marine_exhaust_stack", "deck_stair_wide_220cm", "rail_straight_100cm", "halfwall_straight_100cm", "cabin_wall_straight", "cabin_door_straight", "cabin_window_straight", "floor_tile", "roof_tile", "deck_stair_220cm", "deck_bracket_2m", "deck_mushroom_vent", "wall_vent_louvre", "cabin_console_straight", "helm_chair", "passenger_seat", "helm_wheel", "helm_throttle", "helm_display", "cabin_bench_straight", "trawl_winch", "trawl_gantry_4m", "insulated_catch_tank", "hold_coaming_5x8", "hatch_cover_5x4", "bulk_divider_5m", "deck_floodlight", "nav_port", "nav_starboard", "nav_stern", "mast_lantern"]
 
 static func ids_for_buildings() -> Array[String]:
 	## Land building editor palette — shared kit minus marine-only systems.
@@ -116,7 +123,7 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			light.lens_energy_scale=.35
 			light.spot_angle_deg=48
 			aim.add_child(light)
-		if not opts.get("skip_finish", false): SurfaceMaterialLibrary.apply(root)
+		if not opts.get("skip_finish", false): SurfaceMaterialLibrary.apply(root, str(entry.get("material_context", "")))
 		if bool(opts.get("preview_mesh", false)):
 			model.position -= visual_bounds(root).get_center()
 		if (entry["style"] == "halfwall" or entry.get("paintable", false)) and opts.has("color"):

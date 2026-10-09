@@ -1,4 +1,10 @@
 {
+  "composite_enamel": {
+    "asset": "Paint004", "metres": [0.8, 0.8], "source_mean": 0.723,
+    "roughness_low": 0.22, "roughness_high": 0.44, "relief": 0.035,
+    "metal_amount": 0, "colour_contrast": 0.10, "source_colour": 0,
+    "use_metal_map": false
+  },
   "hull_painted_plate": {
     "asset": "MetalPlates001",
     "metres": [

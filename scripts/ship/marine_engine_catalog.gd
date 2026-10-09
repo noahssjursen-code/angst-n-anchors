@@ -2,7 +2,7 @@ class_name MarineEngineCatalog
 extends RefCounted
 ## One installed machinery package per imported hull; presentation never grants power.
 const DIRECTORY := "res://resources/models/machinery/"
-const MOUNTS := {"trawler_hull_14m":Vector3(0,.35,3.2), "hull_24x8":Vector3(0,.55,7.2), "hull_32x10":Vector3(0,.65,10.2), "hull_88x14":Vector3(0,1,36)}
+const MOUNTS := {"catamaran_36x11":Vector3(0,.45,12.5), "trawler_hull_14m":Vector3(0,.35,3.2), "hull_24x8":Vector3(0,.55,7.2), "hull_32x10":Vector3(0,.65,10.2), "hull_88x14":Vector3(0,1,36)}
 static var _presets: Array = []
 
 static func options(hull_id: String) -> Array[Dictionary]:
@@ -33,11 +33,15 @@ static func apply(profile: HullPhysicsProfile, hull_id: String, id: String) -> v
 static func visual(hull_id: String, id: String = "") -> Node3D:
 	var spec := resolve(hull_id,id)
 	assert(not spec.is_empty())
-	var root := (load(DIRECTORY+str(spec.model)+".glb") as PackedScene).instantiate() as Node3D
-	var socket := root.find_child("OutputCoupling",true,false) as Node3D
-	assert(socket != null)
-	var coupling := (load(DIRECTORY+"marine_drive_coupling.glb") as PackedScene).instantiate() as Node3D
-	coupling.name = "CouplingRotor"
-	socket.add_child(coupling)
+	var root := Node3D.new()
+	for offset: Array in spec.get("visual_offsets", [[0,0,0]]):
+		var engine := (load(DIRECTORY+str(spec.model)+".glb") as PackedScene).instantiate() as Node3D
+		engine.position = Vector3(offset[0],offset[1],offset[2])
+		root.add_child(engine)
+		var socket := engine.find_child("OutputCoupling",true,false) as Node3D
+		assert(socket != null)
+		var coupling := (load(DIRECTORY+"marine_drive_coupling.glb") as PackedScene).instantiate() as Node3D
+		coupling.name = "CouplingRotor"
+		socket.add_child(coupling)
 	SurfaceMaterialLibrary.apply(root, "engine")
 	return root

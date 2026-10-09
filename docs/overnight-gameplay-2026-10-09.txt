@@ -205,3 +205,49 @@ existing side gangway cannot supply wide bow boarding; there is no current
 passenger manifest/fare service. Preserve the accepted monohulls, ocean and gait.
 Next batch starts the brief's isolated twin-hull support and measured arrangement,
 then reusable Blender models and terminal. Multiplayer stays out of scope.
+
+
+9 October 22:18 Oslo - Coastal Express 240 construction milestone
+Built the original 36.5 x 11 m catamaran from the researched arrangement: 194
+editable Shipyard placements, 240 authored seat sockets, raised forward bridge,
+open twin-hull tunnel, twin 1.45 m propellers/rudders and a 3600 kW engine package.
+Reusable Blender sources and separate GLBs cover saloon, seating, bridge, stairs,
+bow ramp, rails, luggage and fittings. The 24 x 24 m pile pier and 18 x 9 m
+waiting room use a separate reusable passenger-terminal kit. All use approved
+materials, including a low-relief composite-enamel profile. These are isolated
+development assets, not yet a commissioned passenger service or stock sale boat.
+
+Split demihull collisions and separate buoyancy strips retain the common mass
+contract; the existing monohull path retains one strip and its drive aliases.
+Tested actual Shipyard save/reload, open tunnel collision, both hull collisions,
+240 seat sockets, design displacement, equilibrium and powered handling. Final
+flat-water results: 35.35 kn full power; 18.30 kn after 30 s coasting; 6.12 s
+astern stop FROM that reduced speed, not from full cruise. No speed clamp.
+Report: machinescreenshots/ferry-construction-test-1791576835-087.json.
+
+The real player initially failed on bridge stair headroom. Expanded the authored
+roof opening, added a stair trunk and cleared the bridge aft entrance. Rendered
+access now passes pier-to-bow ramp, opening/entering bow door, centre aisle,
+bridge ascent/descent and side aisle around stairs to the aft seats:
+ferry-construction-test-1791576939-979.json. Its log has no engine errors or
+warnings. The separate editor-roundtrip run passes but reports ObjectDB / seven
+resources in use at shutdown; earlier combined editor/access runs also reported
+renderer environment RIDs. This cleanup issue remains; do not call those logs
+clean. Existing starter_drafts_test passes all four starter roundtrips.
+
+Actual daytime Godot images reviewed through several iterations. Corrected
+over-transparent saloon glass, boxy bridge profile, wall/roof gaps, stair access,
+diagonal bow rail spacing and doubled pier/canopy posts. Latest full captures:
+C:/Users/noahs/Pictures/machinescreenshots/coastal-express-1791576792-777/
+bow.png, side.png, stern.png, saloon.png, bridge.png, tunnel.png, terminal.png,
+terminal-entrance.png. Bow plus terminal: 339 draw calls, median 9.98 ms and
+p95 10.35 ms across 100 warmed frames at 1920 x 1080 on this machine. This is
+a local scene sample, not full-world or minimum-hardware performance acceptance.
+
+Next: working deploy/stow bow boarding with berth/propulsion interlocks, passenger
+manifest and route lifecycle using the existing local company authority, two
+isolated terminal stops and exact-once fare/payment persistence. Still pending:
+night lighting, moving/wave boarding, side boarding, interior detail and eventual
+save-compatible real-port placement. Shared throttle represents the symmetric
+twin-drive package; independent engine control is not implemented. Keep water,
+locomotion, multiplayer and unrelated UI working-copy changes untouched.

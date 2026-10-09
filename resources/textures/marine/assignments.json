@@ -146,6 +146,11 @@
     }
   },
   "asset_overrides": {
+    "composite_ferry": {
+      "Paint_HullUpper": "composite_enamel",
+      "Warm white painted steel": "composite_enamel",
+      "Paint_Fascia": "composite_enamel"
+    },
     "loaded_storage_rack": {
       "Office render": "packing_cardboard"
     },

@@ -1,0 +1,2526 @@
+{
+  "version": 1,
+  "hull": "catamaran_36x11",
+  "parts": [
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        -12.375
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        -12.375
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        -12.375
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        -12.375
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        -12.375
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        -10.125
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        -10.125
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        -10.125
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        -10.125
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_open_225cm",
+      "position": [
+        0,
+        5.67,
+        -10.125
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        -7.875
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        -7.875
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        -7.875
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        -7.875
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_open_225cm",
+      "position": [
+        0,
+        5.67,
+        -7.875
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        -5.625
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        -5.625
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        -5.625
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        -5.625
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_open_225cm",
+      "position": [
+        0,
+        5.67,
+        -5.625
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        -3.375
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        -3.375
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        -3.375
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        -3.375
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        -3.375
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        -1.125
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        -1.125
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        -1.125
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        -1.125
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        -1.125
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        1.125
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        1.125
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        1.125
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        1.125
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        1.125
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        3.375
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        3.375
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        3.375
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        3.375
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        3.375
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        5.625
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        5.625
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        5.625
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        5.625
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        5.625
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        7.875
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        7.875
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        7.875
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        7.875
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        7.875
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        10.125
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        10.125
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        10.125
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        10.125
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        10.125
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        -4.7,
+        3.2,
+        12.375
+      ],
+      "yaw_degrees": 180,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        -5.51,
+        2.45,
+        12.375
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_bay_225cm",
+      "position": [
+        4.7,
+        3.2,
+        12.375
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_rubbing_strake_225cm",
+      "position": [
+        5.51,
+        2.45,
+        12.375
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_saloon_roof_225cm",
+      "position": [
+        0,
+        5.67,
+        12.375
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        10.9
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        10.0
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        9.1
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        8.2
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        7.300000000000001
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        6.4
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        5.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        4.6000000000000005
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        3.7
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        2.8000000000000007
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        1.9000000000000004
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        1.0
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        0.09999999999999964
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -0.8000000000000007
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -1.6999999999999993
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -2.5999999999999996
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -3.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -4.4
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -5.299999999999999
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -6.200000000000001
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -7.1
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -8.000000000000002
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -8.9
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_seating_row_10",
+      "position": [
+        0,
+        3.2,
+        -9.799999999999999
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "upholstery": [
+          0.1,
+          0.22,
+          0.28
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        -4.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        -3.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        -2.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        -1.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_door_straight",
+      "position": [
+        -0.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        0.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        1.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        2.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_window_straight",
+      "position": [
+        3.5,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_end_header",
+      "position": [
+        0,
+        5.4,
+        13.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_saloon_front",
+      "position": [
+        0,
+        3.2,
+        -13.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_door_straight",
+      "position": [
+        0.5,
+        3.2,
+        -13.5
+      ],
+      "yaw_degrees": 90,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_luggage_rack",
+      "position": [
+        -3.6,
+        3.2,
+        15.6
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_luggage_rack",
+      "position": [
+        3.6,
+        3.2,
+        15.6
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        17.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        16.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        16.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        15.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        15.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        14.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        14.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        13.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        17.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        16.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        16.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        15.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        15.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        14.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        14.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        13.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        13.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -4.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -4.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -3.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -3.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -2.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -2.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -1.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -1.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -0.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -0.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        0.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        0.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        1.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        1.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        2.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        2.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        3.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        3.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        4.25,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        4.75,
+        3.2,
+        17.5
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "floor_tile",
+      "position": [
+        0,
+        5.9,
+        0
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "surface": [
+          0.21,
+          0.27,
+          0.27
+        ],
+        "fascia": [
+          0.8,
+          0.81,
+          0.75
+        ],
+        "underside": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      },
+      "outline": [
+        [
+          -4,
+          -7.5
+        ],
+        [
+          -1,
+          -7.5
+        ],
+        [
+          -1,
+          -9.5
+        ],
+        [
+          1,
+          -9.5
+        ],
+        [
+          1,
+          -7.5
+        ],
+        [
+          4,
+          -7.5
+        ],
+        [
+          4,
+          -12.5
+        ],
+        [
+          3,
+          -13.5
+        ],
+        [
+          -3,
+          -13.5
+        ],
+        [
+          -4,
+          -12.5
+        ]
+      ]
+    },
+    {
+      "asset_id": "ferry_bridge_front",
+      "position": [
+        0,
+        5.9,
+        -11.8
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_bridge_side_2m",
+      "position": [
+        -3.65,
+        5.9,
+        -10.8
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_bridge_side_2m",
+      "position": [
+        -3.65,
+        5.9,
+        -8.8
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_bridge_side_2m",
+      "position": [
+        3.65,
+        5.9,
+        -10.8
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_bridge_side_2m",
+      "position": [
+        3.65,
+        5.9,
+        -8.8
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        -3.5,
+        5.9,
+        -7.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.55,
+          0.055,
+          0.035
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        -2.5,
+        5.9,
+        -7.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.55,
+          0.055,
+          0.035
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        -1.5,
+        5.9,
+        -7.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.55,
+          0.055,
+          0.035
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        0.5,
+        5.9,
+        -7.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.55,
+          0.055,
+          0.035
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        1.5,
+        5.9,
+        -7.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.55,
+          0.055,
+          0.035
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_wall_straight",
+      "position": [
+        2.5,
+        5.9,
+        -7.5
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.55,
+          0.055,
+          0.035
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_bridge_roof",
+      "position": [
+        0,
+        8.1,
+        -10.3
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_bridge_stair_trunk",
+      "position": [
+        0,
+        5.67,
+        -6.0
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_bridge_stair_270cm",
+      "position": [
+        0,
+        3.2,
+        -6.0
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_straight",
+      "position": [
+        -1.5,
+        5.9,
+        -11.65
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_straight",
+      "position": [
+        -0.5,
+        5.9,
+        -11.65
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_straight",
+      "position": [
+        0.5,
+        5.9,
+        -11.65
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "cabin_console_straight",
+      "position": [
+        1.5,
+        5.9,
+        -11.65
+      ],
+      "yaw_degrees": 270,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "helm_chair",
+      "position": [
+        -1,
+        5.9,
+        -10.4
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_display",
+      "position": [
+        -1,
+        6.74,
+        -11.6
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_chair",
+      "position": [
+        1,
+        5.9,
+        -10.4
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_display",
+      "position": [
+        1,
+        6.74,
+        -11.6
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_wheel",
+      "position": [
+        -0.8,
+        6.74,
+        -11.3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_throttle",
+      "position": [
+        0.4,
+        6.74,
+        -11.3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "ferry_bow_ramp_2m",
+      "position": [
+        0,
+        3.2,
+        -18.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -1.15,
+        3.2,
+        -13.6
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -1.15,
+        3.2,
+        -14.1
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -1.15,
+        3.2,
+        -14.6
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -1.15,
+        3.2,
+        -15.100000000000001
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -1.15,
+        3.2,
+        -15.600000000000001
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        1.15,
+        3.2,
+        -13.6
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        1.15,
+        3.2,
+        -14.1
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        1.15,
+        3.2,
+        -14.6
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        1.15,
+        3.2,
+        -15.100000000000001
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        1.15,
+        3.2,
+        -15.600000000000001
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        -11.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -5.25,
+        3.2,
+        -11.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "ferry_guard_1x3",
+      "position": [
+        -5.25,
+        3.2,
+        -12.0
+      ],
+      "yaw_degrees": -18.43494882292201
+    },
+    {
+      "asset_id": "ferry_guard_3x2",
+      "position": [
+        -4.25,
+        3.2,
+        -15.0
+      ],
+      "yaw_degrees": -56.309932474020215
+    },
+    {
+      "asset_id": "feeder_liferaft",
+      "position": [
+        -3.7,
+        5.95,
+        4.0
+      ],
+      "yaw_degrees": 90,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "feeder_liferaft",
+      "position": [
+        -3.7,
+        5.95,
+        6.2
+      ],
+      "yaw_degrees": 90,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "nav_port",
+      "position": [
+        -3.76,
+        7.6,
+        -11.2
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_mushroom_vent",
+      "position": [
+        -2.8,
+        5.95,
+        10.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        -11.0
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        5.25,
+        3.2,
+        -11.5
+      ],
+      "yaw_degrees": -0.0
+    },
+    {
+      "asset_id": "ferry_guard_1x3",
+      "position": [
+        5.25,
+        3.2,
+        -12.0
+      ],
+      "yaw_degrees": 18.43494882292201
+    },
+    {
+      "asset_id": "ferry_guard_3x2",
+      "position": [
+        4.25,
+        3.2,
+        -15.0
+      ],
+      "yaw_degrees": 56.309932474020215
+    },
+    {
+      "asset_id": "feeder_liferaft",
+      "position": [
+        3.7,
+        5.95,
+        4.0
+      ],
+      "yaw_degrees": 90,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "feeder_liferaft",
+      "position": [
+        3.7,
+        5.95,
+        6.2
+      ],
+      "yaw_degrees": 90,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "nav_starboard",
+      "position": [
+        3.76,
+        7.6,
+        -11.2
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_mushroom_vent",
+      "position": [
+        2.8,
+        5.95,
+        10.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "ferry_radar_mast",
+      "position": [
+        0,
+        8.3,
+        -9.5
+      ],
+      "yaw_degrees": 0,
+      "colors": {
+        "wall": [
+          0.8,
+          0.81,
+          0.75
+        ]
+      }
+    },
+    {
+      "asset_id": "nav_stern",
+      "position": [
+        0,
+        5.5,
+        13.7
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "mast_lantern",
+      "position": [
+        0,
+        10.55,
+        -9.5
+      ],
+      "yaw_degrees": 0
+    }
+  ],
+  "hull_colors": {
+    "upper": [
+      0.8,
+      0.81,
+      0.75
+    ],
+    "lower": [
+      0.065,
+      0.085,
+      0.09
+    ],
+    "deck": [
+      0.27,
+      0.3,
+      0.29
+    ]
+  },
+  "engine_preset": "catamaran_3600",
+  "rising_bow": false,
+  "active_floor": 0,
+  "cell_offset": 0,
+  "show_all_floors": true
+}

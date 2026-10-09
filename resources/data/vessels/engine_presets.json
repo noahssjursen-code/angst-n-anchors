@@ -1,5 +1,6 @@
 {
   "presets": [
+    {"id":"catamaran_3600","name":"Twin diesel package · 3600 kW","hull":"catamaran_36x11","model":"marine_v12_freighter","visual_offsets":[[-4.3,0,0],[4.3,0,0]],"power_kw":3600,"mass_kg":12500,"fuel_lph":850,"shaft_rpm":420,"default":true},
     {"id":"feeder_1500","name":"Feeder diesel · 1500 kW","hull":"hull_88x14","model":"marine_v12_feeder","power_kw":1500,"mass_kg":11200,"fuel_lph":360,"shaft_rpm":160,"default":true},
     {"id":"feeder_2100","name":"Feeder diesel · 2100 kW","hull":"hull_88x14","model":"marine_v12_feeder","power_kw":2100,"mass_kg":12800,"fuel_lph":505,"shaft_rpm":185},
     {"id":"compact_300","name":"Compact diesel · 300 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":300,"mass_kg":950,"fuel_lph":75,"shaft_rpm":240,"default":true},

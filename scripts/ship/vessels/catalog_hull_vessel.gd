@@ -67,6 +67,8 @@ static func make_physics_profile(config: Dictionary) -> HullPhysicsProfile:
 	var profile := HullPhysicsProfile.new()
 	profile.length_m = loa_m
 	profile.beam_m = beam_m
+	profile.demihull_beam_m = float(config.get("demihull_beam_m", 0.0))
+	profile.demihull_spacing_m = float(config.get("demihull_spacing_m", 0.0))
 	profile.depth_m = depth_m
 	profile.design_draft_m = draft_m
 	profile.design_displacement_t = displacement_t
@@ -78,6 +80,9 @@ static func make_physics_profile(config: Dictionary) -> HullPhysicsProfile:
 		if raw_form is Dictionary
 		else HullFormProfile.resolve(str(config.get("form", HullFormProfile.DEFAULT_ID)))
 	)
+	if profile.demihull_beam_m > 0.0:
+		profile.hull_form = HullFormProfile.resolve("catamaran_demihull")
+		profile.station_count = 20
 	profile.hull_center_of_mass = Vector3(0.0, depth_m * 0.14, loa_m * bow_frac * 0.12)
 	profile.engine_mass_kg = displacement_t * 8.5
 	profile.engine_position = Vector3(0.0, depth_m * 0.16, loa_m * 0.30)
