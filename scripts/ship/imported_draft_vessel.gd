@@ -340,6 +340,11 @@ func _configure_coaster_hold() -> void:
 
 func _add_interactions(part: Node3D, state: ShipPartState) -> void:
 	var style := str(BrickCatalog.get_entry(str(part.get_meta("asset_id", ""))).get("style", ""))
+	if part.find_child("RampHinge",true,false) != null and part.find_child("RampTip",true,false) != null:
+		var boarding := FerryBoarding.new()
+		boarding.name = "FerryBoarding"
+		boarding.setup(self, part)
+		part.add_child(boarding)
 	if style == "winch":
 		var fishing := FishingSystem.new()
 		fishing.name = "FishingSystem"
@@ -436,7 +441,7 @@ func _ensure_walk_deck() -> void:
 		# Door leaf transforms follow their authored hinge, including the collision.
 		var parent := mesh.get_parent()
 		while parent != self:
-			if str(parent.name).begins_with("DoorLeafPivot") or parent.has_meta("gangway_gate"):
+			if str(parent.name).begins_with("DoorLeafPivot") or parent.has_meta("gangway_gate") or parent.has_meta("boarding_ramp"):
 				moving_colliders.append({"mesh":mesh, "collision":collision})
 				break
 			parent = parent.get_parent()

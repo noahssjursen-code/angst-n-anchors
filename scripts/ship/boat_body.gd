@@ -269,6 +269,10 @@ var _walk_deck:   AnimatableBody3D
 
 ## Mooring positional solve runs here (inside Jolt/Godot integration), not via impulses.
 var _mooring_integrate: Callable = Callable()
+## Installed equipment can hold departure until its physical operation is safe.
+## No equipment means no restriction on existing vessels.
+signal departure_requested
+var departure_checks: Array[Callable] = []
 ## id -> {mass_kg, position, category}. Bricks and pallets register here.
 var _mass_entries: Dictionary = {}
 var _mass_breakdown: Dictionary = {}
@@ -276,6 +280,19 @@ var _physics_lod_timer: float = 0.0
 var _applied_physics_quality: int = -1
 
 signal mass_properties_changed(total_mass_kg: float, local_center_of_mass: Vector3)
+
+
+func departure_block_reason() -> String:
+	for check in departure_checks:
+		if check.is_valid():
+			var reason := str(check.call())
+			if not reason.is_empty(): return reason
+	return ""
+
+
+func prepare_departure() -> String:
+	departure_requested.emit()
+	return departure_block_reason()
 
 
 # ── Fuel API ─────────────────────────────────────────────────────────────────
@@ -962,7 +979,7 @@ func dock_at_berth(dock: Node3D, _berth_index: int = 0) -> void:
 	var xform: Transform3D
 	if dock is QuayBerthSlot:
 		var slot := dock as QuayBerthSlot
-		xform = slot.global_transform * slot.ship_dock_local(half_beam)
+		xform = slot.global_transform * slot.ship_dock_local(half_beam, length_m)
 	else:
 		var local := Vector3(0.0, 0.0, -(half_beam + 1.5))
 		## Legacy PortDock faces: offset −Z, bow along +X.

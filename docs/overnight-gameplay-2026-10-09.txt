@@ -251,3 +251,65 @@ night lighting, moving/wave boarding, side boarding, interior detail and eventua
 save-compatible real-port placement. Shared throttle represents the symmetric
 twin-drive package; independent engine control is not implemented. Keep water,
 locomotion, multiplayer and unrelated UI working-copy changes untouched.
+
+
+9 October 22:50 Oslo - functional ferry boarding and passenger berth
+Completed the next construction batch: authored rigid bow leaf, physical hinge,
+separate barrels/sliding rods and landing rollers, plus an L-shaped side quay
+assembled from existing pier modules. Bow-in QuayBerthSlot placement uses actual
+vessel length. PassengerTerminal explicitly registers its berth and mooring posts
+with the existing harbour; production generated ports remain unchanged.
+
+FerryBoarding discovers hinge/tip sockets, verifies both roller lanes on real
+pier collision, alignment, speed, slope/roll and head clearance, then deploys only
+with both lines fast. The rigid leaf tracks small hull motion; it never stretches.
+An occupied ramp cannot be lifted. Cast-off first requests stow and retains lines;
+a second order releases when secured. Direct propulsion/thruster commands also
+respect the equipment interlock and do not burn fuel while blocked. Fit-out
+rebuild leaves exactly one current callback. Bow-in mooring does not haul the hull
+sideways by the alongside berth's 2.2 m capture retract.
+
+Failures investigated, not hidden: an initial centre support probe hit a tiny
+bevel at a pier tile seam and wrongly rejected the landing. Two actual roller
+support probes fixed that without permitting a water gap. A destination fixture
+produced a rope toward the old pier and large drift because dock_at_berth reenabled
+physics during synthetic pose movement; restoring the fixture freeze after dock
+fixed that. This was not proof of a live destination bug. The separate final
+free-floating phase stays aligned, 0.027 m displacement after eight seconds.
+A hardware iteration added siblings during _ready and produced parent-busy errors
+and leaked unparented resources; moved construction before tree entry. Its report
+ferry-boarding-1791578373-057 is explicitly marked invalid. Final logs are clean.
+
+Verified rendered reports, all under C:/Users/noahs/Pictures/machinescreenshots:
+- ferry-boarding-1791578882-31/report.json: real player crosses both directions
+  under scripted +/-0.18 m heave, +/-0.25 degree pitch and +/-1.25 degree roll;
+  occupied ramp, single-line release and force/fuel interlocks; stow collision;
+  rotated second berth; steep/misaligned/wrong-heading/water-gap rejection;
+  actual free-floating stability, hydraulic stroke and safe fit-out rebuild.
+  Zero failures. Earlier final-mechanism run 1791578722-112 also verifies the
+  current working-copy helm line command before its UI-independent test wrapper.
+- ferry-construction-test-1791578831-014.json: updated pier/ramp, bow door,
+  saloon aisles and stairs traversed by real player; 35.35 kn flat-water cruise,
+  monohull contract retained. Zero failures and no engine errors/warnings.
+- gangway-1791578574-coaster*.png and work/ferry-gangway-regression.log: existing
+  coaster walks both rotated quay sides, stows, rejects bad landings and rebuilds
+  fit-out. Zero failures, no engine errors/warnings.
+- harbour_service_routing_test passes existing local freight/deployment checks.
+  Its shutdown still reports ObjectDB/four resources in use; not a clean log.
+  No network tests were run.
+- coastal-express-1791578930-425/: eight daytime in-engine views, reviewed bow,
+  terminal and ramp close-ups. 387 draw calls, median 10.009 ms, p95 12.305 ms
+  across 100 warmed 1920x1080 frames on this GPU. Local scene sample only.
+
+Only scoped ferry/berth/interlock changes are committed. The UI-specific one-line
+rejection message in the existing uncommitted order_lines_from_helm remains with
+that unrelated UI rebuild. Baselines in work/mooring-before-ferry.gd and
+controller-before-ferry.gd preserve its original state. The committed boarding
+test calls the underlying gameplay moor/release endpoints directly.
+
+Next unfinished priority: lean passenger manifest/seat capacity and two-terminal
+sailing lifecycle using existing company authority/ledger, exact-once payment and
+scratch save restoration. Not yet passenger service, stock sale, generated-port
+integration, autonomous bow approach, rough-weather acceptance, side boarding,
+night fixture acceptance or completed interior detail. Do not repeat completed
+Northline40, ocean or locomotion work; multiplayer remains out of scope.

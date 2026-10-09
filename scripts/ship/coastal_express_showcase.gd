@@ -35,6 +35,11 @@ func _ready() -> void:
 	var terminal:=preload("res://scenes/port/passenger_terminal.tscn").instantiate()
 	terminal.position.y=WaveSurface.WATER_LEVEL+1.65
 	add_child(terminal)
+	var harbour:=HarbourController.new()
+	harbour.setup("ferry-review");add_child(harbour);HarbourRegistry.register(harbour)
+	var slot:QuayBerthSlot=terminal.register_berth(harbour)
+	harbour.plug_ship(slot.berth_id,boat)
+	(boat.get_node("ShipGameplay/MooringComponent") as MooringComponent).moor_to_nearest_of(slot.bollards())
 	for component in ["StripBuoyancyComponent","StripBuoyancyStarboard","HydrodynamicsComponent","PropulsionComponent","RudderComponent","BowThrusterComponent"]:
 		boat.get_node(component).set_physics_process(false)
 	camera=Camera3D.new();camera.far=8000;camera.fov=52;camera.near=.06;add_child(camera)

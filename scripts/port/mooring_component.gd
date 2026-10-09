@@ -81,6 +81,7 @@ var _rope_root: Node3D
 ## Rest distances (world-space chord at tie-time) maintained under tension while moored.
 var _rest_distance_bow: float = -1.0
 var _rest_distance_stern: float = -1.0
+var _bow_berth_capture := false
 
 ## Hull-space cleat anchor points baked from the berth tree (cheap during integrate).
 var _bow_cleat_body_local: Vector3 = Vector3.ZERO
@@ -449,7 +450,10 @@ func _line_distance_excess_from_transform(
 func _rope_max_distance_from_rest(rest_distance: float) -> float:
 	if rest_distance <= 0.0:
 		return 0.0
-	var target := maxf(rest_distance - tie_capture_retract_m, 0.6)
+	# Bow boarding is already on its landing datum. Hauling both side lines in
+	# by 2.2 m would drag the demihull into the support pier and miss that datum.
+	var retract := 0.0 if _bow_berth_capture else tie_capture_retract_m
+	var target := maxf(rest_distance - retract, 0.6)
 	var max_distance := target + rope_tension_slack_m
 	if max_tied_rope_length_m > 0.0:
 		max_distance = minf(max_distance, max_tied_rope_length_m)
@@ -480,7 +484,19 @@ func moor_to_posts(front_post: Node, rear_post: Node) -> void:
 	_emit_mooring_state()
 
 
+func _departure_rejected() -> bool:
+	# Confirmed state hydration is not a fresh captain order.
+	if _suppress_state_signal: return false
+	var ship := _resolve_boat_body()
+	if ship == null: return false
+	last_mooring_reject = ship.prepare_departure()
+	if last_mooring_reject.is_empty(): return false
+	mooring_rejected.emit(last_mooring_reject)
+	return true
+
+
 func release_mooring() -> void:
+	if _departure_rejected(): return
 	_remember_authority_identity()
 	is_moored = false
 	bow_line_tied = false
@@ -556,10 +572,11 @@ func toggle_line_from_post(post: Node) -> bool:
 			_stern_point = pick
 
 	set_line_tied(forward_slot, next_tied)
-	return next_tied
+	return is_slot_tied(forward_slot)
 
 
 func set_line_tied(forward_slot: bool, tied: bool) -> void:
+	if not tied and _departure_rejected(): return
 	_remember_authority_identity()
 	if forward_slot:
 		bow_line_tied = tied
@@ -692,6 +709,9 @@ func is_slot_tied(forward_slot: bool) -> bool:
 func _capture_rest_distances() -> void:
 	if _body == null:
 		_body = _resolve_boat_rigid_body()
+	var harbour := _resolve_harbour_controller()
+	var slot := _resolve_berth_slot(harbour) if harbour != null else null
+	_bow_berth_capture = slot != null and slot.bow_in
 
 	if bow_line_tied and _bow_point != null and _front_post != null:
 		_rest_distance_bow = _cleat_anchor(_bow_point).distance_to(_post_anchor(_front_post))
@@ -834,6 +854,12 @@ func _resolve_boat_body() -> BoatBody:
 
 
 func _resolve_harbour_controller() -> HarbourController:
+	# Standalone passenger terminals still belong to an existing harbour. Resolve
+	# the actual tied posts, including arrival after leaving the spawning port.
+	for post in [_front_post,_rear_post]:
+		if not is_instance_valid(post): continue
+		var owner := HarbourRegistry.controller(str(post.get_meta("harbour_port_id","")))
+		if owner != null and owner.berth_for_bollard(post) != null: return owner
 	var plot := _find_port_dock() as PortPlot
 	if plot != null:
 		var hc := plot.harbour_controller()

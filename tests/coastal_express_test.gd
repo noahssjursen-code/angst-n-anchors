@@ -95,6 +95,12 @@ func verify_access(boat: ImportedDraftVessel) -> void:
 	access_player=preload("res://scenes/shared/player.tscn").instantiate()
 	var terminal:=preload("res://scenes/port/passenger_terminal.tscn").instantiate() as Node3D
 	terminal.position.y=3.2;add_child(terminal)
+	var harbour:=HarbourController.new()
+	harbour.setup("ferry-access");add_child(harbour);HarbourRegistry.register(harbour)
+	var slot:QuayBerthSlot=terminal.register_berth(harbour)
+	harbour.plug_ship(slot.berth_id,boat)
+	(boat.get_node("ShipGameplay/MooringComponent") as MooringComponent).moor_to_nearest_of(slot.bollards())
+	await run_for(4)
 	add_child(access_player);access_player.position=Vector3(0,3.28,-24.0)
 	for frame in 20:await get_tree().physics_frame
 	await walk_to(Vector3(0,3.2,-16.0))
@@ -119,6 +125,7 @@ func verify_access(boat: ImportedDraftVessel) -> void:
 	check(access_player.position.z>11.7 and absf(access_player.position.y-3.2)<.15,"passenger aisle bypasses bridge stairs and reaches aft seating")
 	access_player.queue_free()
 	terminal.queue_free()
+	harbour.queue_free()
 	for frame in 5:await get_tree().process_frame
 
 func walk_to(target: Vector3) -> void:

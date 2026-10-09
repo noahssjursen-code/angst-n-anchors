@@ -4,11 +4,20 @@ extends Node3D
 ## the service contract are integrated; existing generated ports are untouched.
 const DIRECTORY := "res://resources/models/parts/passenger_terminal/"
 var guard_joints: Dictionary={}
+var berth: QuayBerthSlot
 
 func _ready() -> void:
 	if get_child_count()>0:return
 	for x in [-9.0,-3.0,3.0,9.0]:
 		for z in [-22.0,-28.0,-34.0,-40.0]:place("passenger_pier_6m",Vector3(x,0,z))
+	# L-shaped support quay: bow boarding plus accessible breast/spring lines.
+	for z in [-16.0,-10.0,-4.0,2.0,8.0,14.0]:
+		place("passenger_pier_6m",Vector3(-9,0,z))
+	for x in [-12.0,-6.0]:
+		for z in [-17.5,-14.5,-11.5,-8.5,-5.5,-2.5,.5,3.5,6.5,9.5,12.5,15.5]:
+			guard(Vector3(x,0,z),90)
+	for x in [-10.5,-7.5]: guard(Vector3(x,0,17))
+	for z in [-14.0,16.0]:place("passenger_berth_fender",Vector3(-6,0,z),90)
 	for x in [-7.5,-4.5,-1.5,1.5,4.5,7.5]:
 		place("terminal_entry_3m" if absf(x)<2 else "terminal_glazed_bay_3m",Vector3(x,0,-30.5))
 		place("terminal_solid_bay_3m",Vector3(x,0,-39.5))
@@ -21,11 +30,31 @@ func _ready() -> void:
 	for x in [-6.0,6.0]:
 		for z in [-34.0,-37.0]:place("terminal_waiting_bench",Vector3(x,0,z))
 	for x in [-3.5,3.5]:place("terminal_information_pylon",Vector3(x,0,-24.0))
-	for x in [-10.5,-7.5,-4.5,4.5,7.5,10.5]:guard(Vector3(x,0,-19.0))
+	for x in [-4.5,4.5,7.5,10.5]:guard(Vector3(x,0,-19.0))
 	for x in [-12.0,12.0]:
 		for z in [-20.5,-23.5,-26.5,-29.5,-32.5,-35.5,-38.5,-41.5]:guard(Vector3(x,0,z),90)
 	for x in [-4.3,4.3]:place("passenger_berth_fender",Vector3(x,0,-19.0))
-	var landing:=Marker3D.new();landing.name="PassengerLanding";landing.position=Vector3(0,0,-19.1);add_child(landing)
+	var landing:=Marker3D.new();landing.name="PassengerLanding";landing.position=Vector3(0,0,-20);add_child(landing)
+	landing.set_meta("landing_size",Vector2(5.5,2.0))
+
+## Explicit opt-in: isolated terminals don't silently register as world ports.
+func register_berth(harbour: HarbourController, station_id: String = "passenger") -> QuayBerthSlot:
+	if is_instance_valid(berth): return berth
+	berth = QuayBerthSlot.new()
+	berth.setup(harbour.port_id()+"/"+station_id,station_id,"passenger",[],45,24,1,Vector3.BACK,0)
+	berth.bow_in = true
+	berth.berth_gap_m = .75
+	berth.position = Vector3(0,0,-19)
+	berth.boarding_landing = get_node("PassengerLanding")
+	add_child(berth)
+	for z in [-14.0,16.0]:
+		var bollard := MooringPost.new()
+		bollard.position = Vector3(-6.8,0,z)
+		bollard.set_meta("harbour_port_id",harbour.port_id())
+		add_child(bollard)
+		berth.add_bollard(bollard)
+	harbour.register_berth(berth)
+	return berth
 
 func guard(at: Vector3, yaw: float=0) -> void:
 	place("passenger_pier_guard_3m",at,yaw)

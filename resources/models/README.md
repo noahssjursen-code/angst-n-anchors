@@ -10,12 +10,26 @@ remaining build order are in `docs/passenger-ferry-research-2026-10-09.txt` and
 `docs/overnight-gameplay-2026-10-09.txt`. This is an original arrangement, not a
 claim to reproduce Fjordbris's exact machinery or certified passenger capacity.
 
-`_source/coastal_express/build_ferry.py`, `build_terminal.py` and `arrangement.py`
+`_source/coastal_express/build_ferry.py`, `build_terminal.py`,
+`build_boarding_gear.py` and `arrangement.py`
 produce separate `.blend`/`.glb` modules and the recipe. The terminal is an
 isolated pile-supported pier with an 18 × 9 m waiting room, canopy, seating and
 information pylons; generated ports are unchanged. All surfaces reuse approved
 maps. The new `composite_enamel` finish uses Paint004 without steel corrosion.
 Cabin paint, hull regions and seat upholstery remain independently recolourable.
+
+The bow ramp now has a fixed hinge, separate hydraulic barrels/sliding rods and
+landing rollers. `FerryBoarding` discovers the authored hinge/tip sockets; the
+rigid leaf rotates without stretching. A registered bow-in `QuayBerthSlot`
+provides the landing datum, while two physical roller probes check actual pier
+support. Both lines must be fast, with low speed, aligned bow, safe slope/roll
+and clear landing before it lowers. Small wave-following adjustments retain
+walkable collision. Occupancy prevents lifting someone; casting off first requests
+stow and keeps the lines, then a second order releases after the ramp is secured.
+Propulsion and thruster forces remain blocked until then. `request_boarding()`
+reopens boarding at a valid secured landing. The L-shaped support quay reuses
+the existing pier modules and harbour occupancy/line system. Generated ports are
+still unchanged; `PassengerTerminal.register_berth()` is explicit opt-in.
 
 The imported physics profile now supports two offset buoyancy strips with a
 matching aggregate displacement table for spawn/equilibrium. Split convex hull
@@ -32,7 +46,15 @@ monohull contract. Add `--editor-roundtrip` for actual Shipyard save/reload;
 add `--access` in a rendered run for real-player pier/ramp/door/aisle/stair access.
 Use isolated runs; do not overwrite captain data or add this to stock prematurely.
 
-Outstanding: wave-following ramp deployment and berth interlock, side boarding,
+`tests/ferry_boarding_test.tscn -- --shipyard-playtest` uses actual player collision
+to cross in both directions under bounded scripted heave/pitch/roll, then checks
+occupied-ramp rejection, stow/cast-off, force/fuel interlocks, a second rotated
+terminal, invalid landings, hydraulic stroke and fit-out rebuilding. A separate
+eight-second free-floating phase checks the real buoyancy/mooring solve. This is
+not rough-weather boarding acceptance. Existing coaster gangways retain their
+independent alongside path.
+
+Outstanding: passenger service/production-port integration, side boarding,
 toilets/kiosk and final interior detail, nighttime fixtures, passenger manifests,
 fare settlement, route/terminal integration and saved voyage restoration.
 

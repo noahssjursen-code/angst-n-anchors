@@ -38,6 +38,8 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _body != null and not is_zero_approx(throttle) and not _body.departure_block_reason().is_empty():
+		throttle = 0.0
 	if Engine.is_editor_hint() or _body == null or is_zero_approx(throttle):
 		delivered_thrust_n = 0.0
 		return

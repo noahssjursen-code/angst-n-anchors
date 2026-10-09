@@ -339,7 +339,7 @@ func _is_moored() -> bool:
 	if _boat_body == null:
 		return false
 	var mooring := _boat_body.get_node_or_null("ShipGameplay/MooringComponent") as MooringComponent
-	return mooring != null and mooring.is_moored
+	return (mooring != null and mooring.is_moored) or not _boat_body.departure_block_reason().is_empty()
 
 
 func _step_throttle_stage(step: int) -> void:

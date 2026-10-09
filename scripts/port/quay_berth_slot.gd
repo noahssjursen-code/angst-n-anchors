@@ -17,6 +17,10 @@ var water_dir_local: Vector3 = Vector3(0.0, 0.0, 1.0)
 var face_offset_m: float = 0.0
 ## Extra gap beyond the hull half-beam once clear of the face.
 var berth_gap_m: float = 2.5
+## Passenger landings face the bow. Other slots keep the existing alongside pose.
+var bow_in: bool = false
+var design_vessel_length_m: float = 36.5
+var boarding_landing: Node3D
 
 var _bollards: Array[Node] = []
 var _yard_nodes: Array[Node] = []
@@ -59,6 +63,11 @@ func ship_clearance_m(half_beam_m: float) -> float:
 ## Local AABB of the legal ship pocket (water side of the coping).
 func ship_pocket_local(design_beam_m: float = 16.0, design_loa_m: float = -1.0) -> AABB:
 	var water := _water_unit()
+	if bow_in:
+		var loa := design_loa_m if design_loa_m > 1.0 else design_vessel_length_m
+		var centre := water * (face_offset_m + berth_gap_m + loa * .5)
+		var half_size := water.abs() * (loa * .5 + berth_gap_m) + _along_unit(water).abs() * (design_beam_m * .5 + berth_gap_m)
+		return AABB(centre-half_size-Vector3.UP, half_size*2.0+Vector3.UP*4.0)
 	var along := _along_unit(water)
 	var loa := design_loa_m if design_loa_m > 1.0 else maxf(length_m * 0.88, 20.0)
 	var beam := maxf(design_beam_m, 8.0)
@@ -74,8 +83,11 @@ func ship_pocket_local(design_beam_m: float = 16.0, design_loa_m: float = -1.0) 
 
 
 ## Local transform for a ship origin (bow = −Z) in the water pocket.
-func ship_dock_local(half_beam_m: float) -> Transform3D:
+func ship_dock_local(half_beam_m: float, vessel_length_m: float = 0.0) -> Transform3D:
 	var water := _water_unit()
+	if bow_in:
+		var loa := vessel_length_m if vessel_length_m > 0.0 else design_vessel_length_m
+		return Transform3D(Basis.looking_at(-water, Vector3.UP), water*(face_offset_m+loa*.5+berth_gap_m))
 	var along := _along_unit(water)
 	var clearance := ship_clearance_m(half_beam_m)
 	## Basis.looking_at: model −Z aims at `forward` (along the quay).
