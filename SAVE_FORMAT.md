@@ -55,6 +55,27 @@ Company mutations use explicit command/result contracts through `CompanyService`
 Processed request ids make opening-company and money commands idempotent so the same
 boundary can later be hosted by a multiplayer server.
 
+### Opt-in passenger sailings
+
+`company.passenger_sailings` is an optional array (absent means empty) used by the
+local passenger-service development slice. This is additive to v6 and preserves
+older captain data. `PassengerService` owns mutations; rendered passengers do not.
+Each record stores `id`, `route_id`, `vessel_uid`, `origin_berth`,
+`destination_berth`, `total`, `onboard`, `landed`, `returned`, `seat_ids`,
+`seat_positions` (vessel-local XYZ arrays), `seat_yaws`, `fare_marks`, `phase` and
+`paid_marks`. Positions and mass survive temporarily missing fit-out seats.
+
+Phases are boarding, ready, underway, alighting, completed, returning or cancelled.
+Completed and cancelled records are retained for idempotency. Fares use the
+existing account ledger with request ID `passenger-fare:<sailing id>`; the ledger
+is the durable receipt beyond the bounded processed-request cache. A quarter-second
+vessel component reconstructs mass and crowd presentation from the manifest.
+
+The isolated journey test verifies scratch save/reload and rebuilding a vessel
+from its owned record. Production route/terminal registration and restoration of
+a live passenger voyage after a normal world load remain pending; the test's
+retained vessel pose is a fixture, not a changed deployment/save policy.
+
 ## Migration
 
 A legacy single-slot `user://save/player.json` is moved into

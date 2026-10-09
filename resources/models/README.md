@@ -5,7 +5,8 @@
 `examples/coastal_express_recipe.json` is the editable first construction of a
 36.5 × 11 m catamaran, with 240 authored passenger-seat sockets, raised bridge,
 glazed saloon, bow ramp, luggage racks and two shaft/rudder assemblies. It is
-**not yet sale-ready stock or a working passenger service**. The research and
+**not yet sale-ready stock or integrated with production passenger routes**. A
+two-terminal service slice is now verified in isolation. The research and
 remaining build order are in `docs/passenger-ferry-research-2026-10-09.txt` and
 `docs/overnight-gameplay-2026-10-09.txt`. This is an original arrangement, not a
 claim to reproduce Fjordbris's exact machinery or certified passenger capacity.
@@ -54,9 +55,37 @@ eight-second free-floating phase checks the real buoyancy/mooring solve. This is
 not rough-weather boarding acceptance. Existing coaster gangways retain their
 independent alongside path.
 
-Outstanding: passenger service/production-port integration, side boarding,
-toilets/kiosk and final interior detail, nighttime fixtures, passenger manifests,
-fare settlement, route/terminal integration and saved voyage restoration.
+`PassengerService` keeps manifests in the existing company aggregate; fares use
+`CompanyService` and its account ledger. Register authored route IDs and both
+terminal berths, then opt a deployed vessel in with `PassengerVoyage.setup()`.
+Capacity comes from supported `PassengerSeat*` sockets, excluding the helm chair.
+Stable placement/socket IDs survive placement reordering. Missing booked seats
+block departure; passenger count is never inferred from the rendered crowd.
+Boarding/alighting checks the actual secured berth, deployed ramp and open door.
+Each passenger adds 90 kg including luggage to the ship's existing mass system.
+Cancellation requires returning boarded passengers at the origin, without a fare.
+Only complete disembarkation at the booked destination settles payment, using a
+durable ledger receipt even after the ordinary request cache has evicted its ID.
+
+`tests/passenger_journey_test.tscn -- --shipyard-playtest` runs that local service
+with 240 passengers, save/reload during boarding, rebuilt-vessel restoration,
+wrong-terminal/at-sea rejection, interrupted alighting, repeated payment requests,
+seat refits and a cancelled return sailing. It writes isolated scratch saves and
+render captures under Pictures/machinescreenshots. Teleporting the ferry between
+terminals is a journey fixture; this does not verify autonomous approaches or
+production-world passenger restoration. The 75-mark fare is test data.
+
+`_source/coastal_express/build_seated_passenger.py` bakes the existing in-house
+mariner's seated pose into `characters/passengers/` shared meshes. No player rig,
+animation or locomotion is changed. Four clothing/skin variants use the approved
+character material library. Near/far meshes contain 6992/1794 triangles per person
+and are instanced without per-passenger controllers or skeletons. Near detail is
+used below 80 m; cabin occupants are omitted beyond 450 m. The manifest and ship
+mass remain active independently. See that asset directory for provenance/cost.
+
+Outstanding: production passenger NPC/booking UI, generated-port and stock-sale
+integration, autonomous bow approach, walking boarding queues, side boarding,
+toilets/kiosk and final interior detail, and nighttime fixture acceptance.
 
 ## Northline 40 container feeder (9 October 2026)
 

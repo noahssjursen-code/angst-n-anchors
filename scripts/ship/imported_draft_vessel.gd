@@ -10,6 +10,7 @@ var engine_visual: Node3D
 var engine_coupling: Node3D
 var engine_couplings: Array[Node] = []
 var gangway: ShipGangway
+var fitout_revision := 0
 
 func configure(snapshot: Dictionary) -> void:
 	# The assembly helper is a Node. Give it a lifetime owner even when this
@@ -174,6 +175,7 @@ func _assemble_parts() -> void:
 	for record: Dictionary in assembler.records.values():
 		var part := assembler.create_part(record)
 		part.set_meta("asset_id", record["asset_id"])
+		part.set_meta("record_key", ImportedShipPartsEditor.slot_key(record))
 		add_child(part)
 		part_roots.append(part)
 	var posts := Node3D.new()
@@ -188,6 +190,7 @@ func _assemble_parts() -> void:
 		if state != null and controller != null and (not part.find_children("WheelPivot*", "Node3D", true, false).is_empty() or not part.find_children("ThrottlePivot*", "Node3D", true, false).is_empty()):
 			state.bind_local_helm(controller)
 		_add_interactions(part, state)
+	fitout_revision += 1
 
 func _configure_cargo_pads() -> void:
 	if ImportedHullCatalog.ENTRIES[_hull_id].has("container_beds"):

@@ -313,3 +313,58 @@ scratch save restoration. Not yet passenger service, stock sale, generated-port
 integration, autonomous bow approach, rough-weather acceptance, side boarding,
 night fixture acceptance or completed interior detail. Do not repeat completed
 Northline40, ocean or locomotion work; multiplayer remains out of scope.
+
+9 October 23:16 Oslo - passenger manifest, fares and seated crowd
+Implemented the isolated local two-terminal service using PassengerService inside
+player.company and the existing CompanyService ledger. Supported passenger-seat
+sockets define capacity and stable allocation; the helm seat never counts. Real
+secured berth, entrance door and bow ramp gate boarding/alighting. Missing booked
+seats block departure. Each boarded passenger adds 90 kg including luggage through
+the existing ship mass system. Cancellation returns boarded passengers at origin.
+Complete destination disembarkation pays once, with the ledger retaining a durable
+receipt even after the bounded processed-request cache is cleared.
+
+Final rendered journey report, read and all checks passed:
+C:/Users/noahs/Pictures/machinescreenshots/passenger-journey-1791580416-783/report.json
+Includes 241 rejected vs 240 supported seats, idempotent/conflicting booking,
+interrupted boarding, scratch save/load, 21.6 t passenger mass, removed seat row,
+placement reordering, actual owned-vessel reconstruction underway, wrong-terminal
+and at-sea rejection, partial destination save, one 18000-mark test fare, replay
+and request-cache eviction protection, and a cancelled partial return sailing.
+Journey positions are teleported/retained by the fixture. This does not establish
+live-world restoration or autonomous terminal approach. Log is clean of engine
+errors/warnings: work/passenger-journey-perf.log. Captain saves remain untouched.
+
+Failures investigated: the first seat probe used parent ancestry, incorrectly
+rejecting the vessel's separate walk-deck physics body. Corrected to its actual
+boat-owner metadata and probed at feet clear of the chair base, so floating chairs
+do not count as seats. A subsequent failing assertion expected the passenger
+warning while the physical ramp interlock correctly won; corrected assertion,
+not gameplay. Final current report supersedes those failed development runs.
+
+Added static seated passengers baked in Blender from the approved in-house mariner
+runtime export; original player mesh/rig/clips/IK unchanged, no downloaded models.
+Shared near/far meshes: 6992/1794 triangles per person, four material variants,
+no individual character controllers/skeletons/physics. Shared MultiMesh projection
+follows the manifest; detail switch 80 m, interior people culled beyond 450 m.
+Authored source, generator and triangle report included. Actual cabin and exterior
+captures inspected: saloon-full.png, fully-boarded.png and arrival-paid.png in the
+same report directory. Seated fit works; identical body/hair and static pose are
+explicit remaining visual limitations, not final animated passenger art.
+
+Noah asked about cost. Measured 180 warmed frames per state at 1920x1080 on RTX5070,
+D3D12 Forward+, test-only VSync disabled, identical view and crowd visible/hidden:
+- Saloon GPU median: 2.371 ms empty / 2.970 ms full, +0.599 ms.
+  Render CPU: 0.670 / 0.794 ms. Draw calls: 173 / 245.
+- Outside at about 120 m GPU: 1.880 / 2.003 ms, +0.123 ms.
+  Render CPU: 1.143 / 1.280 ms. Draw calls: 365 / 425.
+The earlier ordinary frame sample was about 10 ms in both states and hid this
+cost. These GPU comparisons describe the isolated fixture on this hardware;
+busy live-port performance and minimum hardware are still unmeasured. Geometry
+budget alone (1.68 M near triangles for240) must not be presented as frame cost.
+
+Next unfinished ferry work: production terminal/route registration and passenger
+NPC booking interface, stock sale only when the route is playable, normal-world
+voyage restoration, nighttime fixtures and terminal/interior detail. No moving
+boarding queues, individual passenger animation, side boarding or autonomous bow
+approach claim. Existing ocean/locomotion and multiplayer remain untouched.
