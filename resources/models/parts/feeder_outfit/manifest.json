@@ -1,0 +1,90 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "feeder_funnel",
+      "style": "vent",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/feeder_outfit/feeder_funnel.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        2.4,
+        2.2
+      ],
+      "height_start_m": 4.3,
+      "height_end_m": 4.3,
+      "paintable": true
+    },
+    {
+      "id": "feeder_signal_mast",
+      "style": "furniture",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/feeder_outfit/feeder_signal_mast.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        3.6,
+        0.4
+      ],
+      "height_start_m": 7,
+      "height_end_m": 7,
+      "paintable": true
+    },
+    {
+      "id": "feeder_liferaft",
+      "style": "furniture",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/feeder_outfit/feeder_liferaft.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        1.4,
+        2.0
+      ],
+      "height_start_m": 1.26,
+      "height_end_m": 1.26,
+      "paintable": true
+    },
+    {
+      "id": "feeder_windlass",
+      "style": "furniture",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/feeder_outfit/feeder_windlass.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        2.8,
+        1.45
+      ],
+      "height_start_m": 1.55,
+      "height_end_m": 1.55,
+      "paintable": true
+    },
+    {
+      "id": "feeder_stowed_anchor",
+      "style": "furniture",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/feeder_outfit/feeder_stowed_anchor.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        1.4
+      ],
+      "height_start_m": 1.65,
+      "height_end_m": 1.65,
+      "paintable": true
+    }
+  ]
+}

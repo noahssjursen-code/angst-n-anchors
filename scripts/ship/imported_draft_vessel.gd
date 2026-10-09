@@ -34,8 +34,10 @@ func configure(snapshot: Dictionary) -> void:
 	linear_damp_coeff = 0.0
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
 	# Game hull-form tuning: soft displacement-speed knees, never speed caps.
-	physics_profile.wave_making_peak_coeff = {"trawler_hull_14m":.011,"hull_24x8":.007,"hull_32x10":.0065}[hull_id]
-	angular_damp_coeff = .9
+	physics_profile.wave_making_peak_coeff = {"trawler_hull_14m":.011,"hull_24x8":.007,"hull_32x10":.0065}.get(hull_id, .0065)
+	for property: String in platform.get("physics", {}):
+		physics_profile.set(property, platform.physics[property])
+	angular_damp_coeff = float(platform.get("angular_damping", .9))
 	process_physics_priority = -10
 	length_m = platform.loa_m
 	beam_m = platform.beam_m
@@ -155,6 +157,9 @@ func _assemble_parts() -> void:
 		_add_interactions(part, state)
 
 func _configure_cargo_pads() -> void:
+	if ImportedHullCatalog.ENTRIES[_hull_id].has("container_beds"):
+		_configure_deck_container_beds()
+		return
 	if draft.get("hull") != "hull_24x8": return
 	for part in part_roots:
 		if part.get_meta("asset_id") in ["bulk_divider_5m", "hatch_cover_5x4"]: return
@@ -187,6 +192,32 @@ func _configure_cargo_pads() -> void:
 		pad.deck_length_m = 6.5 if iso else 4.0
 		pad.cell_size_m = .5 if iso else 1.0
 		pad.container_footprint = Vector2i(5,13) if iso else Vector2i(4,4)
+		pad.transform = part.transform.affine_inverse() * _relative_transform(socket)
+		part.add_child(pad)
+
+
+func _configure_deck_container_beds() -> void:
+	# Capacity belongs to supported, installed beds. Empty hulls, raised/floating
+	# fittings, rotated beds and off-grid placements cannot manufacture inventory.
+	var config: Dictionary = ImportedHullCatalog.ENTRIES[_hull_id]
+	var mounts: Dictionary = config.container_beds
+	for part in part_roots:
+		if part.get_meta("asset_id") != "container_bed_20ft": continue
+		if not part.basis.is_equal_approx(Basis.IDENTITY): continue
+		var supported := false
+		for x: float in mounts.lanes:
+			for bay in int(mounts.bay_count):
+				var seat := Vector3(x, float(config.depth_m), float(mounts.first_bay) + bay * float(mounts.bay_pitch))
+				if part.position.is_equal_approx(seat): supported = true
+		if not supported: continue
+		var socket := part.find_child("CargoDatum", true, false) as Node3D
+		assert(socket != null)
+		var pad := ImportedCargoPad.new()
+		pad.name = "CargoPad"
+		pad.deck_width_m = 2.5
+		pad.deck_length_m = 6.5
+		pad.cell_size_m = .5
+		pad.container_footprint = Vector2i(5,13)
 		pad.transform = part.transform.affine_inverse() * _relative_transform(socket)
 		part.add_child(pad)
 

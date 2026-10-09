@@ -2,7 +2,7 @@ class_name MarineEngineCatalog
 extends RefCounted
 ## One installed machinery package per imported hull; presentation never grants power.
 const DIRECTORY := "res://resources/models/machinery/"
-const MOUNTS := {"trawler_hull_14m":Vector3(0,.35,3.2), "hull_24x8":Vector3(0,.55,7.2), "hull_32x10":Vector3(0,.65,10.2)}
+const MOUNTS := {"trawler_hull_14m":Vector3(0,.35,3.2), "hull_24x8":Vector3(0,.55,7.2), "hull_32x10":Vector3(0,.65,10.2), "hull_88x14":Vector3(0,1,36)}
 static var _presets: Array = []
 
 static func options(hull_id: String) -> Array[Dictionary]:

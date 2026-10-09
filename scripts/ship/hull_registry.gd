@@ -94,7 +94,7 @@ static func get_by_id(hull_id: String) -> Dictionary:
 	var id := resolve_network_hull_id(hull_id)
 	if ImportedHullCatalog.has(id):
 		var entry: Dictionary = ImportedHullCatalog.ENTRIES[id].duplicate(true)
-		entry.merge({"id": id, "display": entry.label, "scene_path": "", "ship_class": ShipClass.Type.SHORT_SEA_COASTER if id == "hull_32x10" else ShipClass.Type.COASTAL_TRADER})
+		entry.merge({"id": id, "display": entry.label, "scene_path": "", "ship_class": ShipClass.Type.HANDYSIZE_FEEDER if float(entry.loa_m)>=60 else (ShipClass.Type.SHORT_SEA_COASTER if float(entry.loa_m)>=30 else ShipClass.Type.COASTAL_TRADER)})
 		return entry
 	if HullCatalog.has_id(id):
 		return HullCatalog.get_by_id(id)

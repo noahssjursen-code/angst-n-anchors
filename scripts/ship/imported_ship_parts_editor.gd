@@ -1403,7 +1403,18 @@ func _setup_drafts() -> void:
 	draft_menu.add_separator("Starter vessels — editable copies")
 	for index in CompanyContracts.starter_options().size():
 		draft_menu.add_item(CompanyContracts.starter_options()[index].label, 100 + index)
+	var starter_ids: Array = CompanyContracts.starter_options().map(func(option: Dictionary) -> String: return option.prebuilt_id)
+	var stock := PrebuiltVesselCatalog.for_sale_entries().filter(func(entry: Dictionary) -> bool: return not starter_ids.has(entry.prebuilt_id))
+	if not stock.is_empty(): draft_menu.add_separator("Larger vessels — editable copies")
+	for index in stock.size(): draft_menu.add_item(stock[index].display, 200 + index)
 	draft_menu.id_pressed.connect(func(id: int) -> void:
+		if id >= 200:
+			var entry: Dictionary = stock[id - 200]
+			_guard(func() -> void:
+				draft_name = str(entry.display)
+				_load_draft_data(entry.prebuilt_layout.duplicate(true))
+			)
+			return
 		if id >= 100:
 			var option: Dictionary = CompanyContracts.starter_options()[id - 100]
 			_guard(func() -> void: load_starter(str(option.id)))
@@ -1662,6 +1673,13 @@ func _furniture_candidate(point: Vector3) -> Dictionary:
 	var p:=Vector3(snappedf(point.x,.1),floor_y(),snappedf(point.z,.1))
 	var id: String=editor.get("_brick_id")
 	if id == "container_bed_20ft":
+		var mounts: Dictionary = ImportedHullCatalog.ENTRIES[hull_id].get("container_beds", {})
+		if not mounts.is_empty() and active_floor == 0:
+			var nearest_x := float(mounts.lanes[0])
+			for x: float in mounts.lanes:
+				if absf(x-point.x) < absf(nearest_x-point.x): nearest_x = x
+			var bay := clampi(roundi((point.z-float(mounts.first_bay))/float(mounts.bay_pitch)), 0, int(mounts.bay_count)-1)
+			return {"asset_id":id,"position":[nearest_x,deck_height,float(mounts.first_bay)+bay*float(mounts.bay_pitch)],"yaw_degrees":0.0}
 		if hull_id != "hull_24x8" or active_floor != 0: return {}
 		return {"asset_id":id,"position":[-1.25 if point.x<0 else 1.25,deck_height,0],"yaw_degrees":0.0}
 	if id == "cargo_deck_5x8":

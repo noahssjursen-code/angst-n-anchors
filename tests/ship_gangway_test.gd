@@ -105,6 +105,12 @@ func capture(tag: String) -> void:
 	print("CAPTURE ",path)
 
 func run() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--vessel="):
+			for side in [-1,1]: await test_vessel(arg.trim_prefix("--vessel="),side)
+			print("GANGWAY RESULT: ",failures)
+			get_tree().quit(0 if failures.is_empty() else 1)
+			return
 	for option: Dictionary in CompanyContracts.starter_options():
 		for side in [-1,1]:
 			await test_vessel(str(option.id),side)
@@ -128,7 +134,12 @@ func test_vessel(id: String,side: int) -> void:
 		slot.add_bollard(post)
 		posts.append(post)
 	harbour.register_berth(slot)
-	boat = VesselSpawn.instantiate_from_record(CompanyService.build_starter_vessel_record(id)) as ImportedDraftVessel
+	var record := CompanyService.build_starter_vessel_record(id)
+	if record.is_empty():
+		for entry in PrebuiltVesselCatalog.for_sale_entries():
+			if entry.prebuilt_id == id:
+				record = VesselSpawn.normalize_record({"uid":"gangway-"+id,"name":entry.display,"hull_id":entry.hull_id,"brick_layout":entry.prebuilt_layout})
+	boat = VesselSpawn.instantiate_from_record(record) as ImportedDraftVessel
 	boat.freeze = true
 	boat.transform = port.global_transform * Transform3D(Basis.IDENTITY,Vector3(side*(10+boat.beam_m*.5+2.5),-boat.draft_m,0))
 	var saved_draft := JSON.stringify(boat.draft)
@@ -207,7 +218,10 @@ func test_vessel(id: String,side: int) -> void:
 	completed += 1
 
 func walk_to(target: Vector3,direction: Vector3,tag: String,bob: bool) -> void:
-	player.rotation.y = atan2(-direction.x,-direction.z)
+	# The accepted player now follows look yaw, independently of body turning.
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	var look: Node = player.get("_player_camera")
+	look.shift_look_yaw(wrapf(atan2(-direction.x,-direction.z)-look.get_look_yaw(),-PI,PI))
 	Input.action_press("move_forward")
 	var start_y := boat.position.y
 	var arrived := false

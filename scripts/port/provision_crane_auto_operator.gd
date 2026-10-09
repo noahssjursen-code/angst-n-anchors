@@ -351,6 +351,9 @@ func _find_ship_pickup(ship: BoatBody) -> ContainerNode:
 		for cn in pad.iter_container_nodes():
 			if not _is_deliverable_here(cn, ship):
 				continue
+			# A long vessel can span several cranes. An unreachable first bay
+			# must not stall this operator while reachable cargo is available.
+			if not _crane.can_reach_point(_aim_point(cn, false), .1): continue
 			if cn.global_position.y > best_y:
 				best_y = cn.global_position.y
 				best = cn

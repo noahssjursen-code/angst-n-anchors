@@ -16,10 +16,15 @@ static func area(poly: PackedVector2Array) -> float:
 static func valid(poly: PackedVector2Array) -> bool:
 	if poly.size() < 3 or poly.size() > 64 or area(poly) < .1:
 		return false
+	# Large hulls put perfectly small cabins far from the vessel origin. Limit
+	# tessellation by surface span, not by an obsolete +/-20 m hull coordinate.
+	var bounds := Rect2(poly[0], Vector2.ZERO)
+	for point in poly: bounds = bounds.expand(point)
+	if bounds.size.x > 40 or bounds.size.y > 40: return false
 	for i in poly.size():
 		var a := poly[i]
 		var b := poly[(i+1)%poly.size()]
-		if not is_finite(a.x) or not is_finite(a.y) or absf(a.x)>20 or absf(a.y)>20 or a.distance_to(a.snapped(Vector2(.5,.5)))>.001:
+		if not is_finite(a.x) or not is_finite(a.y) or absf(a.x)>128 or absf(a.y)>128 or a.distance_to(a.snapped(Vector2(.5,.5)))>.001:
 			return false
 		var d := (b-a).abs()
 		if d.length()<.49 or not (is_zero_approx(d.x) or is_zero_approx(d.y) or is_equal_approx(d.x,d.y) or is_equal_approx(d.x*2,d.y) or is_equal_approx(d.x,d.y*2)):

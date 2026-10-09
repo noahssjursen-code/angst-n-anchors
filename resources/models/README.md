@@ -1,5 +1,52 @@
 # Imported 3D models
 
+## Northline 40 container feeder (9 October 2026)
+
+`resources/data/vessels/prebuilt/container_feeder_40.json` is an editable format-3
+stock vessel: 88 × 14 m, forty independent real 20-foot ISO deck positions,
+aft T-shaped bridge, two accommodation levels, external stairs and wing door.
+It is sold empty by the existing shipwright catalog; it is not a new free starter.
+Shipyard **Drafts → Larger vessels → Northline 40** opens an editable copy.
+The corresponding draft is `examples/container_feeder_40_draft.json`.
+
+The original Blender assets and repeatable recipes live under `_source/feeder_88`.
+`build_feeder.py` exports the hull, 1500/2100 kW engine visual, 2.6 m propeller,
+3 m rudder, support, funnel, signal mast, liferaft cases, windlass and anchors.
+It reuses the existing exact perimeter miters, cabin, stair, surface and interior
+parts. `arrangement.py` produces a placement recipe; `tests/feeder_authoring.tscn`
+loads, validates, saves and reloads it through the actual Shipyard editor.
+The 477 placements remain separate, recolourable construction parts.
+All new surface names resolve to the approved marine material library.
+
+Layout/proportion reference: Damen's Combi Freighter 3850,
+https://www.damen.com/vessels/cargo/multi-purpose-cargo-vessels/combi-freighter-3850
+(aft accommodation and machinery, long cargo area, coastal-freighter proportions).
+This is an original arrangement using this game's modular construction system.
+
+Hull metadata owns the cargo mounting grid and physical profile. Only correctly
+placed deck beds create cargo capacity; raised, rotated or unsupported beds do not.
+Containers are single-tier: four lanes × ten bays. Do not fake stacking or attach
+decorative cargo to inventory. The actual cargo components carry identity/mass.
+The editor snaps beds to the same grid; physics, steering, mooring, gangway,
+freight and save/replica systems use their existing contracts.
+
+Verified with `--shipyard-playtest`: editor save/reload and bed placement,
+captain record round-trip, forty real containers adding 800 t, real-controller
+stairs and bridge entry (`container_feeder_test`, renderer required), gangway
+traversal on both sides (`ship_gangway_test --vessel=container_feeder_40 --rotated`),
+starter/harbour regressions and all-stock longitudinal handling. Free-floating
+`container_feeder_handling` measured 12.4/12.3 kn empty/laden and 42.2/55.6 s
+stopping from 7.8 kn. These are controlled flat-water results, not a sea trial.
+`fleet_world_journey --vessel=container_feeder_40 --cycles=1 --speed=8` completed
+real generated-port deployment, four booked containers, arrival/mooring, unloading
+and exact-once payment. The full forty-container crane cycle remains a separate
+overnight gameplay check; the forty-slot capacity/mass case already passes.
+
+`scenes/showcases/container_feeder_showcase.tscn` provides isolated empty/loaded,
+bow/stern, bridge, side-walkway and helm views. C switches cargo; 1–5 switches views.
+`--capture` archives actual rendered views and a warmed frame-time sample under
+`C:/Users/noahs/Pictures/machinescreenshots`. Captain saves are never opened.
+
 ## Mandatory material acceptance for every physical item
 
 Current implementation: `SurfaceMaterialLibrary` and

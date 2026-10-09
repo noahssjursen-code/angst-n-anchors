@@ -140,7 +140,8 @@ func _has_yard_container(ship: BoatBody) -> bool:
 
 func _has_free_pad_slot(ship: BoatBody) -> bool:
 	for pad in ship.get_cargo_pads():
-		if pad.find_free_slot() >= 0:
+		var target := pad.slot_drop_world_for_free()
+		if target != Vector3.INF and _crane.can_reach_point(target, .1):
 			return true
 	return false
 
@@ -164,7 +165,8 @@ func _has_ship_container(ship: BoatBody) -> bool:
 		for node in pad.iter_container_nodes():
 			var container := node as ContainerNode
 			if container != null and container.unit != null \
-					and _can_deliver_unit(container.unit, ship):
+					and _can_deliver_unit(container.unit, ship) \
+					and _crane.can_reach_point(container.to_global(Vector3.UP * container.lift_height_m()), .1):
 				return true
 	return false
 

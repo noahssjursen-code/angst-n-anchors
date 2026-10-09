@@ -1,0 +1,66 @@
+Overnight gameplay quality pass — 9–10 October 2026
+
+Authorization and limits
+Noah requested an overnight run improving the game/gameplay while out. Finish
+the requested 40-container T-bridge ship first. Working cutoff: 08:00 Europe/Oslo
+10 October (06:00 UTC); pause overnight-marine-models-and-integration then.
+30-minute heartbeat. Work substantial batches between checkpoints. No subagents.
+Read AGENTS.md and resources/models/README.md. Accepted walking and ocean stay
+unchanged. Preserve captain saves, geography, unrelated work and current editors.
+Use --shipyard-playtest; archive all captures in Pictures/machinescreenshots.
+Commit only verified scoped changes, push feature/3d-model-migration, verify SHA.
+
+Order
+1. Finish Northline 40: editor-authored reusable Blender hull/outfit, forty real
+   deck container positions, T bridge, all access, handling and cargo delivery.
+2. Inspect full gameplay loop with real production services: purchase/deploy,
+   boarding, freight booking/cancellation, load, moor, unload/pay, save/reload.
+   Read every report and fix demonstrated failures. Keep tests lean and fast.
+3. Verify two-client authority for cabin doors/mooring and relevant new vessel
+   interactions where feasible; record honest limits. Avoid parallel services.
+4. Review performance/visual fitout in actual play; improve concrete deficiencies
+   found during these journeys rather than broad rewrites or gratuitous changes.
+At cutoff record pushed commits, checks, screenshots and remaining gaps here.
+
+Starting checkpoint, 9 October approximately 20:00 local
+Northline 40 is uncommitted work currently being verified. 88 x 14 m, 477 editable
+parts, 40 x 20 ft single-deck containers (no invented stacking), 1500/2100 kW
+presets. 1850 t lightship and 2650 t with forty real 20 t ContainerUnits.
+Actual Shipyard editor save/reload passes. Handling passes free Jolt simulation:
+12.4/12.3 kn empty/laden, 42.2/55.6 s crash stop from 7.8 kn, actual cargo mass,
+propeller/rudder and bow thruster. Test report feeder-handling-1791568370-622.json
+under screenshot archive. World journey passes harbourmaster deploy, four-unit
+booking/load, destination ropes, crane unload, exact once-only payment. Report:
+fleet-journeys-1791568458-263/report.json. Found and narrowly fixed selection of
+out-of-reach cargo by cranes on long vessels. Initial failure report retained.
+Outstanding current work: rendered real-controller stair/door test (headless
+mouse capture does not work), moved liferafts off upper passage, regenerate
+materials to remove Blender .001 rubber name, final renders and scoped commit.
+Detailed logs live in C:/Users/noahs/Documents/Codex/2026-10-05/
+referenced-chatgpt-conversation-this-is-an/work/feeder-*.log.
+Unrelated large UI refactor is already unstaged; do NOT sweep it into this commit.
+
+9 October approximately 20:15 local — feeder acceptance
+Resolved player access through authored geometry only: liferaft cradles moved off
+gallery, upper stair reversed to face the aft landing, stairwell lengthened for
+head clearance, bridge wing door added, seats moved clear of the doorway.
+Rendered container_feeder_test now passes the whole real-input stair/door route.
+ship_gangway_test with --vessel=container_feeder_40 --rotated passes boarding and
+return across a moving span on both sides, stow/redeployment and bad-landing limits.
+Captures: gangway-1791569371-container_feeder_40*.png in the screenshot archive.
+Added larger-stock editable copies to the builder Drafts menu and nearest authored
+bed snapping, checked all forty seats through the actual editor. All four original
+starters pass imported_starter_fleet_test; harbour_service_routing_test passes.
+All five ships pass vessel_handling_test; heavy ship limits preserve longer inertia
+while retaining finite astern braking and unpowered deceleration. Report:
+handling-1791569166-799.json. Free-floating laden result remains the more useful
+speed estimate (12.3 kn); yaw/heave-locked benchmark reports 14.3 kn for the feeder.
+New asset finish-name audit passes; accidental Blender rubber suffixes corrected.
+Remaining overnight gameplay priority: full forty-unit crane load/unload across
+multiple crane work envelopes, then purchase/cancellation/persistence and network
+authority checks. Do not call the four-unit delivery a forty-unit crane test.
+Final rendered review: feeder-1791569517-129/{loaded-bow,loaded-stern,bridge,
+deck-walkway,helm,empty-bow}.png. Warmed loaded scene at 1920x1080 on RTX 5070:
+median 10.03 ms, p95 10.984 ms, 1503 draw calls (isolated sea scene, not a full
+port benchmark). Inspect batching opportunities during later performance work.
+Starter editor save/load regression passes with the expanded stock-copy menu.

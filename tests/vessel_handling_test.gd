@@ -11,7 +11,7 @@ var output := ""
 var floating := false
 var laden := false
 const STAGES := ["cruise", "coast_cruise", "coast_harbour", "crash_stop", "astern", "brake_astern"]
-const DURATIONS := [180.0, 30.0, 30.0, 60.0, 60.0, 45.0]
+const DURATIONS := [180.0, 30.0, 30.0, 90.0, 60.0, 45.0]
 
 func _ready() -> void:
 	assert(ShipyardPlaytestMode.active())
@@ -43,7 +43,7 @@ func _ready() -> void:
 		var helm := boat.get_node("BoatController") as BoatController
 		helm._active = true
 		boats.append(boat)
-		rows.append({"vessel":entry.prebuilt_id,"mass_kg":boat.mass,"crash_stop_s":-1.0,"brake_astern_s":-1.0})
+		rows.append({"vessel":entry.prebuilt_id,"length_m":boat.length_m,"mass_kg":boat.mass,"crash_stop_s":-1.0,"brake_astern_s":-1.0})
 	await get_tree().physics_frame
 	next_phase()
 
@@ -85,10 +85,13 @@ func _physics_process(delta: float) -> void:
 func finish() -> void:
 	var passed := true
 	for row in rows:
-		var ok := float(row.crash_stop_s) > 0 and float(row.crash_stop_s) < 35 \
-			and float(row.brake_astern_s) > 0 and float(row.brake_astern_s) < 25 \
-			and absf(float(row.coast_harbour_end_kn)) < 1.0 \
-			and float(row.coast_cruise_end_kn) < float(row.cruise_end_kn)*.8
+		# A loaded 88 m feeder must retain more momentum than a 14 m trawler.
+		# Still require measurable unpowered decay and finite stopping both ways.
+		var feeder := float(row.length_m) >= 60.0
+		var ok := float(row.crash_stop_s) > 0 and float(row.crash_stop_s) < (90 if feeder else 35) \
+			and float(row.brake_astern_s) > 0 and float(row.brake_astern_s) < (45 if feeder else 25) \
+			and absf(float(row.coast_harbour_end_kn)) < (3.5 if feeder else 1.0) \
+			and float(row.coast_cruise_end_kn) < float(row.cruise_end_kn)*(.95 if feeder else .8)
 		row["passed"] = ok
 		passed = passed and ok
 		print("HANDLING RESULT ",JSON.stringify(row))

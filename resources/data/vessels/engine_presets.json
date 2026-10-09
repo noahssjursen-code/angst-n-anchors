@@ -1,5 +1,7 @@
 {
   "presets": [
+    {"id":"feeder_1500","name":"Feeder diesel · 1500 kW","hull":"hull_88x14","model":"marine_v12_feeder","power_kw":1500,"mass_kg":11200,"fuel_lph":360,"shaft_rpm":160,"default":true},
+    {"id":"feeder_2100","name":"Feeder diesel · 2100 kW","hull":"hull_88x14","model":"marine_v12_feeder","power_kw":2100,"mass_kg":12800,"fuel_lph":505,"shaft_rpm":185},
     {"id":"compact_300","name":"Compact diesel · 300 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":300,"mass_kg":950,"fuel_lph":75,"shaft_rpm":240,"default":true},
     {"id":"compact_450","name":"Compact diesel · 450 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":450,"mass_kg":1050,"fuel_lph":113,"shaft_rpm":275},
     {"id":"coastal_700","name":"Coastal diesel · 700 kW","hull":"hull_24x8","model":"marine_i6_coastal","power_kw":700,"mass_kg":2450,"fuel_lph":175,"shaft_rpm":210,"default":true},
