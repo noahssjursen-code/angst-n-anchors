@@ -13,12 +13,16 @@ Commit only verified scoped changes, push feature/3d-model-migration, verify SHA
 Order
 1. Finish Northline 40: editor-authored reusable Blender hull/outfit, forty real
    deck container positions, T bridge, all access, handling and cargo delivery.
-2. Inspect full gameplay loop with real production services: purchase/deploy,
+2. Noah's new ferry request: research Bergen-area Skyss/Norled passenger
+   catamarans and terminals, then build a coherent passenger ferry/terminal
+   slice. Research is saved in docs/passenger-ferry-research-2026-10-09.txt.
+   Resume its build order; do not treat the legacy empty catamaran as finished.
+3. Inspect full gameplay loop with real production services: purchase/deploy,
    boarding, freight booking/cancellation, load, moor, unload/pay, save/reload.
    Read every report and fix demonstrated failures. Keep tests lean and fast.
-3. Noah said at approximately 21:17 local on 9 October to leave multiplayer
+4. Noah said at approximately 21:17 local on 9 October to leave multiplayer
    alone. Do not resume multiplayer implementation or network tests.
-4. Review performance/visual fitout in actual play; improve concrete deficiencies
+5. Review performance/visual fitout in actual play; improve concrete deficiencies
    found during these journeys rather than broad rewrites or gratuitous changes.
 At cutoff record pushed commits, checks, screenshots and remaining gaps here.
 
@@ -186,3 +190,18 @@ Next single-player work: inspect real boarding and freight cancellation/rebookin
 at varied generated ports, especially layout pockets and equipment reach. Northline
 construction, forty-unit delivery, accepted movement and ocean need no repeat pass.
 Do not restart network work. Preserve the unrelated UI work and all captain saves.
+
+9 October - passenger ferry research, new user priority
+Reviewed primary Brødrene Aa, Skyss, Oma and Servogear references for a
+Bergen-area passenger catamaran and terminal. Visually inspected Fjordbris
+exterior, bridge, saloon and controls; rendered the Skyss/Rambøll 2021 terminal
+study's Strandkaien layout and bow-boarding/pontoon proposals. Source evidence,
+proposed original vessel/terminal arrangement and implementation gaps are saved
+in docs/passenger-ferry-research-2026-10-09.txt. Source photographs remain in the
+task's work/ferry-research-20261009; PDF captures are archived in machinescreenshots.
+Research only: no new ferry model, passenger service or physics changes yet.
+Key gaps: imported pipeline assumes one hull/drive and one convex collision;
+existing side gangway cannot supply wide bow boarding; there is no current
+passenger manifest/fare service. Preserve the accepted monohulls, ocean and gait.
+Next batch starts the brief's isolated twin-hull support and measured arrangement,
+then reusable Blender models and terminal. Multiplayer stays out of scope.
