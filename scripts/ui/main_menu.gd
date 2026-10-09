@@ -2,6 +2,8 @@ extends Control
 
 ## Title orchestrator — pages call services; services own persistence/network.
 
+@export var preview_mode := false
+
 const RosterPanelScript := preload("res://scripts/ui/captain_roster_panel.gd")
 const MenuBackdropScript := preload("res://scripts/ui/menu_backdrop.gd")
 const ChartPreviewBootstrapScript := preload("res://scripts/ui/chart/chart_preview_bootstrap.gd")
@@ -171,6 +173,7 @@ func _build_singleplayer_page() -> void:
 	_sp_roster.selected.connect(func(id: String) -> void: _captains.select(id))
 	_sp_roster.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_sp_roster)
+	_add_action(vbox, "Development captain · all ships", _on_development_captain)
 	_add_action(vbox, "Back", func() -> void: _show_page(Page.MODE_SELECT))
 
 
@@ -489,6 +492,14 @@ func _teardown_home_port_chart() -> void:
 		if _home_port_chart.is_home_port_pick_mode():
 			_home_port_chart.exit_home_port_pick_mode()
 		_home_port_chart.visible = false
+
+
+func _on_development_captain() -> void:
+	if preview_mode:
+		return
+	var player: PlayerData = _captains.create_development_local()
+	if player != null:
+		_sp_roster.set_message("Development fleet ready · %d ships owned. Select Sail to play." % player.owned_vessels.size())
 
 
 func _on_sp_sail(captain_id: String) -> void:

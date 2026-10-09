@@ -155,16 +155,25 @@ func create_local(
 		error_message.emit("PlayerSession missing.")
 		return null
 	var account_id := PlayerData.new_uuid()
-	LocalCaptainStore.create_slot(account_id, {
+	# A new company must never save over a previously selected local captain.
+	LocalCaptainStore.clear_active()
+	session.begin_offline_voyage()
+	if not LocalCaptainStore.create_slot(account_id, {
 		"display_name": display_name,
 		"home_port_id": home_port_id,
 		"world_seed": world_seed,
 		"last_played_unix": int(Time.get_unix_time_from_system()),
-	})
+	}):
+		error_message.emit("Could not create the captain's save folder.")
+		return null
 	session.begin_new_captain(
 		display_name, appearance, home_port_id, account_id, world_seed,
 		company_name, brand_color, starter_vessel,
 	)
+	if not session.save_now():
+		error_message.emit("Could not save the new captain.")
+		LocalCaptainStore.clear_active()
+		return null
 	LocalCaptainStore.touch_index_from_player(session.data)
 	selected_id = account_id
 	var entry := {
@@ -180,6 +189,36 @@ func create_local(
 	captain_created.emit(entry)
 	refresh()
 	return session.data
+
+
+## One reusable local testing captain; ordinary captains never receive grants.
+func create_development_local() -> PlayerData:
+	if mode != Mode.LOCAL:
+		return null
+	var session := (Engine.get_main_loop() as SceneTree).root.get_node("PlayerSession")
+	var existing := DevelopmentFleet.existing_captain_id()
+	if not existing.is_empty():
+		if not load_local_into_session(existing):
+			error_message.emit("Could not load the development captain.")
+			return null
+		refresh()
+		return session.data
+	var player := create_local("Development Captain", CharacterAppearance.default_appearance(),
+		"port-home", 424242, "Development Shipping", Color("d78b37"), "general_cargo")
+	if player == null:
+		return null
+	player.company["development_captain"] = true
+	# Adopt the normal onboarding grant instead of adding a second copy.
+	player.company["development_fleet"] = {
+		str(CompanyContracts.STARTER_VESSELS.general_cargo.prebuilt_id): str(player.active_vessel.uid),
+	}
+	DevelopmentFleet.synchronize(player)
+	if not session.save_now():
+		error_message.emit("Could not save the development fleet.")
+		return null
+	LocalCaptainStore.touch_index_from_player(player)
+	refresh()
+	return player
 
 
 func create_remote(display_name: String, appearance: CharacterAppearance) -> void:
@@ -213,12 +252,19 @@ func load_local_into_session(captain_id: String) -> bool:
 		session = tree.root.get_node_or_null("PlayerSession")
 	if session == null:
 		return false
+	LocalCaptainStore.clear_active()
 	if session.has_method("begin_offline_voyage"):
 		session.call("begin_offline_voyage")
 	if not LocalCaptainStore.activate(captain_id):
 		return false
-	var player := PlayerSaveStore.load_player()
-	session._load_data(player.to_dict())
+	var envelope := PlayerSaveStore.load_envelope()
+	if envelope.is_empty():
+		LocalCaptainStore.clear_active()
+		return false
+	session._load_data(envelope["player"])
+	if DevelopmentFleet.synchronize(session.data) > 0 and not session.save_now():
+		error_message.emit("Could not save the updated development fleet.")
+		return false
 	LocalCaptainStore.touch_index_from_player(session.data)
 	selected_id = captain_id
 	return true

@@ -368,3 +368,25 @@ NPC booking interface, stock sale only when the route is playable, normal-world
 voyage restoration, nighttime fixtures and terminal/interior detail. No moving
 boarding queues, individual passenger animation, side boarding or autonomous bow
 approach claim. Existing ocean/locomotion and multiplayer remain untouched.
+2026-10-09 23:45 Oslo - User steering: development captain
+- Added Singleplayer > Development captain / all ships. Reuses one distinct local
+  captain and grants the five current stock arrangements plus Coastal Express.
+  Normal onboarding's Harbour Cargo is adopted, not duplicated. Future catalog
+  additions are granted on load, while existing names, paint and selected ship
+  remain untouched. No multiplayer or ordinary captain grant path was changed.
+- Includes the existing local captain creation/load safeguards (clear old active
+  slot before switching, validate create/save/load outcome); the new bootstrap
+  depends on these to preserve the currently selected captain.
+- Actual title-button/render and 26 persistence/catalog checks passed in
+  tests/development_captain_test.tscn -- --shipyard-playtest. Read the produced
+  report. All six records pass the normal deployable-record validator.
+- Evidence: C:/Users/noahs/Pictures/machinescreenshots/development-captain-1791582224-883/
+  report.json and singleplayer-development-captain.png. Another isolated normal
+  captain's player.json remained byte-identical throughout development operations.
+- Earlier test fixture initially left a future vessel recovery archive behind,
+  so archive recovery correctly restored it and the fixture incorrectly counted
+  a duplicate. Corrected the older-save fixture to omit that future archive;
+  final run has no failures or engine errors. An initial UI lookup also needed
+  to account for the menu theme's uppercase button text.
+- Main-menu changes are scoped to the new action and preview guard. Preserve the
+  unrelated existing UI rebuild and other working-copy changes.

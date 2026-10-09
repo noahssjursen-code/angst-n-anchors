@@ -148,3 +148,25 @@ Multiplayer worlds take `world_seed`, `generation_version`, and
 `PlayerData.from_dict()` supplies defaults for missing fields, so old envelopes
 upgrade on the next successful save. Flat legacy player dictionaries are still
 wrapped into the current envelope by `PlayerSaveStore`.
+
+## Development captain (9 October 2026)
+
+Singleplayer -> Development captain / all ships creates or reopens a separate
+local captain. All valid ready-built catalog entries plus explicitly registered
+review vessels are granted through the normal owned-vessel ledger. Current fleet:
+Harbour Cargo, Coastal Bulk, Coastal Freighter, Northline 40, Coastal Trawler,
+and Coastal Express. No normal captain is upgraded to development implicitly.
+
+The optional company.development_captain flag opts in; company.development_fleet
+maps stock IDs to granted vessel UIDs. Loading this captain grants newly added
+catalog entries once. Existing owned records, names, paint, active selection and
+runtime state are retained. Stock updates do not overwrite saved customizations.
+Future yard stock is discovered automatically from PrebuiltVesselCatalog; review
+arrangements not yet for sale are registered in DevelopmentFleet.REVIEW_RECIPES.
+Normal company normalization preserves these optional JSON-safe fields; no save
+version migration is required. This is a local development facility, not an
+online account or a change to normal purchase/authority rules.
+
+Verification: tests/development_captain_test.tscn -- --shipyard-playtest exercises
+the real title button, isolated creation, disk roundtrip, reload/new-stock grants,
+customization retention and byte-for-byte protection of another captain's save.
