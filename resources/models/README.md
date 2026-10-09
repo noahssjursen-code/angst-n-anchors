@@ -125,10 +125,11 @@ starter/harbour regressions and all-stock longitudinal handling. Free-floating
 `container_feeder_handling` measured 12.4/12.3 kn empty/laden and 42.2/55.6 s
 stopping from 7.8 kn. These are controlled flat-water results, not a sea trial.
 `fleet_world_journey --vessel=container_feeder_40 --cycles=1 --speed=8` completed
-real generated-port deployment, four booked containers, arrival/mooring, unloading
-and exact-once payment. Add `--containers=40` for the full-capacity crane journey:
-this explicitly substitutes a forty-unit consignment on a generated trade route,
-then uses normal booking, staging, physical cranes and destination settlement.
+real generated-port deployment, a production cargo-agent offer of forty containers,
+arrival/mooring, unloading and exact-once payment. Eligible offers now use actual
+unreserved cargo-pad/hold capacity and scale payment with the quoted quantity.
+Existing bookings keep their agreed quantity; new offers fill remaining space.
+No `--containers` override is required for the full-capacity journey.
 Each operator serves its own crane envelope; the test visits the next operator
 along the quay when necessary. The full cycle has passed at ports 11 and 23 with
 seed 424242. Those forty provisions containers weigh 128 t; the separate handling

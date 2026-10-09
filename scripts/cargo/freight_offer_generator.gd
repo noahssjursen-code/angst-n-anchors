@@ -59,8 +59,7 @@ static func _make_offer(origin: Dictionary, destination: Dictionary, commodity_i
 	var handling_mode := CommodityCatalog.commodity_handling_mode(commodity_id)
 	var quantity := _quantity_for(handling_mode, stable_seed)
 	var quantity_unit := "tonnes" if handling_mode == "bulk" else "units"
-	var cargo_factor := 8.0 if handling_mode == "bulk" else 95.0
-	var pay := maxi(MIN_PAY, int(round(distance_m * 0.055)) + int(round(quantity * cargo_factor)))
+	var pay := payment_for(distance_m, handling_mode, quantity)
 	return {
 		"id": "freight:%s:%s:%s:%d" % [origin.get("id", ""), destination.get("id", ""), commodity_id, day],
 		"status": "offered",
@@ -77,6 +76,11 @@ static func _make_offer(origin: Dictionary, destination: Dictionary, commodity_i
 		"pay_marks": pay,
 		"offer_day": day,
 	}
+
+
+static func payment_for(distance_m: float, handling_mode: String, quantity: float) -> int:
+	var cargo_factor := 8.0 if handling_mode == "bulk" else 95.0
+	return maxi(MIN_PAY, int(round(distance_m * 0.055)) + int(round(quantity * cargo_factor)))
 
 
 static func is_handling_available(commodity_id: String) -> bool:

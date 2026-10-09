@@ -421,3 +421,25 @@ approach claim. Existing ocean/locomotion and multiplayer remain untouched.
 - Still unfinished: production passenger NPC offers/boarding controls and the
   full passenger journey through that UI. Next user steering is cargo offers
   filling current vessel capacity (Northline40 currently gets only6).
+2026-10-10 00:05 Oslo - Vessel-sized freight offers
+- Cargo agents now quote actual unreserved cargo capacity: Northline40 gets forty
+  containers when empty, HarbourCargo two, CoastalBulk80t and CoastalFreighter120t.
+  Pricing uses the existing per-unit/route rule at the new quantity. Existing
+  bookings retain their original quantities, identities and agreed payment.
+- Sizing and booking share capacity calculation: real ISO pad footprint, occupied
+  space, pending reservations and separate bulk-consignment holds. Capacity is in
+  quote identity so stale UI cannot silently book a different quantity/price.
+- Read all30 checks in freight-capacity-1791582864-694/report.json: zero failures.
+  Includes physical occupancy, stale quote, pending/partial/full reservations,
+  no mixing of bulk consignments, and all five cargo/fishing stock arrangements.
+  Existing freight generator and harbour service routing regressions also passed.
+- Full rendered world journey passed with NO test quantity override: actual cargo
+  agent offered40 provisions containers for5064 marks, real cranes loaded all40,
+  destination port23 mooring/unloading succeeded,128t cargo mass cleared and exact
+  payment/duplicate-delivery rejection passed. Originport11, seed424242.
+  Evidence: Pictures/machinescreenshots/fleet-journeys-1791582744-87/report.json;
+  inspected loaded and delivered captures. Engine log has no errors/warnings.
+- Initial capacity test called a nonexistent fixture release method; corrected to
+  the existing unplug_ship. Final test and full journey have no failures.
+- User reports12.4kn Northline speed. This matches earlier1500kW free-floating
+  results, not yet evidence of a regression. Comparing existing2100kW package.

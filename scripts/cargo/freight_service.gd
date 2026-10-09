@@ -48,7 +48,19 @@ func eligible_offers_at(port_id: String, ship: BoatBody) -> Array[Dictionary]:
 	if not is_ship_ready_at_port(ship, port_id):
 		return []
 	var eligible: Array[Dictionary] = []
-	for offer in _generated_offers(port_id, 0):
+	for template in _generated_offers(port_id, 0):
+		# The old fixed-size bulk fallback would duplicate the same full-hold job.
+		if str(template.id).ends_with(":small"):
+			continue
+		var offer := template.duplicate(true)
+		var quantity := floorf(available_cargo_quantity(ship, str(offer.commodity_id), str(offer.handling_mode)))
+		if quantity < 1.0:
+			continue
+		offer["quantity"] = quantity
+		offer["pay_marks"] = FreightOfferGenerator.payment_for(float(offer.distance_m), str(offer.handling_mode), quantity)
+		# A different capacity is a different quote. A stale panel cannot silently
+		# book a smaller load or price when another job has reserved its space.
+		offer["id"] = "%s:vessel:%s:load:%d" % [template.id, _vessel_uid(ship), int(quantity)]
 		if is_offer_compatible_with_ship(offer, ship):
 			eligible.append(offer)
 		if eligible.size() >= FreightOfferGenerator.OFFER_COUNT:
@@ -144,20 +156,43 @@ func is_offer_compatible_with_ship(offer: Dictionary, ship: BoatBody) -> bool:
 	if handling in ["general", "container"]:
 		if not is_equal_approx(required, roundf(required)):
 			return false
+	return available_cargo_quantity(ship, commodity_id, handling) >= required
+
+
+## Actual free equipment space minus outstanding bookings, shared by offer
+## sizing and acceptance. Vessel names and nominal hull classes grant no space.
+func available_cargo_quantity(ship: BoatBody, commodity_id: String, handling: String) -> float:
+	if ship == null or not is_instance_valid(ship):
+		return 0.0
+	if handling in ["general", "container"]:
 		# Match the units issued by make_container_units, including real ISO size
 		# and each pad's cell resolution. Legacy nominal slots can be too short.
 		var unit := ContainerFactory.make_one("", "", commodity_id)
 		var free_units := 0
 		for pad in ship.get_cargo_pads():
 			free_units += pad.get_free_slot_count(unit.footprint_cells(pad.cell_size_m))
-		return float(free_units) - _reserved_quantity(ship, false) >= required
+		return maxf(0.0, float(free_units) - _reserved_quantity(ship, false))
 	if handling == "bulk":
 		var available_t := 0.0
 		for hold in ship.get_bulk_holds():
-			if hold.can_accept_commodity(commodity_id):
+			# A new consignment cannot mix into another shipment's partial hold.
+			if hold.can_accept_commodity(commodity_id) and hold.get_state().is_empty():
 				available_t += hold.get_state().available_tonnes_t()
-		return available_t - _reserved_quantity(ship, true) >= required
-	return false
+		var reserved_t := 0.0
+		for contract in _active:
+			if str(contract.get("vessel_uid", "")) != _vessel_uid(ship) or str(contract.get("handling_mode", "")) != "bulk":
+				continue
+			var remaining := maxf(0.0, float(contract.quantity) - float(contract.get("loaded_quantity", 0.0)))
+			var consignment := str(contract.get("consignment", {}).get("consignment_id", ""))
+			# Its own partly loaded holds already reserve this space. Only the
+			# remainder must be deducted from still-empty holds offered above.
+			for hold in ship.get_bulk_holds():
+				var state := hold.get_state()
+				if not state.is_empty() and state.consignment_id == consignment and hold.cargo_accessible:
+					remaining = maxf(0.0, remaining - state.available_tonnes_t())
+			reserved_t += remaining
+		return maxf(0.0, available_t - reserved_t)
+	return 0.0
 
 
 func can_accept(offer: Dictionary) -> bool:
