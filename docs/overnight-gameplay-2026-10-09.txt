@@ -591,3 +591,39 @@ approach claim. Existing ocean/locomotion and multiplayer remain untouched.
   visibility away from the terminal; then stock-sale commissioning and terminal
   night fixtures/interior review. No multiplayer, ocean, locomotion or geography
   changes in this batch. Moving passenger queues remain unimplemented.
+2026-10-10 01:39 Oslo - clear coastal air and new overnight direction
+- Noah requested Norwegian atmosphere/world work after the passenger ferry, with
+  clear-air distance haze immediately. Existing overnight schedule updated to this
+  priority, preserving the 08:00 Oslo cutoff. Latest steering also identifies
+  illogical rain/cloud combinations and artificial-looking rain; investigate next.
+- Fixed WorldRenderer's clear weather setting distance fog to exactly zero.
+  Existing exponential fog now has a 0.00010/metre clear-air floor, mildly raised
+  with cloud/storm, plus the existing weather extinction. Thin air samples the
+  directional sky radiance; dense fog retains its previous colour response.
+  No new volumetric pass, meshes, ocean/locomotion/geography/save changes.
+- Review uses actual generated 40km world, ocean, forests, ports and renderer.
+  tests/coastal_atmosphere_review.tscn extends the existing isolated world review;
+  --mainland adds port-2 coastline and distant hills. Day, sunset (21:50), night,
+  rain and dense fog matched comparisons inspected. 21 streaming/world checks
+  passed each run. world_lighting_grade_test passed including near/far contrast.
+- Captures/report: C:/Users/noahs/Pictures/machinescreenshots/
+  compact-world-1791588331-282 (outer islands),
+  compact-world-1791588470-833 (mainland). Best comparison: channel-clear-before
+  and channel-clear-after; harbour views keep near trees/quays readable.
+- Actual viewport1920x1080; mainland post-change frame medians10.29-14.60ms,
+  p9515.87-21.16ms, unchanged paired draw counts. GPU timings varied considerably
+  between samples; these short runs do not establish a precise incremental cost.
+  Engine logs clean. Existing near-water depth edge and distant canopy artefacts
+  appear in both baselines and changed views; not introduced or fixed here.
+- Source: Godot4.6 Environment documents low-density exponential fog and sky
+  radiance aerial perspective (docs.godotengine.org/en/4.6/classes/class_environment.html).
+  Future landscape reference: NIBIO coastal heath is a mosaic of heath, grass
+  and poor bog with juniper/birch/rowan/pine encroachment:
+  https://www.nibio.no/tema/landskap/kulturlandskap-og-biologisk-mangfold/kulturmarkstyper/kystlynghei
+  Fureneset documents wet/windy western coastal setting, moraine/peat, natural
+  birch/Scots pine and planted spruce: https://nibio.no/en/about-eng/addresses/fureneset
+- Next immediate issue: weather matrix explicitly permits clear-sky drizzle and
+  light-cloud rain; interpolated cells/fronts need continuous rain support too.
+  RainField currently renders fixed, unshaded42cm boxes with an excessive wind
+  ratio. Inspect/update coherence, sky lighting and actual rain appearance.
+  Then resume remaining ferry itinerary/persistence/stock and wider atmosphere.

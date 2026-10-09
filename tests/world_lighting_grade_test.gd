@@ -27,6 +27,10 @@ func _run() -> void:
 	_check(float(clear["adjustment_saturation"]) >= 1.0, "grade preserves paint color")
 	_check(float(clear["glow_intensity"]) < 0.5, "glow is restrained")
 	_check(not bool(clear["volumetric_fog_enabled"]), "clear day skips volumetric fog")
+	var clear_extinction := float(clear["fog_density"])
+	_check(1.0 - exp(-clear_extinction * 100.0) < 0.02, "clear air preserves nearby vessel contrast")
+	_check(1.0 - exp(-clear_extinction * 5000.0) > 0.20, "clear air softens distant mountains")
+	_check(1.0 - exp(-clear_extinction * 5000.0) < 0.65, "clear air preserves distant navigation landmarks")
 
 	# Ordinary rain/haze must retain a readable foreground and remain cheap.
 	_apply_state(renderer, 0.50, 0.72, 0.62, 0.76, 0.15)

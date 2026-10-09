@@ -749,12 +749,17 @@ func _apply_fog(solar: Dictionary, fog_t: float, daylight: float, cloud: float, 
 		.lerp(Color(0.16, 0.18, 0.22), storm * 0.55)
 	)
 	
-	# Traditional Screen-Space Fog (Handles skybox blending and distant occlusion)
-	# Keep the response soft: haze should read as atmosphere, not a white wall.
+	# Clear weather still contains air. Keep a metre-scaled extinction floor:
+	# about 1% at 100 m, 39% at 5 km, 63% at 10 km. Weather visibility adds
+	# mist independently; it must not remove aerial perspective when set to 1.
+	# This uses the existing exponential fog, not another volumetric pass.
 	_environment.fog_light_color = base_fog_col
 	var distance_haze := pow(fog_t, 2.15)
-	_environment.fog_density            = 0.009 * distance_haze
-	_environment.fog_aerial_perspective = 0.24 * fog_t
+	var coastal_air := 0.00010 * (1.0 + cloud * 0.30 + storm * 0.20)
+	_environment.fog_density = coastal_air + 0.009 * distance_haze
+	# Thin air takes its colour from the actual sky in the viewing direction.
+	# Dense weather instead uses the fog colour, avoiding sky/cloud bleed-through.
+	_environment.fog_aerial_perspective = lerpf(0.82, 0.24 * fog_t, smoothstep(0.04, 0.44, fog_t))
 	_environment.fog_sky_affect = 0.30 * distance_haze
 
 	# A thin clear-night medium gives nearby lamps depth without reducing the
