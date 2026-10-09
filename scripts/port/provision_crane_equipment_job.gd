@@ -5,6 +5,7 @@ extends QuayEquipmentJob
 
 var _crane: ProvisionCrane
 var last_failure := ""
+var last_result := ""
 
 
 func bind_crane(crane: ProvisionCrane) -> void:
@@ -27,11 +28,13 @@ func _on_phase_changed(_phase: int) -> void:
 
 func progress_label() -> String:
 	var op := _crane.get_auto_operator() if is_instance_valid(_crane) else null
-	return op.get_progress_label() if op != null else "idle"
+	if op != null and op.is_active(): return op.get_progress_label()
+	return last_result if not last_result.is_empty() else "idle"
 
 
 func _on_auto_job_failed(reason: String) -> void:
 	last_failure = reason
+	last_result = reason
 	notify_job_stopped()
 	status_changed.emit()
 
@@ -39,14 +42,19 @@ func _on_auto_job_failed(reason: String) -> void:
 func start_job(ship: BoatBody, mode: String, commodity_id: String = "", context: Dictionary = {}) -> bool:
 	if is_job_active(): return false
 	last_failure = ""
+	last_result = ""
 	return super.start_job(ship, mode, commodity_id, context)
 
 
 func _on_auto_job_finished(_operation: Variant = null, _cycles: int = 0) -> void:
+	last_result = "%s %d container%s. This crane's transfer is finished." % [
+		"Loaded" if _operation == ProvisionCraneAutoOperator.Operation.LOAD else "Unloaded",
+		_cycles, "" if _cycles == 1 else "s"]
 	notify_job_completed({"cycles": _cycles})
 
 
 func _on_auto_job_stopped() -> void:
+	last_result = "Transfer stopped."
 	notify_job_stopped()
 
 
@@ -119,13 +127,13 @@ func serve_hint(ship: BoatBody, mode: String) -> String:
 	var m := mode.strip_edges().to_lower()
 	if m == MODE_LOAD:
 		if not _has_yard_container(ship):
-			return "No general cargo in the yard"
+			return "No booked cargo in this crane's yard. Check the other operators along the quay."
 		if not _has_free_pad_slot(ship):
-			return "Cargo pad is full"
+			return "No empty cargo bed within this crane's reach."
 		return ""
 	if m == MODE_UNLOAD:
 		if not _has_ship_container(ship):
-			return "No general cargo on ship"
+			return "No cargo for this port within this crane's reach."
 		if not _has_yard_slot():
 			return "Yard is full"
 		return ""

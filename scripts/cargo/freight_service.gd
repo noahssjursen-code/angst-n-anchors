@@ -226,8 +226,9 @@ func stage_yard(yard: Node, berth_id: String, port_id: String) -> void:
 			continue
 		if str(contract.get("handling_mode", "")) not in ["general", "container"]:
 			continue
+		var example := ContainerFactory.make_one("", "", str(contract.get("commodity_id", "provisions")))
 		var count := mini(
-			pad.get_free_slot_count(),
+			pad.get_free_slot_count(example.footprint_cells(pad.cell_size_m)),
 			maxi(
 				int(round(float(contract.get("quantity", 0.0))))
 					- int(contract.get("issued_quantity", 0)),
@@ -248,9 +249,9 @@ func stage_berth(port_id: String, berth_id: String) -> void:
 		return
 	for yard in controller.serviceable_yards_on_berth(berth_id, ship):
 		stage_yard(yard as Node, berth_id, port_id)
-		## A contract movement belongs to the one crane bay serving the ship,
-		## never every cargo pad along the same long quay.
-		break
+		## Long vessels can span several crane bays. Issue the remaining booked
+		## units into other reachable yards; the shared issued count prevents
+		## duplication. Unreachable yards still receive nothing.
 
 
 ## Uncollected freight belongs in warehouse authority, not on an empty quay.
@@ -405,7 +406,13 @@ func can_deliver_unit(unit: ContainerUnit, port_id: String, ship: BoatBody = nul
 
 
 func record_unit_loaded(unit: ContainerUnit, port_id: String, ship: BoatBody = null) -> bool:
-	return can_load_unit(unit, port_id, ship) and record_loaded(unit.freight_contract_id, 1.0)
+	if not can_load_unit(unit, port_id, ship) or not record_loaded(unit.freight_contract_id, 1.0):
+		return false
+	# Replenish a finite quay staging area only once the previous lift has
+	# landed aboard. Issued counters keep the remaining cargo in warehouse
+	# authority until there is physical yard space for it.
+	call_deferred("_stage_contract", unit.freight_contract_id)
+	return true
 
 
 func record_unit_delivered(unit: ContainerUnit, port_id: String, ship: BoatBody = null) -> bool:

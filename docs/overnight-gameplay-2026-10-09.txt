@@ -71,3 +71,52 @@ vessel build/access/handling acceptance is complete. Resume priority 2 with the
 full-capacity crane journey; do not repeat the completed construction work.
 Final actual Shipyard capture: feeder-editor-1791569638-654.png. Test processes
 have exited. The user's existing editor/game instances were preserved.
+
+9 October approximately 20:50 local — full-capacity freight
+Reproduced a real large-vessel failure: the 40-unit booking issued/loaded only
+25 units, then the crane reported completion. FreightService stopped after the
+first reachable yard. Failure report: fleet-journeys-1791570848-071/report.json.
+Staging now uses all reachable crane bays, respects the actual issued footprint,
+and replenishes finite yard space after a physical lift lands aboard. Shared
+issued counts prevent duplicate cargo. Each NPC still controls its own crane;
+the test visits successive operators along the quay. Operator messages now say
+when this crane's work is finished and distinguish reach limits from full beds.
+No global port creation, crane teleporting, or invented cargo capacity was added.
+
+Extended the existing fleet_world_journey with --containers=40, explicit fixture
+scope and per-lift manifest/equipment records. It uses generated ports 11 and 23,
+seed 424242, a controlled 40-unit provisions booking, real acceptance/staging/
+physical lifting/destination ropes/settlement. Ship motion is frozen at the quay
+and the voyage is teleported, as before. This is local authority, not multiplayer
+proof. The provisions load is 128 t; the earlier heavy handling load was 800 t.
+Headless complete journey passed in 340.34 s at --speed=8:
+fleet-journeys-1791570996-915/report.json, forty loaded, forty delivered, zero
+remaining ship cargo mass, exact 16,440 fixture payment and all duplicate
+deliveries rejected. Initial rendered attempt 1791571341-757 was deliberately
+interrupted because the harbourmaster conversation covered the scene; its
+report records that reason. Added normal Escape input to dismiss it in the test.
+Harbour service routing regression passes, now including multi-yard issuance,
+unreachable-yard exclusion, repeated staging and one-slot yard replenishment.
+Existing freight_cancellation_test passes 29 checks, including failed-save
+rollback and scratch-save reload. Its deliberate failed-write error is expected.
+Unrelated UI/cancellation edits remain unstaged and must not be swept into this
+batch. Only new freight hunks in the shared files were selected for this commit.
+
+Final rendered acceptance: fleet-journeys-1791571443-933/report.json passes all
+158 checks, records 80 physical transfers and 8 archived captures. Inspected
+deployed, staged-yard, fully-loaded, destination-transfer and empty-after-delivery
+images. Loading used crane 0 for 15 units and crane 1 for 25; destination unloading
+used crane 0 for 4 and crane 1 for 36. No floating cargo remained on the hooks or
+deck after completion. No engine errors/warnings in the rendered log. The full
+1600x900 rendered run took 478.0 s with 8x simulation, versus 340.34 s headless;
+this exercises accelerated world physics and is not a normal-play FPS benchmark.
+Loaded capture: container_feeder_40-loaded-0.png in that report folder.
+All task test processes exited; existing user editor/game processes were preserved.
+
+Next: real purchase/deploy/return-to-storage and persistence in the generated
+world, then two-client authority. The existing uncommitted voyage_ui_test assumes
+every sale vessel is affordable with new-captain capital; that assumption is now
+wrong for the 98,000 Northline 40. Fund that test through an explicit test ledger
+credit and retain the insufficient-funds case; do not lower the ship's price or
+increase starting capital to make a test pass. Do not use remote_realtime_join_smoke
+as an isolated test: it targets the production server and an existing captain.

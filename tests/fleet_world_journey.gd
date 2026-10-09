@@ -13,6 +13,7 @@ var started := 0
 var cycles := 2
 var filter := ""
 var speed := 8.0
+var container_count := 0
 var stage_label: Label
 var checks_label: Label
 var camera_subject: Node3D
@@ -115,6 +116,9 @@ func run() -> void:
 		if arg.begins_with("--cycles="): cycles = maxi(1, int(arg.trim_prefix("--cycles=")))
 		if arg.begins_with("--seed="): report.seed = int(arg.trim_prefix("--seed="))
 		if arg.begins_with("--speed="): speed = clampf(float(arg.trim_prefix("--speed=")),1.0,16.0)
+		if arg.begins_with("--containers="): container_count = maxi(0, int(arg.trim_prefix("--containers=")))
+	if container_count > 0:
+		report.scope["container_booking"] = "Generated route with controlled %d-unit consignment; normal acceptance and physical handling" % container_count
 	# Accelerate simulated time while retaining the normal physical timestep.
 	Engine.physics_ticks_per_second = int(60*speed)
 	Engine.max_physics_steps_per_frame = int(8*speed)
@@ -245,6 +249,16 @@ func journey(entry: Dictionary) -> void:
 	ship.freeze = true
 	master._dialogue.hide_panel()
 	master.close_ui()
+	# Dismiss the walk-up conversation through normal input before reviewing
+	# the ship. Otherwise the service panel obscures every cargo capture.
+	if GameMenu.is_modal_open():
+		var close := InputEventAction.new()
+		close.action = "ui_cancel"
+		close.pressed = true
+		Input.parse_input_event(close)
+		await get_tree().process_frame
+		close.pressed = false
+		Input.parse_input_event(close)
 	var mc := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if not check(mc != null, "mooring component exists"): return
 	check(await wait_until(func(): return mc.bow_line_tied and mc.stern_line_tied, 5), "deployment ties both lines")
@@ -299,6 +313,14 @@ func arrive(record: Dictionary, mc: MooringComponent, id: String, family: String
 	return plot
 
 func run_equipment(plot: PortPlot, mode: String) -> bool:
+	# Each walk-up operator owns one crane. Visit the next serving operator
+	# after its work envelope is exhausted, as a player on a long quay would.
+	for batch in maxi(1, plot.harbour_controller().equipment_ids_on_berth(ship.get_moored_berth_id()).size()):
+		if not await run_operator(plot, mode): return false
+		if serving_operator(plot, ship.get_moored_berth_id(), mode) == null: return true
+	return true
+
+func run_operator(plot: PortPlot, mode: String) -> bool:
 	set_stage("Finding " + mode + " operator")
 	camera_subject = ship
 	var berth_id := ship.get_moored_berth_id()
@@ -314,6 +336,18 @@ func run_equipment(plot: PortPlot, mode: String) -> bool:
 	set_stage("Cargo " + mode + " — waiting for physical transfer")
 	var completed := [false]
 	job.job_completed.connect(func(_ctx,_report): completed[0] = true, CONNECT_ONE_SHOT)
+	var cycle_observer := func(_operation, count):
+		var manifests: Array = []
+		for movement in FreightService.active_contracts():
+			manifests.append({"id": movement.id, "quantity": movement.quantity, "issued": movement.get("issued_quantity", 0), "loaded": movement.loaded_quantity, "delivered": movement.delivered_quantity})
+		var transfer := {"mode": mode, "equipment": job.equipment_id(), "cycle": count, "manifests": manifests}
+		current.get_or_add("transfers", []).append(transfer)
+		write_report()
+		print("FLEET transfer ", transfer)
+	var operator: ProvisionCraneAutoOperator
+	if job is ProvisionCraneEquipmentJob:
+		operator = (job.get_parent() as ProvisionCrane).get_auto_operator()
+		operator.cycle_completed.connect(cycle_observer)
 	npc._on_interact()
 	var button: Button = npc._panel._btn_load if mode == "load" else npc._panel._btn_unload
 	if not check(not button.disabled, "operator enables " + mode): npc._on_ui_cancel(); return false
@@ -321,6 +355,11 @@ func run_equipment(plot: PortPlot, mode: String) -> bool:
 	npc._on_ui_cancel()
 	await capture(mode+"-started-"+str(current.get("checks",[]).size()))
 	var simulation_budget := 180.0
+	if job is ProvisionCraneEquipmentJob:
+		var units := 0.0
+		for movement in FreightService.active_contracts():
+			units += float(movement.quantity) - float(movement.get("loaded_quantity" if mode == "load" else "delivered_quantity", 0.0))
+		simulation_budget = maxf(simulation_budget,60.0+60.0*units)
 	if job is BulkCraneEquipmentJob:
 		var tonnes := ship.cargo_mass / 1000.0
 		if mode == "load":
@@ -329,8 +368,9 @@ func run_equipment(plot: PortPlot, mode: String) -> bool:
 		var grab_t := (job.get_parent() as BulkCrane).bucket_capacity_tonnes_t()
 		simulation_budget = maxf(simulation_budget,60.0+60.0*ceilf(tonnes/grab_t))
 	var done := await wait_until(func(): return completed[0] or not job.is_job_active(), maxf(10.0,simulation_budget/speed))
-	var ok := check(done and completed[0] and not job.is_job_active(), "equipment completes " + mode, {"status":Array(job.status_lines()),"equipment":job.equipment_id(),"failure":job.last_failure if job is BulkCraneEquipmentJob else ""})
+	var ok := check(done and completed[0] and not job.is_job_active(), "equipment completes " + mode, {"status":Array(job.status_lines()),"equipment":job.equipment_id(),"failure":job.last_failure if job is BulkCraneEquipmentJob or job is ProvisionCraneEquipmentJob else ""})
 	if not ok: plot.harbour_controller().stop_equipment(job.equipment_id())
+	if operator != null: operator.cycle_completed.disconnect(cycle_observer)
 	observed_job = null
 	return ok
 
@@ -350,7 +390,11 @@ func freight_trip(record: Dictionary, mc: MooringComponent, trip: int) -> bool:
 	if not check(agent != null, "cargo agent exists"): return false
 	var offers := FreightService.eligible_offers_at(plot.port_id, ship)
 	if not check(not offers.is_empty(), "cargo agent offers compatible freight", {"trip":trip}): return false
-	var offer := offers[0]
+	var offer := offers[0].duplicate(true)
+	if container_count > 0 and str(offer.handling_mode) in ["general", "container"]:
+		offer["pay_marks"] = int(round(float(offer.pay_marks) * container_count / float(offer.quantity)))
+		offer["quantity"] = float(container_count)
+		offer["id"] += ":capacity-fixture"
 	var marks := PlayerSession.data.marks
 	agent._on_interact()
 	agent._accept(offer)
