@@ -266,6 +266,7 @@ func _show_ship_select() -> void:
 
 
 func _deploy_fleet_vessel(record: Dictionary) -> void:
+	if _passenger_storage_blocked(PlayerVessel.find_active_ship(get_tree())): return
 	var resolved := VesselSpawn.resolve_deployable_record(record)
 	if resolved.is_empty():
 		_dialogue.clear()
@@ -413,6 +414,7 @@ func _show_abandon_confirm() -> void:
 
 
 func _commit_abandon() -> void:
+	if _passenger_storage_blocked(PlayerVessel.find_active_ship(get_tree())): return
 	var active_record: Dictionary = LocalPlayerView.get_active_vessel_record()
 	var vessel_id := HarbourDeploy.authority_vessel_id(active_record)
 	if not vessel_id.is_empty() and WorldGateway.is_ready():
@@ -548,3 +550,10 @@ func _network_register_ship(
 		if not record2.is_empty():
 			ship_id = String(record2.get("uid", "player_ship"))
 	manager.call("register_ship_spawn", ship_id, hull_id, ship_node)
+
+
+func _passenger_storage_blocked(ship: BoatBody) -> bool:
+	var reason := PassengerOperations.storage_reason(ship)
+	if reason.is_empty(): return false
+	deployment_finished.emit(false, reason)
+	return true

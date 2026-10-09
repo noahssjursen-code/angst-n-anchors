@@ -547,3 +547,47 @@ approach claim. Existing ocean/locomotion and multiplayer remain untouched.
   with --shipyard-playtest (--geometry-only skips rendering/deployment).
 - Known existing terrain/coast and elevated ocean-horizon artefacts remain visible
   in the wide review; accepted ocean/geography/player movement left untouched.
+2026-10-10 01:20 Oslo - Live passenger terminal operations
+- Found the production integration gap: owned ferries never received the
+  PassengerVoyage component used by isolated tests. The live world now owns one
+  PassengerOperations instance, registers safe terminal data without building
+  distant scenes, and attaches the component to owned passenger ferries.
+- Generated terminals now have an approachable passenger agent. Its dedicated
+  panel uses the existing HUD theme/materialled in-house NPC. Offers select the
+  nearest three real terminal destinations; passenger counts use supported seats
+  up to240, with explicit game fares and direct distances (not quoted sea routes).
+  Book, reopen boarding equipment, cancel/return and land passengers use the
+  existing company manifest, physical ramp/door/line checks and exact-once ledger.
+  UI reads through LocalPlayerView. Panel lifetime follows its streamed terminal.
+- Active sailings block harbourmaster storage/replacement. In the current UI,
+  the storage action explains the restriction. Whole-world scratch reload plus
+  harbourmaster redeployment restores the manifest, crowd and21.6t passenger mass.
+  This does NOT restore the ship's mid-passage coordinates; that remains a gap.
+- Final actual-world test: tests/passenger_live_loop_test.tscn with
+  --shipyard-playtest,44 checks passed. Includes actual terminal buttons, normal
+  interaction ray, Escape/modal closure, partial cancellation then new booking
+  in the same panel,240 boarding with panel closed, whole-world reload, departure,
+  wrong-terminal rejection, streamed destination,240 landed and14640 NOK paid
+  once. Transfer accelerated and travel teleported; no autonomous approach claim.
+- Read report and reviewed daytime route, boarding and arrival captures under:
+  C:/Users/noahs/Pictures/machinescreenshots/passenger-live-1791587838-193
+  Earlier reviewed iterations:1791587456-735 and1791587561-812. Corrected the
+  backward-facing agent and excessive empty height during active sailings.
+- Runtime review at actual1920x1080: frame median11.802ms,p9516.132ms,
+  GPU median2.353ms,2276 draws in terminal/ferry view on RTX5070. All35-port
+  passenger-site metadata generation added2.779ms total, no distant models.
+  This view measurement is not a whole-game performance guarantee.
+- Final engine and import logs clean: work/passenger-live-verified.log and
+  work/passenger-live-verified-import.log. Initial rejected run had an erroneous
+  hook in editor-preview scope; fixed. Early fixture could emit an empty success
+  after that parse failure; added a mandatory final-checkpoint assertion.
+- Scoped staging preserves the large pre-existing UI rebuild. The shared storage
+  predicate also protects the committed legacy abandon entry point. Its hook in
+  the working UI's new request_storage method and two-line disabled-reason hook
+  in the already-untracked PortServiceDesk remain with that pending UI rebuild;
+  do not discard them. Tests exercised this working copy, not a clean HEAD UI.
+  Staging script/backups: work/stage_passenger_live.py and passenger-live-baseline.
+- Next: inspect actual mid-voyage save/re-entry behaviour and passenger itinerary
+  visibility away from the terminal; then stock-sale commissioning and terminal
+  night fixtures/interior review. No multiplayer, ocean, locomotion or geography
+  changes in this batch. Moving passenger queues remain unimplemented.

@@ -241,3 +241,7 @@ func _current_world_context() -> Dictionary:
 	if world != null and world.has_method("get_world_context"):
 		return world.call("get_world_context") as Dictionary
 	return {}
+
+
+func passenger_terminal_snapshot(agent: PassengerAgentNpc) -> Dictionary:
+	return agent.snapshot()

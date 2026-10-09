@@ -33,6 +33,12 @@ func register_route_ids(id: String, origin: String, destination: String, passeng
 func records() -> Array:
 	return _player.company.get("passenger_sailings", []).duplicate(true)
 
+func capacity(ship: ImportedDraftVessel) -> int:
+	return _seats(ship).size()
+
+func secured_at(ship: BoatBody, berth_id: String) -> bool:
+	return _secured(ship, berth_id)
+
 func record(id: String) -> Dictionary:
 	for item: Dictionary in _player.company.get("passenger_sailings", []):
 		if str(item.id) == id: return item.duplicate(true)

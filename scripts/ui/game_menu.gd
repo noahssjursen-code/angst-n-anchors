@@ -302,3 +302,7 @@ func _return_to_title() -> void:
 	_set_screen(Screen.NONE)
 	get_tree().paused = false
 	WorldBootstrapScript.return_to_title(get_tree())
+
+
+func is_modal_open() -> bool:
+	return _screen != Screen.NONE or get_tree().get_first_node_in_group("passenger_terminal_panel") != null

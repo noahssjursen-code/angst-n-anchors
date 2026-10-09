@@ -333,6 +333,11 @@ func _add_editor_preview(defs: Array[PortDefinition]) -> void:
 
 
 func _setup_ports(defs: Array[PortDefinition]) -> void:
+	var passengers: PassengerOperations
+	if PlayerSession.persistence_mode != PlayerSession.PersistenceMode.REMOTE:
+		passengers = PassengerOperations.new()
+		passengers.name = "PassengerOperations"
+		add_child(passengers)
 	var loader  := ProximityLoader.new()
 	loader.name = "ProximityLoader"
 	add_child(loader)
@@ -355,6 +360,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 	for i in range(defs.size()):
 		var def  := defs[i]
 		var data := PortExpander.expand(def, world_seed, _world_layout)
+		if passengers != null: passengers.register_port(data, _world_layout)
 
 		if registry != null:
 			registry.register_port(

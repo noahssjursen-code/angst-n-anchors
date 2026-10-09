@@ -69,6 +69,12 @@ static func install(parent: Node3D, harbour: HarbourController, site: Dictionary
 	terminal.rotation.y=float(site.yaw)
 	parent.add_child(terminal)
 	terminal.register_berth(harbour)
+	if PassengerOperations.current(parent.get_tree()) != null:
+		var agent := PassengerAgentNpc.new()
+		agent.name = "PassengerAgent"
+		agent.port_id = harbour.port_id()
+		agent.position = Vector3(4, 0, -27)
+		terminal.add_child(agent)
 	return terminal
 
 static func _v(a: Array) -> Vector2:

@@ -2,7 +2,7 @@ class_name PassengerVoyage
 extends Node3D
 
 ## Opt-in local operating component. No new singleton or per-passenger physics.
-## Production port/service UI integration is separate from this isolated slice.
+## Installed by PassengerOperations for owned ferries in the live world.
 signal changed(manifest: Dictionary, status: String)
 var service: PassengerService
 var boat: ImportedDraftVessel
