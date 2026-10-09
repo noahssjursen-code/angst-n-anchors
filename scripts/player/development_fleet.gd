@@ -35,6 +35,14 @@ static func is_development(player: PlayerData) -> bool:
 	return player != null and bool(player.company.get("development_captain", false))
 
 
+static func configure_home_port(definitions: Array[PortDefinition], player: PlayerData) -> void:
+	if not is_development(player): return
+	for definition in definitions:
+		if definition.port_id == player.home_port_id:
+			definition.development_facilities = true
+			return
+
+
 static func grant_missing(player: PlayerData, entries: Array[Dictionary]) -> int:
 	if not is_development(player):
 		return 0

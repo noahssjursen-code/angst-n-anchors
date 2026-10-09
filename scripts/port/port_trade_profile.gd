@@ -71,6 +71,8 @@ const THEMES: Array[Dictionary] = [
 
 static func derive(definition: PortDefinition, world_seed: int) -> PortTradeProfile:
 	assert(definition != null, "PortTradeProfile requires a port definition")
+	if definition.development_facilities:
+		return DevelopmentHarbour.trade_profile()
 	var profile := PortTradeProfile.new()
 	var size := PortSizing.normalized_size(definition.size)
 	var rng := RandomNumberGenerator.new()
@@ -137,6 +139,10 @@ static func resync_for_size(profile: PortTradeProfile, size: int) -> void:
 ## Pier count is handled by the berth plan — do not re-lock commodities here.
 ## Sparse destinies fully unlock at their own trade ceiling (not only at size 5).
 static func _apply_size_unlock(profile: PortTradeProfile, size: int) -> void:
+	if profile.theme_id == DevelopmentHarbour.THEME:
+		profile.export_slots = profile.destiny_export_slots.duplicate()
+		profile.import_slots = profile.destiny_import_slots.duplicate()
+		return
 	var mature_at := mini(
 		PortSizing.TRADE_COMPLETE_SIZE,
 		max_size_for_profile(profile),

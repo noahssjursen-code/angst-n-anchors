@@ -39,6 +39,8 @@ static func generate(
 
 	var layout := attributes.get("world_layout") as WorldLayout
 	var half_width := CoastTracer.port_area_half_width_m(size)
+	if definition.development_facilities:
+		half_width = maxf(half_width, DevelopmentHarbour.SHORE_LENGTH_M)
 	var half_depth := CoastTracer.trace_half_depth_m(size)
 	var traced_coast := _trace_coast(
 		layout,
@@ -56,16 +58,17 @@ static func generate(
 		site_seed,
 		0.0,
 		str(attributes.get("length_profile_override", "")),
+		DevelopmentHarbour.SHORE_LENGTH_M if definition.development_facilities else 0.0,
 	)
 	var coast_path: PackedVector2Array = fit.get("harbour_coast", PackedVector2Array()) as PackedVector2Array
 	var natural_shore: PackedVector2Array = fit.get("natural_shore", PackedVector2Array()) as PackedVector2Array
 	graph.initial_attributes["port_area"] = {
-		"half_width_m": CoastTracer.port_area_half_width_m(size),
+		"half_width_m": half_width,
 		"half_depth_m": CoastTracer.port_area_half_depth_m(size),
 		"trace_half_width_m": half_width,
 		"trace_half_depth_m": half_depth,
 		"half_extent_m": maxf(
-			CoastTracer.port_area_half_width_m(size),
+			half_width,
 			CoastTracer.port_area_half_depth_m(size),
 		),
 		"coast_polyline": _polyline_to_array(coast_path),

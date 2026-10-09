@@ -44,7 +44,7 @@ static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictio
 		size = site_max
 		definition.size = size
 		PortTradeProfile.resync_for_size(trade, size)
-	var has_fish_landing := PortFishingService.is_eligible(definition, world_seed)
+	var has_fish_landing := definition.development_facilities or PortFishingService.is_eligible(definition, world_seed)
 	if has_fish_landing:
 		PortFishingService.apply_to_profile(trade)
 	definition.size = def_size
@@ -151,7 +151,7 @@ static func expand_uncached(
 		data.size = definition.site_max_size
 		definition.size = data.size
 		PortTradeProfile.resync_for_size(data.trade_profile, data.size)
-	data.has_fish_landing = PortFishingService.is_eligible(definition, world_seed)
+	data.has_fish_landing = definition.development_facilities or PortFishingService.is_eligible(definition, world_seed)
 	if data.has_fish_landing:
 		PortFishingService.apply_to_profile(data.trade_profile)
 	data.has_fuel_point = true

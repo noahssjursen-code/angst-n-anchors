@@ -407,11 +407,13 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 
 
 func _generate_definitions() -> Array[PortDefinition]:
-	return COASTAL_PORT_PLACER.place_ports(
+	var definitions := COASTAL_PORT_PLACER.place_ports(
 		_world_layout,
 		maxi(port_count, 1),
 		PackedStringArray(WORLD_PORT_NAMES.NAMES),
 	)
+	DevelopmentFleet.configure_home_port(definitions, PlayerSession.data)
+	return definitions
 
 
 func _spawn_player() -> void:

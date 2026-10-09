@@ -508,3 +508,42 @@ approach claim. Existing ocean/locomotion and multiplayer remain untouched.
   newer helm reach check; only investigate that if a reproducible issue returns.
 - Unrelated UI/editor working-copy changes preserved. Only the new world selector
   and size-restoration changes are staged from shared dirty files.
+2026-10-10 00:56 Oslo - Development captain home with all terminal types
+- Noah requested every possible terminal/quay at the Development home. Its saved
+  home ID now opts into a separate trade profile and 1200m coast-traced frontage.
+  Other captains and all other seeded ports retain their previous generation.
+  No captain migration, terrain edits or live-save writes. Re-enter Development
+  Captain from the main menu to rebuild its home with this layout.
+- Nine dedicated commodity quays: provisions, containers, fish landing, iron ore,
+  coal, grain, crude oil, diesel and LNG; plus a separate passenger terminal and
+  bow-in ferry berth in a reserved 120m waterfront pocket. Existing fuel,
+  harbourmaster and port services remain. Uses existing models/materials.
+- Grain/LNG are deliberately available only at this development home; their
+  unfinished gameplay has NOT been completed or re-enabled in ordinary ports.
+  Passenger booking NPC/UI is still unfinished as recorded earlier.
+- Actual world + local harbourmaster deployed all six owned ships at their
+  preferred service family, including Northline and ferry. Hull water-clearance
+  and ferry ramp checks passed. 109 live checks. Initial test incorrectly treated
+  a replaced ship's occupied berth as unavailable; corrected the expectation to
+  the authority's actual atomic replacement semantics. No authority changes.
+- Long frontage exposed a shallow fish-quay loading side beside a headland.
+  Development-only placement now checks neighbour gaps AND working-side water
+  depth, flipping this quay to the deep side. Unused shore-facing water may remain
+  shallow. Normal three-quay budget and ordinary dock placement are unchanged.
+- Definition serialization and cache key distinguish development layouts. Pure
+  port generation stays independent of player/runtime classes: a first CLI
+  regression exposed that dependency; moved captain marking to DevelopmentFleet.
+  Final ordinary-world trade test is clean:35 ports,7 ore docks(5 export/2 import),
+  no grain/LNG. Final geometry/save reload/isolation checks also clean.
+- Reviewed daytime whole-harbour, Northline quay and ferry landing captures in
+  Pictures/machinescreenshots/development-harbour-1791586389-093; report.json
+  passed. Live world boot20.0s,1600x900 review median14.02ms,p9517.79ms,3983 draws
+  in final waterfront view on RTX5070. This is a deliberately heavier dev home,
+  not a claim that normal ports need this much geometry.
+- Earlier rejected/fault-finding captures retained in the screenshot archive.
+  Final isolation report:development-harbour-1791586540-411. Logs under task work:
+  dev-harbour-final.log,dev-harbour-isolation-final.log,
+  dev-harbour-ordinary-final.log. Runnable scene:tests/development_harbour_test.tscn
+  with --shipyard-playtest (--geometry-only skips rendering/deployment).
+- Known existing terrain/coast and elevated ocean-horizon artefacts remain visible
+  in the wide review; accepted ocean/geography/player movement left untouched.
