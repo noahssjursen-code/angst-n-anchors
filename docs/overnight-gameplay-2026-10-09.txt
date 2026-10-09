@@ -64,3 +64,10 @@ deck-walkway,helm,empty-bow}.png. Warmed loaded scene at 1920x1080 on RTX 5070:
 median 10.03 ms, p95 10.984 ms, 1503 draw calls (isolated sea scene, not a full
 port benchmark). Inspect batching opportunities during later performance work.
 Starter editor save/load regression passes with the expanded stock-copy menu.
+
+Checkpoint saved: ff7675b788ba265dcda344f1181cbc58d198bb9b committed and pushed
+to origin/feature/3d-model-migration; ls-remote matched exactly. Priority 1's
+vessel build/access/handling acceptance is complete. Resume priority 2 with the
+full-capacity crane journey; do not repeat the completed construction work.
+Final actual Shipyard capture: feeder-editor-1791569638-654.png. Test processes
+have exited. The user's existing editor/game instances were preserved.
