@@ -13,11 +13,15 @@ void fragment() {
     vec2 forest_uv=world_pos.xz/(forest_world_half_extent_m*2.0)+vec2(.5);
     float forest=texture(forest_map,clamp(forest_uv,vec2(0),vec2(1))).r;
     vec3 habitat=terrain_habitat(world_pos,n,coast_w,forest,macro);
-    // Metre-scale source tiles, identical UVs in every LOD.
+    // Metre-scale source detail with matching non-repeating blends in every LOD.
     vec3 rock=terrain_tri(stone_color,world_pos*.25,w);
-    vec3 heath=texture(heath_color,world_pos.xz/2.1).rgb*vec3(.45,.62,.55);
-    vec3 soil=texture(soil_color,world_pos.xz/1.4).rgb;
-    float moss_patches=smoothstep(.35,.66,texture(macro_map,world_pos.xz*.035+vec2(.31,.73)).g);
+    vec3 heath=terrain_tile_colour(heath_color,world_pos.xz/2.1).rgb*vec3(.38,.53,.47);
+    vec3 soil=terrain_tile_colour(soil_color,world_pos.xz/1.4).rgb;
+    // Broad irregular moss patches; the old 28 m mask repeated visibly in rows.
+    vec2 turned=mat2(vec2(.8,.6),vec2(-.6,.8))*world_pos.xz;
+    float moss_field=texture(macro_map,world_pos.xz*.011+vec2(.31,.73)).g*.6
+        +texture(macro_map,turned*.017+vec2(.19,.47)).b*.4;
+    float moss_patches=smoothstep(.36,.64,moss_field);
     soil=mix(soil,heath,.12+moss_patches*.22);
     vec3 albedo=rock*habitat.x+soil*habitat.y+heath*habitat.z;
     albedo*=mix(.78,1.12,macro.g);

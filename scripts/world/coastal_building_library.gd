@@ -4,9 +4,12 @@ extends RefCounted
 ## Shared authored shells; far meshes retain roof, openings and paint placement.
 ## No scene-node cache and no independent material allocations per house.
 const ROOT := "res://resources/models/scenery/coastal_settlement/"
+const WINDOW_SHADER := preload("res://resources/shaders/coastal_building.gdshader")
 const COLOURS := [Color("dad7c8"), Color("893c30"), Color("bd9d59"), Color("d2d2c5"), Color("607373"), Color("746454")]
 static var _cache := {}
 static var _sources := {}
+static var _window_materials: Array[ShaderMaterial] = []
+static var _night_factor := 0.0
 
 static func mesh(kind: String, near: bool, paint: int) -> ArrayMesh:
 	paint = posmod(paint, COLOURS.size())
@@ -36,8 +39,11 @@ static func mesh(kind: String, near: bool, paint: int) -> ArrayMesh:
 			"Coastal timber door": profile = "painted_timber"
 		if not profile.is_empty(): output.surface_set_material(surface, SurfaceMaterialLibrary.material(profile, color, name))
 		else:
-			var glass := original.duplicate() as StandardMaterial3D
-			glass.roughness = .28; glass.metallic = .15
+			var glass := ShaderMaterial.new();glass.shader=WINDOW_SHADER
+			glass.set_shader_parameter("glass_colour",color)
+			glass.set_shader_parameter("night_factor",_night_factor)
+			glass.set_meta("coastal_glass",true)
+			_window_materials.append(glass)
 			output.surface_set_material(surface, glass)
 	if not near: output = _merge_distant(output)
 	_cache[key] = output
@@ -50,6 +56,9 @@ static func _merge_distant(source: ArrayMesh) -> ArrayMesh:
 	for surface in source.get_surface_count():
 		var material := source.surface_get_material(surface)
 		var color := SurfaceMaterialLibrary.colour_of(material)
+		var glazing := material.has_meta("coastal_glass")
+		if glazing: color=material.get_shader_parameter("glass_colour")
+		color=color.srgb_to_linear();color.a=1.0 if glazing else 0.0
 		var arrays := source.surface_get_arrays(surface)
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
@@ -60,11 +69,17 @@ static func _merge_distant(source: ArrayMesh) -> ArrayMesh:
 			tool.set_color(color); tool.set_normal(normals[index]); tool.add_vertex(vertices[index])
 	tool.index()
 	var result := tool.commit()
-	var finish := StandardMaterial3D.new()
-	finish.vertex_color_use_as_albedo = true; finish.vertex_color_is_srgb = true
-	finish.roughness = .86
+	var finish := ShaderMaterial.new();finish.shader=WINDOW_SHADER
+	finish.set_shader_parameter("distant_shell",true)
+	finish.set_shader_parameter("night_factor",_night_factor)
+	_window_materials.append(finish)
 	result.surface_set_material(0, finish)
 	return result
 
+static func set_night_factor(value: float) -> void:
+	if absf(value-_night_factor)<.001:return
+	_night_factor=value
+	for material in _window_materials:material.set_shader_parameter("night_factor",value)
+
 static func clear() -> void:
-	_cache.clear(); _sources.clear()
+	_cache.clear(); _sources.clear();_window_materials.clear()

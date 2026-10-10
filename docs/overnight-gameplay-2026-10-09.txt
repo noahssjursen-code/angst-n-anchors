@@ -768,3 +768,35 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
 - Next substantial visible issue: terrain's obvious repeated ground tiles in
   the new inhabited views. Researching stable texture tiling/blending; also
   settlement night-window presentation and rain shelter remain unfinished.
+2026-10-10 - Ground repetition and settlement night presentation
+- Ground037/Ground048 retain original approved image files, but now share
+  triangular offset blends across colour/normal/roughness and both terrain LODs.
+  Explicit derivatives keep mip selection stable across cell boundaries. The
+  source/detail blend is narrower to preserve detail; not a histogram transform.
+  Research: Deliot/Heitz tiling/blending and Godot shader sampler documentation,
+  linked in the marine material README. Cooler, slightly darker heath tint.
+- Actual world revealed that the separate moss mask still repeated every28m;
+  replaced that with two differently oriented broader scales. Final same-camera
+  field no longer shows the pronounced marching green/brown patch pattern.
+  Terrain geometry, forests, world identity, accepted ocean and motion unchanged.
+- Added stable household/floor window occupancy and gradual twilight activation.
+  Existing near panes and physical far models agree. No point lights, per-house
+  controllers or new far draw calls. These are lit scenery shells, not interiors.
+- Initial terrain shader draft rejected: Godot disallows reusing a sampler
+  function across different texture hints. Split colour/normal/roughness helper
+  entry points; subsequent close kit and actual-world renders compile cleanly.
+  Discarded terrain-material-1791592358-891 from acceptance (shader failure).
+- Baseline terrain-material-1791592329-879; valid revised close/wide surfaces
+  terrain-material-1791592438-137. First world texture revision1791592480-075
+  still had repeating moss; final daylight compact-world-1791592815-617 inspected
+  against settlement baseline1791592089-558. Night1791592683-776 all3 views
+  inspected: warm panes readable from channel and close up. Day kit
+  coastal-building-1791592610-717 confirms original model/finish remains coherent.
+  Every capture archived in C:/Users/noahs/Pictures/machinescreenshots.
+- Actual-world report no failures; near house collision still passes. Final
+  1600x900 RTX5070 vsync60:median16.660-16.733ms,p9517.088-17.459ms,
+  GPU4.787-5.687ms, same3836-4919draws. These short runs do not establish a
+  performance improvement; texture sample cost remains small in these views.
+- Next: rain presently passes through roofs and can spawn below roof height.
+  Investigating bounded local GPU heightfield collision, with sheltered/exposed
+  comparisons and actual vessel review before acceptance. No implementation yet.

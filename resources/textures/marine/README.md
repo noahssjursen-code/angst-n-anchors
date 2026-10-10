@@ -92,3 +92,12 @@ fade between 80 and 200 m; distant land retains matching colour texture
 coordinates. No terrain heights, collisions or saved world identity change.
 Review with tests/terrain_material_review.tscn and tests/forest_root_review.tscn
 using --shipyard-playtest. Source URLs and original file hashes are in sources.json.
+
+The 10 October terrain pass uses a three-sample triangular offset blend for
+Ground037/Ground048 colour, normals and roughness, with explicit texture
+footprints for stable mip selection. The shared include is terrain_tile.gdshaderinc.
+It uses the tiling/blending idea described by Deliot and Heitz, not their full
+histogram-transform algorithm: https://eheitzresearch.wordpress.com/738-2/ .
+Separate shader functions retain Godot's required sampler-hint consistency.
+The woodland moss mask also blends differently oriented scales to remove its
+previous repeating 28 m patch pattern. Source texture files remain untouched.

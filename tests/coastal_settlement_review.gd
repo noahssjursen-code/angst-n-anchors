@@ -17,7 +17,8 @@ func capture(label: String, _eye: Vector3, _target: Vector3) -> void:
 	elif label=="coast": eye=target+sea*18+Vector3(5,5,0)
 	player.global_position=eye
 	camera.position=eye;camera.look_at(target+Vector3(0,3,0))
-	WorldClock.snap_time_of_day(.46);WeatherLighting.time_of_day=.46
+	var tod := .06 if OS.get_cmdline_user_args().has("--night") else .46
+	WorldClock.snap_time_of_day(tod);WeatherLighting.time_of_day=tod
 	WeatherLighting.cloud_cover=.3;WeatherLighting.precipitation=0;WeatherLighting.visibility=1
 	var forest := world.get_node("WorldForestStreamer") as WorldForestStreamer
 	for tick in 10:await get_tree().process_frame

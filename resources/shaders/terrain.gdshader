@@ -13,11 +13,15 @@ void fragment() {
     vec2 forest_uv=world_pos.xz/(forest_world_half_extent_m*2.0)+vec2(.5);
     float forest=texture(forest_map,clamp(forest_uv,vec2(0),vec2(1))).r;
     vec3 habitat=terrain_habitat(world_pos,n,coast_w,forest,macro);
-    // Metre-scale source tiles, identical UVs in every LOD.
+    // Metre-scale source detail with matching non-repeating blends in every LOD.
     vec3 rock=terrain_tri(stone_color,world_pos*.25,w);
-    vec3 heath=texture(heath_color,world_pos.xz/2.1).rgb*vec3(.45,.62,.55);
-    vec3 soil=texture(soil_color,world_pos.xz/1.4).rgb;
-    float moss_patches=smoothstep(.35,.66,texture(macro_map,world_pos.xz*.035+vec2(.31,.73)).g);
+    vec3 heath=terrain_tile_colour(heath_color,world_pos.xz/2.1).rgb*vec3(.38,.53,.47);
+    vec3 soil=terrain_tile_colour(soil_color,world_pos.xz/1.4).rgb;
+    // Broad irregular moss patches; the old 28 m mask repeated visibly in rows.
+    vec2 turned=mat2(vec2(.8,.6),vec2(-.6,.8))*world_pos.xz;
+    float moss_field=texture(macro_map,world_pos.xz*.011+vec2(.31,.73)).g*.6
+        +texture(macro_map,turned*.017+vec2(.19,.47)).b*.4;
+    float moss_patches=smoothstep(.36,.64,moss_field);
     soil=mix(soil,heath,.12+moss_patches*.22);
     vec3 albedo=rock*habitat.x+soil*habitat.y+heath*habitat.z;
     albedo*=mix(.78,1.12,macro.g);
@@ -34,14 +38,14 @@ void fragment() {
     float detail=1.0-smoothstep(80.0,200.0,length(VERTEX));
     if(detail>0.001) {
         vec3 gradient=terrain_gradient(stone_normal,world_pos*.25,w)*habitat.x;
-        vec3 hn=texture(heath_normal,world_pos.xz/2.1).xyz*2.0-1.0;
-        vec3 sn=texture(soil_normal,world_pos.xz/1.4).xyz*2.0-1.0;
+        vec3 hn=terrain_tile_normal(heath_normal,world_pos.xz/2.1).xyz*2.0-1.0;
+        vec3 sn=terrain_tile_normal(soil_normal,world_pos.xz/1.4).xyz*2.0-1.0;
         gradient+=vec3(hn.x,0,hn.y)*habitat.z+vec3(sn.x,0,sn.y)*habitat.y;
         gradient-=n*dot(n,gradient);
         NORMAL=normalize((VIEW_MATRIX*vec4(normalize(n+gradient*.65*detail),0)).xyz);
         float rough=terrain_rough(world_pos*.25,w)*habitat.x
-            +texture(heath_roughness,world_pos.xz/2.1).r*habitat.z
-            +texture(soil_roughness,world_pos.xz/1.4).r*habitat.y;
+            +terrain_tile_roughness(heath_roughness,world_pos.xz/2.1).r*habitat.z
+            +terrain_tile_roughness(soil_roughness,world_pos.xz/1.4).r*habitat.y;
         ROUGHNESS=mix(ROUGHNESS,mix(rough,.4,wet),detail);
     }
 }

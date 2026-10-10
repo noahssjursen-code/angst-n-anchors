@@ -44,3 +44,8 @@ add `--capture` to exit after the archived close/detail/LOD views. The actual-wo
 review is `tests/coastal_settlement_review.tscn -- --shipyard-playtest --size=40000`.
 Placement checks are in `tests/coastal_settlement_test.gd`. All review captures
 go to the user's machinescreenshots archive.
+
+Night windows use the shared solar daylight factor and a stable per-building/
+floor occupancy seed. Near glazing and the one-draw far shell use matching
+emissive panes; there are no individual point lights, interior simulations or
+extra distant draw calls. Add `--night` to the world review for the night series.

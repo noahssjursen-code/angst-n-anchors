@@ -1,5 +1,6 @@
 // One habitat/material policy for every terrain LOD. No vertex-colour fallback.
 #include "terrain_canopy.gdshaderinc"
+#include "terrain_tile.gdshaderinc"
 uniform sampler2D stone_color : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D heath_color : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D soil_color : source_color, filter_linear_mipmap_anisotropic, repeat_enable;

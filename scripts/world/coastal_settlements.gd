@@ -44,6 +44,7 @@ func _process(delta: float) -> void:
 	_timer-=delta
 	if _timer<=0:
 		_timer=.5
+		CoastalBuildingLibrary.set_night_factor(1.0-WeatherLighting.daylight_factor())
 		_update_collisions(WorldReference.visual_position(get_viewport()))
 
 func _build_chunk(coord: Vector2i) -> void:
@@ -53,15 +54,19 @@ func _build_chunk(coord: Vector2i) -> void:
 	var batches := {}
 	for building: Dictionary in _groups[coord].buildings:
 		var key := str(building.kind)+":"+str(building.paint)
-		var batch: Dictionary = batches.get_or_add(key,{"kind":building.kind,"paint":building.paint,"transforms":[]})
+		var batch: Dictionary = batches.get_or_add(key,{"kind":building.kind,"paint":building.paint,"transforms":[],"occupancy":[]})
 		batch.transforms.append(Transform3D(Basis(Vector3.UP,float(building.yaw)),building.position-center))
+		batch.occupancy.append(WorldForestStreamer._hash01(int(building.position.x),int(building.position.z),11,29))
 	for batch: Dictionary in batches.values():
 		for near in [false,true]:
 			var instance := MultiMeshInstance3D.new()
 			var multi := MultiMesh.new();multi.transform_format=MultiMesh.TRANSFORM_3D
+			multi.use_custom_data=true
 			multi.mesh=CoastalBuildingLibrary.mesh(batch.kind,near,int(batch.paint))
 			multi.instance_count=batch.transforms.size()
-			for i in multi.instance_count: multi.set_instance_transform(i,batch.transforms[i])
+			for i in multi.instance_count:
+				multi.set_instance_transform(i,batch.transforms[i])
+				multi.set_instance_custom_data(i,Color(batch.occupancy[i],0,0,0))
 			instance.multimesh=multi
 			instance.visibility_range_begin=0 if near else LOD_DISTANCE
 			instance.visibility_range_end=LOD_DISTANCE if near else 0
