@@ -22,6 +22,9 @@ var cancel_lock := Mutex.new()
 var cancelled := false
 var worker: Thread
 var zones: Array = []
+## Worker-private spatial cache. Settlement roads add many small exclusions;
+## scanning the whole world's list for every coverage cell is unnecessary.
+var zone_chunks: Dictionary = {}
 var trees := 0
 var peak_ms := 0.0
 var batches: Dictionary = {}
@@ -109,10 +112,19 @@ func build_cell(cell:Vector2i) -> void:
 	if not batches.has(key): batches[key]=[PackedFloat32Array(),PackedFloat32Array(),PackedFloat32Array(),PackedFloat32Array()]
 	var groups: Array = batches[key]
 	var origin:=point(cell)
+	var bounds := Rect2(origin,Vector2.ONE*cell_m)
 	var local_zones: Array = []
+	var visited := {}
 	for offset in [Vector2.ZERO,Vector2(cell_m,0),Vector2(0,cell_m),Vector2.ONE*cell_m]:
 		var p:Vector2=origin+offset
-		for zone in WorldTerrainStreamer.zones_intersecting_chunk(zones,Vector2i(floori(p.x/1000),floori(p.y/1000)),1000):
+		var coord := Vector2i(floori(p.x/1000),floori(p.y/1000))
+		if visited.has(coord): continue
+		visited[coord] = true
+		if not zone_chunks.has(coord):
+			zone_chunks[coord] = WorldTerrainStreamer.zones_intersecting_chunk(zones,coord,1000)
+		for zone in zone_chunks[coord]:
+			var influence := WorldTerrainStreamer._zone_influence_bounds(zone)
+			if influence.size != Vector2.ZERO and not influence.intersects(bounds,true): continue
 			if not local_zones.has(zone): local_zones.append(zone)
 	var count:=ceili(cell_m/STEP)
 	var spacing:=cell_m/count

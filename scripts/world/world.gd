@@ -170,6 +170,14 @@ func _rebuild() -> void:
 		var flatten_zones := WORLD_TERRAIN_STREAMER.make_flatten_zones(
 			defs, 0.0, world_seed, _world_layout
 		)
+		var settlements := CoastalSettlements.new()
+		settlements.name = "CoastalSettlements"
+		add_child(settlements)
+		var settlement_plan := CoastalSettlementPlan.build(_world_layout, defs, flatten_zones)
+		settlements.configure(_world_layout, settlement_plan, flatten_zones)
+		# Clear actual occupied footprints only. Settlement scenery must not
+		# flatten terrain, move a quay or erase woodland around the entire town.
+		flatten_zones.append_array(settlement_plan.exclusions)
 		ForestField.initialize(_world_layout, world_seed, flatten_zones)
 		_add_terrain_streamer(defs)
 		_add_forest_streamer(flatten_zones)

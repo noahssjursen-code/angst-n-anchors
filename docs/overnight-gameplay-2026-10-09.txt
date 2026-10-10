@@ -731,4 +731,40 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
   Pre-hook VoyagePanel backup: workspace work/voyage-panel-before-passenger.gd.
 - Next: inhabited Norwegian coast, building/road material and distance review.
   Ferry animated queues, terminal night fitout and full continuous passage remain
-  possible follow-up polish; do not repeatedly rerun completed passenger journey.
+  possible follow-up polish; do not repeatedly rerun completed passenger journey.2026-10-10 02:31 Oslo - Inhabited coastal scenery, authored kit and forest cost
+- Added original Blender cottages, two-storey timber houses and boathouses with
+  near/far geometry, named shared ambientCG finishes, six paints, roof seams,
+  joinery, plinths, porch steps and rainpipes. Near/far triangles3046/238,
+  4054/322,2494/154 respectively. Sources, references and limits in kit README.
+- Existing shore/terrain/port metadata places519 buildings around32 settlements
+  in30km seed424242,659 around33 in40km. Narrow lanes and gravel drives follow
+  current terrain triangles. No land pads, port moves, save edits or new world
+  identity. Clear only occupied house/road/drive footprints from woodland.
+- Shared MultiMesh batches use3D far buildings, not sprites; no distance holes.
+  Nearby closed-house collision only. Exteriors are scenery, not enterable
+  interiors, new businesses, resident simulation or a vehicle road network.
+- Initial actual-world run exposed sparse clusters, downward road normals and
+  ground-intersecting road strips; corrected spacing/setback trials, normals,
+  terrain subdivisions and entry drives. First draft forest failed120s budget.
+  Worker-private spatial filtering replaces repeated global exclusion scans;
+  exact full-world cache parity passed after first optimization, then narrower
+  coverage-cell bounds filtering retained deterministic exclusion test results.
+- Final cold world forest prepares32.807s asynchronously, all2,904,193 distant
+  trees ready36.912s. Warm cache prepares150ms, whole canopy uploaded8.192s.
+  New scenery plans~299ms. First-use chunk build peak45.544ms remains a startup
+  cost; this is not an assertion of hitch-free first-time asset upload.
+- Placement/determinism/exclusion checks pass for30/40km. Persistent canopy
+  placement/cancellation regression passes701 samples. Real-world house ray
+  confirms physical walls. Final report has no failures or pending terrain/trees.
+  All logs read. One intermediate type-inference error was repaired before the
+  final run. Preserved unrelated existing UI/editor work with partial world hunk.
+- Kit captures coastal-building-1791591089-22; first world draft
+  compact-world-1791591374-905 rejected incomplete canopy/road artifacts.
+  Revisions1791591910-688 and final warm1791592089-558 inspected close/harbour/
+  channel, archived under C:/Users/noahs/Pictures/machinescreenshots.
+  Final1600x900 RTX5070 vsync60:16.677-16.685ms median,p9516.799-17.256ms,
+  GPU5.014-5.588ms. Same-view hiding settlement geometry reduces350-370draws;
+  measured GPU difference -0.085 to+0.094ms is within short-run variability.
+- Next substantial visible issue: terrain's obvious repeated ground tiles in
+  the new inhabited views. Researching stable texture tiling/blending; also
+  settlement night-window presentation and rain shelter remain unfinished.

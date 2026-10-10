@@ -1960,3 +1960,15 @@ to Pictures/machinescreenshots. Final1440x810 RTX5070 D3D12 measurements: boat
 view2.845ms total vs2.140ms hidden; near woodland4.096vs1.883ms. These are GPU
 fixture measurements, not universal FPS guarantees. Ground textures and accepted
 water remain outside this change. Noah accepted the resulting forest appearance.
+
+## Norwegian coastal settlements (10 October 2026)
+
+`scenery/coastal_settlement/` contains three original Blender building shells
+with near/far variants, shared approved materials and six paint colours. The
+source kit, triangle budgets and references are documented in that folder.
+`CoastalSettlementPlan` fits houses, boathouses, lanes and drives to existing
+coastal ground without altering terrain or saved port layouts. Physical far
+models remain visible across the channel; only near buildings create collision.
+These are closed scenery exteriors, without resident simulation or interiors.
+Inspect via `tests/coastal_building_review.tscn` and the production-world
+`tests/coastal_settlement_review.tscn`, both with `--shipyard-playtest`.

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "cottage_near",
+    "triangles": 3046
+  },
+  {
+    "id": "cottage_far",
+    "triangles": 238
+  },
+  {
+    "id": "house_near",
+    "triangles": 4054
+  },
+  {
+    "id": "house_far",
+    "triangles": 322
+  },
+  {
+    "id": "boathouse_near",
+    "triangles": 2494
+  },
+  {
+    "id": "boathouse_far",
+    "triangles": 154
+  }
+]
