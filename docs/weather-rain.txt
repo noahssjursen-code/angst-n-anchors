@@ -31,3 +31,29 @@ All images/reports archive under C:/Users/noahs/Pictures/machinescreenshots.
 Godot reference:
 https://docs.godotengine.org/en/stable/classes/class_gpuparticlescollisionheightfield3d.html
 https://docs.godotengine.org/en/stable/classes/class_gpuparticlescollision3d.html
+
+Wet ground (10 October 2026)
+- SurfaceWetness is local presentation driven by WeatherLighting.rain_amount,
+  not another weather authority or persistent hydrology simulation. Entering a
+  rainy world starts damp. Subsequent rain wets ground over tens of seconds;
+  after rain stops, drying takes several minutes of real play time. Updates at
+  most8Hz and stops uniform work when stable. Streamed materials inherit the
+  current amount; weak references do not retain discarded terrain/materials.
+- Quay paving and road paint opt in through HarbourEnvironmentKit. Village
+  asphalt/gravel opt in explicitly through SurfaceMaterialLibrary's rain_exposed
+  argument. Cached exposed and sheltered instances are separate. Default ship,
+  cabin, clothing and imported finishes remain dry; material names alone never
+  establish exposure. Future sheltered exterior geometry needs explicit masking.
+- Original source maps remain unchanged. Damp asphalt darkens and gains a
+  broad sheen, gravel stays rough. Both terrain LODs share habitat-dependent
+  darkening: bedrock/soil stronger, heath restrained. Existing tidal dampness
+  remains. Snow and distant canopy never inherit glossy ground roughness.
+- No puddle geometry, water depth, impact splashes or screen reflection pass is
+  added. This is a low-cost damp-surface response, not pooled water simulation.
+- tests/wet_ground_review.tscn compares sourced finishes and both terrain LODs,
+  checks temporal response, late streaming and sheltered material isolation.
+  tests/wet_ground_world_review.tscn compares actual harbour day/night and inland
+  terrain under identical weather, with archived images and timing reports.
+
+Material response reference (porosity, roughness, accumulation and drying):
+https://seblagarde.wordpress.com/2013/04/14/water-drop-3b-physically-based-wet-surfaces/

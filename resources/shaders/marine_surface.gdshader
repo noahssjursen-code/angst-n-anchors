@@ -26,6 +26,10 @@ uniform sampler2D corrosion_map : source_color, filter_linear_mipmap_anisotropic
 uniform float corrosion = 0.0;
 uniform float corrosion_metres = 2.4;
 uniform float corrosion_base_band = 0.0;
+uniform float rain_wetness = 0.0;
+uniform float wet_darkening = 0.0;
+uniform float wet_roughness = 0.7;
+uniform float wet_relief = 1.0;
 varying vec3 finish_position;
 varying vec3 finish_normal;
 varying mat3 finish_to_view;
@@ -80,5 +84,10 @@ void fragment() {
 	vec3 detail = vec3(0.0, nx.y, -signs.x * nx.x) * weights.x
 		+ vec3(ny.x, 0.0, -signs.y * ny.y) * weights.y
 		+ vec3(signs.z * nz.x, nz.y, 0.0) * weights.z;
-	NORMAL = normalize(finish_to_view * normalize(n + detail * relief));
+	// Only explicitly exposed surfaces receive rain_wetness. Keep rough source
+	// grain in the damp finish; this is a thin film, not a flat mirror puddle.
+	float damp = rain_wetness * mix(0.8, 1.0, r);
+	ALBEDO *= 1.0 - wet_darkening * damp;
+	ROUGHNESS = mix(ROUGHNESS, wet_roughness, damp);
+	NORMAL = normalize(finish_to_view * normalize(n + detail * relief * mix(1.0, wet_relief, damp)));
 }

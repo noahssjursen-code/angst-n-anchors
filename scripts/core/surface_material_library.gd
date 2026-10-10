@@ -38,8 +38,8 @@ static func assignments() -> Dictionary:
 		_assignments = JSON.parse_string(FileAccess.get_file_as_string(DIRECTORY + "assignments.json"))
 	return _assignments
 
-static func material(profile: String, colour: Color, source_name: String = "", authored_colour: Texture2D = null) -> ShaderMaterial:
-	var key := profile + ":" + colour.to_html(true) + ":" + source_name + (":" + str(authored_colour.get_instance_id()) if authored_colour else "")
+static func material(profile: String, colour: Color, source_name: String = "", authored_colour: Texture2D = null, rain_exposed: bool = false) -> ShaderMaterial:
+	var key := profile + ":" + colour.to_html(true) + ":" + source_name + (":" + str(authored_colour.get_instance_id()) if authored_colour else "") + (":rain" if rain_exposed else ":dry")
 	if _materials.has(key): return _materials[key]
 	var spec: Dictionary = profiles()[profile]
 	var result := ShaderMaterial.new()
@@ -58,9 +58,11 @@ static func material(profile: String, colour: Color, source_name: String = "", a
 		if ResourceLoader.exists(path): result.set_shader_parameter(channel, load(path))
 	if float(spec.get("corrosion", 0)) > 0:
 		result.set_shader_parameter("corrosion_map", load(DIRECTORY + "MetalPlates013/MetalPlates013_1K-PNG_Color.png"))
-	for parameter in ["source_mean", "colour_contrast", "source_colour", "roughness_low", "roughness_high", "relief", "metal_amount", "use_metal_map", "corrosion", "corrosion_metres", "corrosion_base_band"]:
+	for parameter in ["source_mean", "colour_contrast", "source_colour", "roughness_low", "roughness_high", "relief", "metal_amount", "use_metal_map", "corrosion", "corrosion_metres", "corrosion_base_band", "wet_darkening", "wet_roughness", "wet_relief"]:
 		if spec.has(parameter): result.set_shader_parameter(parameter, spec[parameter])
 	result.set_shader_parameter("repeat_metres", Vector2(spec.metres[0], spec.metres[1]))
+	result.set_shader_parameter("rain_wetness", 0.0)
+	if rain_exposed: SurfaceWetness.register_material(result)
 	# Editor colour scrubbing must not retain every historical colour forever.
 	if _materials.size() >= 512: _materials.clear()
 	_materials[key] = result

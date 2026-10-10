@@ -421,6 +421,7 @@
     "use_metal_map": true
   },
   "asphalt": {
+    "wet_darkening": 0.45, "wet_roughness": 0.24, "wet_relief": 0.7,
     "asset": "Asphalt033",
     "metres": [
       2.5,
@@ -574,6 +575,7 @@
     "use_metal_map": false
   },
   "crushed_aggregate": {
+    "wet_darkening": 0.28, "wet_roughness": 0.64, "wet_relief": 0.9,
     "asset": "Gravel023",
     "metres": [
       1.5,

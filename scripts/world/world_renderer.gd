@@ -82,6 +82,8 @@ var _above_water_camera_far := 0.0
 ## the ocean shader, so we re-upload exactly once when LandField finishes
 ## initialising (which happens after WorldRenderer is added).
 var _shelter_texture_bound : bool = false
+var _surface_rain := 0.0
+var _surface_weather_elapsed := 0.0
 
 
 func _ready() -> void:
@@ -110,6 +112,8 @@ func _ready() -> void:
 	_build_screen_effects()
 	_connect_weather_lighting()
 	_apply_weather_lighting()
+	# A newly entered rainy world is already damp; subsequent changes accumulate.
+	SurfaceWetness.set_amount(SurfaceWetness.target(_surface_rain))
 
 
 func get_ocean_debug_stats() -> Dictionary:
@@ -174,6 +178,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
+	_surface_weather_elapsed += _delta
+	if _surface_weather_elapsed >= 0.125:
+		SurfaceWetness.advance(_surface_rain, _surface_weather_elapsed)
+		_surface_weather_elapsed = 0.0
 	# Celestial direction follows the clock every frame, independent of throttled
 	# weather/color updates. Sky disk, direct shadows and water agree.
 	var sun_direction := _celestial_dir(0.0)
@@ -662,7 +670,7 @@ func _apply_weather_lighting() -> void:
 	_apply_sky_shader(solar, daylight, cloud, storm, rain)
 	_apply_ocean_shader(solar, daylight, cloud, rain, sea, air_wind, storm, fog_t)
 	_apply_screen_effects(daylight, cloud, rain, storm, fog_t)
-	Palette.set_wetness(smoothstep(0.08, 0.72, rain))
+	_surface_rain = rain
 
 	# Optional: Sync FFT parameters based on weather
 	if _fft_system:

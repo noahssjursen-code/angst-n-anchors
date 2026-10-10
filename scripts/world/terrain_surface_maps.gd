@@ -17,6 +17,7 @@ static func bind_to_material(material: ShaderMaterial, bake_seed: int = 90210) -
 				var path := "res://resources/textures/marine/%s/%s_1K-PNG_%s.png" % [pair[1], pair[1], channel[1]]
 				_cached_maps[pair[0] + "_" + channel[0]] = load(path)
 	for name in _cached_maps: material.set_shader_parameter(name, _cached_maps[name])
+	SurfaceWetness.register_material(material)
 
 
 static func bake_macro_map(bake_seed: int) -> ImageTexture:

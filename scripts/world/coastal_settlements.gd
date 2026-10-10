@@ -97,7 +97,7 @@ func _build_roads(parent: Node3D, center: Vector3, roads: Array, drives := false
 				for index in [0,2,1,1,2,3]: tool.add_vertex(vertices[index])
 		tool.generate_normals()
 		var mesh := MeshInstance3D.new();mesh.mesh=tool.commit()
-		mesh.material_override=SurfaceMaterialLibrary.material("crushed_aggregate" if shoulder else "asphalt",Color(.32,.31,.27) if shoulder else Color(.26,.27,.27))
+		mesh.material_override=SurfaceMaterialLibrary.material("crushed_aggregate" if shoulder else "asphalt",Color(.32,.31,.27) if shoulder else Color(.26,.27,.27),"",null,true)
 		mesh.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mesh.visibility_range_end=3500;mesh.visibility_range_end_margin=250
 		mesh.visibility_range_fade_mode=GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF

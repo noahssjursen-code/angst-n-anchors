@@ -27,6 +27,8 @@ void fragment() {
     albedo*=mix(.78,1.12,macro.g);
     float wet=coast_w*(1.0-smoothstep(.2,2.8,world_pos.y));
     albedo*=mix(1.0,.48,wet);
+    float damp=rain_wetness*mix(.8,1.0,macro.b);
+    albedo*=1.0-damp*dot(habitat,vec3(.32,.28,.12));
     float snow=smoothstep(850.0,1250.0,world_pos.y)*smoothstep(.7,.95,n.y);
     albedo=mix(albedo,vec3(.65,.69,.72),snow);
     // Canopy is only a distant coverage substitute; near trees sit on soil.
@@ -35,5 +37,6 @@ void fragment() {
     ALBEDO=albedo;
     SPECULAR=.25;
     ROUGHNESS=mix(.92,.48,wet);
-
+    float damp_rough=dot(habitat,vec3(.40,.72,.86));
+    ROUGHNESS=mix(ROUGHNESS,min(ROUGHNESS,damp_rough),damp*(1.0-canopy)*(1.0-snow));
 }

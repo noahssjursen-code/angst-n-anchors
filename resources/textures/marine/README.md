@@ -101,3 +101,13 @@ histogram-transform algorithm: https://eheitzresearch.wordpress.com/738-2/ .
 Separate shader functions retain Godot's required sampler-hint consistency.
 The woodland moss mask also blends differently oriented scales to remove its
 previous repeating 28 m patch pattern. Source texture files remain untouched.
+
+## Rain exposure
+
+Sourced finishes stay dry unless their caller explicitly supplies `rain_exposed`
+to `SurfaceMaterialLibrary.material`. Exposed and sheltered copies have separate
+cache keys; do not wet cabins merely because they share paint with an exterior.
+Asphalt and crushed aggregate define wet darkening/roughness/relief in
+`profiles.json`. Harbour paving/road paint and both terrain LODs use the same
+gradual local `SurfaceWetness` amount. Original images remain unchanged.
+Coverage, timing, limitations and rendered reviews: `docs/weather-rain.txt`.

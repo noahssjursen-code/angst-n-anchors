@@ -847,4 +847,34 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
 - Rain batch commit7499c20. Next useful atmosphere work: inspect outdoor ground
   response to sustained rain (currently the surfaces stay dry); keep any wetness
   out of cabin interiors. Shared floor/roof edge precision is a separate observed
-  visual issue. Finish scoped work with actual views/performance, no multiplayer.
+  visual issue. Finish scoped work with actual views/performance, no multiplayer.2026-10-10 03:27 Oslo - Gradual wet-weather ground response
+- Sourced quay paving/paint, village roads/gravel and both terrain LODs now
+  respond to supported local rain. Asphalt darkens with a broad sky/light sheen;
+  bedrock/soil/heath use different restrained responses. Original source images,
+  terrain geometry, vegetation, ocean and captain records are unchanged.
+- SurfaceWetness reuses local WeatherLighting, no new authority/autoload/save.
+  Initial rainy world starts damp; onset builds over tens of seconds, drying over
+  several real minutes.8Hz bounded updates, no work when stable; weak material
+  registrations allow streamed resources to expire. Late resources inherit state.
+  Rain exposure is explicit and cached separately; ship/cabin finishes stay dry.
+  This is dampness, not new puddles/SSR/splash simulation or roof exposure masks.
+- Close kit wet-ground-1791594908-543: nine checks pass,18 renders including
+  source materials, ground LODs and sheltered finish. Same-profile interior and
+  exterior instances remain separate. Shared material library regression passes.
+  Initial fixture had a null/default uniform assertion error; exposed the absent
+  CPU-side default and now explicitly initializes dry parameters. Corrected run
+  clean. First world fixture had two type-inference errors, fixed before review.
+- Actual world compact-world-1791594998-852: paired dry/wet day quay, night quay
+  and inland woodland inspected; all streaming complete, no failures. Night
+  lamps now reflect softly in wet paving. Ground retains texture and canopy stays
+  rough. Captures archived under C:/Users/noahs/Pictures/machinescreenshots.
+- One inland sample had26.185ms frame p95; investigated instead of dismissing.
+  Repeat compact-world-1791595261-371 all pass, p95 dry17.334/wet17.580ms.
+  Four settled alternating samples: GPU3.250/3.256/3.255/3.256ms, p95
+ 18.214/17.293/16.957/16.936ms. No repeatable wetness penalty in this view;
+  short samples and background machine activity do not prove hitch-free play.
+  Same3487draws. Day/night quay705/707draws, GPU1.774-2.092ms;1600x900,
+  RTX5070/vsync60. All produced logs and reports read; final runs clean.
+- Reference and opt-in policy: docs/weather-rain.txt and material README.
+  Next investigate observed shared floor/roof tile glints at far world positions,
+  first with a controlled origin/far comparison. No geometry change started.

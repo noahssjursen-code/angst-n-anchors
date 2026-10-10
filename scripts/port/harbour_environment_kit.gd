@@ -15,6 +15,7 @@ static func paving() -> ShaderMaterial:
 		_paving.set_shader_parameter("colour_map", load(SurfaceMaterialLibrary.DIRECTORY + "Asphalt033/Asphalt033_1K-PNG_Color.png"))
 		_paving.set_shader_parameter("normal_map", load(SurfaceMaterialLibrary.DIRECTORY + "Asphalt033/Asphalt033_1K-PNG_NormalGL.png"))
 		_paving.set_shader_parameter("roughness_map", load(SurfaceMaterialLibrary.DIRECTORY + "Asphalt033/Asphalt033_1K-PNG_Roughness.png"))
+		SurfaceWetness.register_material(_paving)
 	_paving.set_shader_parameter("use_scan", SurfaceMaterialLibrary.enabled)
 	return _paving
 
@@ -112,6 +113,7 @@ static func line(parent: Node3D, a: Vector3, b: Vector3, width: float = .12) -> 
 	if not _paint_widths.has(width):
 		var paint := _paint.duplicate() as ShaderMaterial
 		paint.set_shader_parameter("paint_width",width)
+		SurfaceWetness.register_material(paint)
 		_paint_widths[width]=paint
 	node.material_override = _paint_widths[width]
 	parent.add_child(node)
