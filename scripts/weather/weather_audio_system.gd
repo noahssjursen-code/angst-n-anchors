@@ -1,7 +1,7 @@
 class_name WeatherAudioSystem
 extends Node
 
-## Four-layer weather audio driven by the 2D weather plane (precipitation × wind_force).
+## Four-layer weather audio driven by supported local rain and wind.
 ##
 ## Each sound "slot" supports multiple variants named {base}_{n}.wav (n = 1, 2, 3 …).
 ## Variants loop continuously at -80 dB until activated. Every 40–120 seconds the slot
@@ -11,7 +11,7 @@ extends Node
 ##   Ocean (4 slots):  calm_seas → choppy_seas → rough_seas → stormy_seas  (wave_intensity)
 ##   Wind  (2 slots):  wind_light  ↔  wind_gale                            (wind_force)
 ##   Rain  (3 slots):  rain_drizzle → rain_moderate → rain_heavy           (rain_amount)
-##   Atmosphere (4 slots): bilinear blend across the full precip × wind plane
+##   Atmosphere (4 slots): calm / wet / dry gale / wet gale from rain × wind
 ##   Thunder: one-shot pool driven by thunder_intensity (heavy rain + wind, not every shower)
 ##
 ## File naming:
@@ -178,7 +178,6 @@ const _WAVE_GALE: float = 1.10
 # Smoothed source parameters.
 var _wave_t : float = 0.0
 var _wind   : float = 0.0
-var _precip : float = 0.0
 var _rain   : float = 0.0
 
 
@@ -218,10 +217,7 @@ func _process(delta: float) -> void:
 	# --- Read weather state ---
 	var wl      := _weather()
 	var wind_raw    := float(wl.get("wind_force"))        if wl else 0.0
-	var precip_raw  := float(wl.get("precipitation"))     if wl else 0.0
 	var rain_raw    := float(wl.get("rain_amount"))       if wl else 0.0
-	var cloud_raw   := float(wl.get("cloud_cover"))       if wl else 0.0
-	var fog_raw     := float(wl.get("fog_density"))       if wl else 0.0
 	var wave_raw   := clampf(
 		(WaveSurface.wave_intensity - _WAVE_CALM) / (_WAVE_GALE - _WAVE_CALM), 0.0, 1.0)
 
@@ -229,7 +225,6 @@ func _process(delta: float) -> void:
 	var k := 1.0 - exp(-delta / maxf(smooth_time, 0.001))
 	_wave_t  = lerpf(_wave_t,  wave_raw,    k)
 	_wind    = lerpf(_wind,    wind_raw,    k)
-	_precip  = lerpf(_precip,  precip_raw,  k)
 	_rain    = lerpf(_rain,    rain_raw,    k)
 
 	# --- Apply volumes ---
@@ -242,7 +237,7 @@ func _process(delta: float) -> void:
 	_blend_sequential(
 		[_rain_drizzle, _rain_moderate, _rain_heavy],
 		smoothstep(0.08, 0.40, _rain), _rain, rain_db)
-	_blend_atmosphere(cloud_raw, fog_raw)
+	_blend_atmosphere()
 
 	_update_pending_thunder(delta)
 
@@ -256,6 +251,9 @@ func _process(delta: float) -> void:
 ## Works for any number of slots ≥ 1.
 func _blend_sequential(
 		slots: Array, gain: float, t: float, max_db: float) -> void:
+	# Do not crossfade into silence when a requested intensity recording is absent
+	# (currently rain_heavy). Keep the strongest available recording at that end.
+	slots = slots.filter(func(slot: VariantSlot): return not slot.is_empty())
 	var n := slots.size()
 	if n == 0:
 		return
@@ -292,20 +290,15 @@ func _blend_sequential(
 			(slots[i] as VariantSlot).apply_volume(max_db + linear_to_db(lin))
 
 
-## Corner-focused bilinear blend across all four weather-plane corners.
-## Near-clear weather forces only the calm slot so the compass centre is not a storm mix.
-func _blend_atmosphere(cloud: float, fog: float) -> void:
-	if maxf(cloud, fog) < 0.12:
-		_atm_calm_clear.apply_volume(atmosphere_db)
-		_atm_grey_drizzle.apply_volume(-80.0)
-		_atm_dry_squall.apply_volume(-80.0)
-		_atm_full_storm.apply_volume(-80.0)
-		return
-
-	var cc := pow((1.0 - cloud) * (1.0 - fog), 2.0)
-	var gd := pow(cloud * (1.0 - fog), 2.0)
-	var ds := pow((1.0 - cloud) * fog, 2.0)
-	var fs := pow(cloud * fog, 2.0)
+## Cloud/fog are optical conditions, not permission to play rain or gale beds.
+## Use the same supported rain that drives particles, with a smooth onset/tail.
+func _blend_atmosphere() -> void:
+	var wet := smoothstep(.02, .65, _rain)
+	var gale := smoothstep(.16, .72, _wind)
+	var cc := pow((1.0 - wet) * (1.0 - gale), 2.0)
+	var gd := pow(wet * (1.0 - gale), 2.0)
+	var ds := pow((1.0 - wet) * gale, 2.0)
+	var fs := pow(wet * gale, 2.0)
 	var sum := cc + gd + ds + fs + 1e-6
 	cc /= sum
 	gd /= sum

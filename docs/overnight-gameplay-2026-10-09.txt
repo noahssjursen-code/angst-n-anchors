@@ -909,3 +909,27 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
   the final clean20-check run. Reports and failed-attempt logs retained.
 - Resume actual-world atmosphere/coastal review, no repeat of completed ferry,
   cargo, water or walking work. No multiplayer.
+2026-10-10 03:56 Oslo - Weather audio follows actual conditions
+- Wider weather audit found atmosphere mix incorrectly using cloud/fog as rain/
+  gale axes. Reproduced dry overcast selecting drizzle at-12dB, calm dry fog
+  selecting full storm at-12.6dB, dry gale barely selecting squall. Also maximum
+  rain crossfaded into absent rain_heavy, silencing the dedicated rain layer.
+  Baseline weather-audio-1791597055-722 has five failed states, retained.
+- Corrected beds to smoothed supported rain/wind; no new weather authority,
+  audio assets, ocean or movement changes. Missing sequential recordings are
+  skipped, retaining strongest available recording instead of fading to silence.
+- Eight actual AudioStreamPlayer gain cases now pass (dry clear/overcast/fog,
+  dry gale, drizzle, downpour, wet gale, cleared). Final headless report
+  weather-audio-1791597100-0 clean; no runtime/shutdown errors. This is playback
+  activation verification, not a claim of listening/mastering new recordings.
+- Rendered rain-1791597129-8249 also passes all audio and emission checks. Seven
+  images and report read, representative dry/wet/night views inspected. Frame
+  p95 16.951-17.108ms at1600x900 RTX5070 vsync60. Existing lighting-showcase
+  shutdown mesh/RID leaks remain (also present before this batch); no runtime
+  script failure. Keep separate from the clean audio-only verification.
+- Actual40km mainland atmosphere sweep compact-world-1791596846-734 completed
+  without functional failures. Reviewed clear/sunset/night/rain/fog plus elevated
+  coast. Haze/settlements remain visible; observed a jagged bright water patch in
+  one low mainland view. Diagnose terrain/depth/render-tier source before any
+  ocean edit; accepted ocean behavior remains unchanged. Distant woodland on
+  one far ridge appears elevated; check roots/LOD before claiming allworld artdone.

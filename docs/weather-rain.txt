@@ -57,3 +57,15 @@ Wet ground (10 October 2026)
 
 Material response reference (porosity, roughness, accumulation and drying):
 https://seblagarde.wordpress.com/2013/04/14/water-drop-3b-physically-based-wet-surfaces/
+
+Weather sound alignment (10 October 2026)
+- Atmosphere beds use supported local rain and wind, with the existing smooth
+  onset/tail. Cloudiness and fog no longer trigger drizzle or storm recordings.
+  Dry wind can select dry squall without requiring rain or low visibility.
+- Sequential layers ignore missing recording slots. There is currently no
+  rain_heavy asset; maximum rain retains the strongest available moderate loop
+  instead of crossfading into an empty slot. No new sound assets were invented.
+- tests/rain_presentation_review.tscn -- --shipyard-playtest --audio-only checks
+  actual player gains in eight weather states; the ordinary rendered run also
+  keeps these checks alongside the seven sky/rain views. This verifies activation
+  and continuity of the existing recordings, not a newly mastered sound library.
