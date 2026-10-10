@@ -3,10 +3,7 @@ extends RefCounted
 
 ## Explicitly opted-in local captains only. Stock grants are append-only; yard
 ## edits, vessel identities, cargo and the selected ship survive catalog updates.
-const REVIEW_RECIPES := [{
-	"id": "coastal_express", "name": "Coastal Express",
-	"path": "res://resources/models/examples/coastal_express_recipe.json",
-}]
+const REVIEW_RECIPES: Array[Dictionary] = []
 
 
 static func catalog_entries() -> Array[Dictionary]:

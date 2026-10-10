@@ -87,3 +87,31 @@ static func storage_reason(ship: BoatBody) -> String:
 	if operations != null and not operations.service.active_for(ship).is_empty():
 		return "Finish the passenger sailing, or return to its departure terminal and cancel it, before storing this ferry."
 	return ""
+
+## Passage guidance stays attached to the booked vessel and terminal. Berthing
+## remains manual; the ordinary autopilot hands over outside the passenger pier.
+func navigation_order(ship: BoatBody) -> Dictionary:
+	var item := service.active_for(ship)
+	if item.is_empty() or item.phase not in ["ready", "underway"]: return {}
+	var destination := str(item.destination_berth).trim_suffix("/passenger")
+	if not terminals.has(destination): return {}
+	return {"destination_port_id": destination, "destination_berth_id": item.destination_berth,
+		"origin_port_id": str(item.origin_berth).trim_suffix("/passenger"),
+		"berth_id": item.origin_berth, "passenger": true}
+
+func voyage_snapshot(ship: BoatBody) -> Dictionary:
+	if ship == null or ship.get_node_or_null("PassengerVoyage") == null: return {}
+	var item := service.active_for(ship)
+	if item.is_empty():
+		return {"objective": "Speak to the passenger terminal agent to book a sailing.", "manifest": {}}
+	var destination := str(item.destination_berth).trim_suffix("/passenger")
+	var destination_name := str(terminals.get(destination, {}).get("name", destination))
+	var objective := ""
+	match str(item.phase):
+		"boarding": objective = "Boarding for %s: %d / %d aboard. Keep both lines secured, the ramp down and the entrance open." % [destination_name, item.onboard, item.total]
+		"ready": objective = "Ready for %s. Cast off, back clear of the pier and turn seaward before engaging passage autopilot." % destination_name
+		"underway":
+			objective = "Take %d passengers to %s. Moor at its passenger terminal and ask the agent to land them." % [item.onboard, destination_name]
+		"alighting": objective = "Landing at %s: %d / %d ashore. Keep the boarding access open." % [destination_name, item.landed, item.total]
+		"returning": objective = "Cancelling sailing: %d passengers still aboard. Keep the boarding access open." % item.onboard
+	return {"objective": objective, "manifest": item, "destination": destination_name}

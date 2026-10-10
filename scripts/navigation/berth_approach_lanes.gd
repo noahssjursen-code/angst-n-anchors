@@ -121,6 +121,26 @@ static func bake_from_port_data(data: PortData) -> int:
 				mid_world, right * sign, seaward, length_m, width_m, half_beam,
 				str(station.get("family", "general")), station.get("commodities", []) as Array)
 
+	# Passenger terminals are additive and not part of the cargo berth plan.
+	# Bake their data-only pose too: the destination can be streamed out while
+	# a captain plots a sailing. Match PassengerTerminal's bow-in dock geometry.
+	var frame := Transform3D(Basis(Vector3.UP, data.rotation_y), data.world_position)
+	var passenger := PassengerPortSites.plan(data.layout_graph, frame, LandField.get_layout())
+	if not passenger.is_empty():
+		var position: Array = passenger.position
+		var terminal := frame * Transform3D(Basis(Vector3.UP, float(passenger.yaw)),
+			Vector3(position[0], position[1], position[2]))
+		var berth := terminal.origin # -19m landing +18.25m half-LOA +0.75m gap.
+		berth.y = WaveSurface.WATER_LEVEL
+		var sea := terminal.basis.z.normalized()
+		var lane := _densify_chain([berth, berth + sea * 16.0,
+			berth + sea * 83.5, berth + sea * 323.5])
+		var id := data.port_id + "/passenger"
+		port_lanes[id] = {int(LaneKind.SPINE): lane, int(LaneKind.FLANK_PORT): lane,
+			int(LaneKind.FLANK_STARBOARD): lane}
+		port_berths[id] = berth
+		port_meta[id] = {"family": "passenger", "commodities": PackedStringArray()}
+		baked += 3
 	_lanes[data.port_id] = port_lanes
 	_berth_positions[data.port_id] = port_berths
 	_target_meta[data.port_id] = port_meta

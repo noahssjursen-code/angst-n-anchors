@@ -695,3 +695,40 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
 - The broad low coastal shelf still exists; this removes the artificial vertical
   ledge, not every remaining terrain/art limitation. Remaining next: ferry
   passage navigation/stock, inhabited coastal scenery, continued atmosphere.
+2026-10-10 02:07 Oslo - Ferry stock and booked passage navigation
+- Coastal Express is now official shipwright stock (78000NOK, existing3600kW
+  authored recipe/240 supported seats). Removed duplicate development recipe;
+  stable coastal_express grant identity preserves existing development vessels.
+- Distant passenger berth approaches are baked as metadata with cargo lanes,
+  without instantiating terminal models. Planned and live bow-in centres agree.
+  BoatController uses this vessel's sailing, then this vessel's freight only;
+  another ship's first contract can no longer choose the navigation destination.
+- Ferry departure requires manual backing clear120m and facing the outbound
+  passage. Existing VesselAutopilot handles travel and hands over200m short
+  for manual berthing. No automatic docking, new follower or multiplayer changes.
+-39 production-world checks pass in passenger-passage-1791590643-307/report.json:
+  actual shipwright purchase/retry charge, harbour deployment, terminal booking,
+  all6 passenger navigation targets, unloaded destination, ramp/line/heading
+  guards, 4.442km route with minimum18.116m sampled land clearance, actual144.36m
+  movement using ordinary propulsion/rudder, disengagement and contract ownership.
+  Boarding transfers accelerated; initial clear-of-pier pose placed by test.
+  Only32 simulation seconds of sailing observed, not a full autopilot crossing.
+  Full240-person loading/unloading/payment journey was covered in prior live loop.
+- First test failed because it bypassed the NPC's door-opening request and
+  editor isolation suppresses automatic autopilot creation. Fixed the test to
+  use agent.request and install the ordinary component while preserving isolated
+  saves. It was a test setup failure, not a successful initial sailing.
+- Company tablet now shows passenger destination, status, count and fare away
+  from terminal. Inspected final underway and itinerary captures; first underway
+  shot had unfinished terrain streaming, replaced after waiting for readiness.
+  Performance final1920x1080 median16.65ms/p9517.573ms,GPU3.029ms,3090draws.
+  Shared MarineAutopilot contracts and development captain/save-preservation
+  regression pass. All logs read; final passage has no script/runtime errors.
+- Scope caveat: two small presentation hooks (get_voyage_snapshot objective and
+  VoyagePanel accepted-work rows) remain within Noah's already-uncommitted UI
+  rebuild. Passenger read API and controller-only navigation hunks are committed;
+  unrelated UI removal/style changes are deliberately not swept into this batch.
+  Pre-hook VoyagePanel backup: workspace work/voyage-panel-before-passenger.gd.
+- Next: inhabited Norwegian coast, building/road material and distance review.
+  Ferry animated queues, terminal night fitout and full continuous passage remain
+  possible follow-up polish; do not repeatedly rerun completed passenger journey.

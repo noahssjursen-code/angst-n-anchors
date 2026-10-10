@@ -245,3 +245,8 @@ func _current_world_context() -> Dictionary:
 
 func passenger_terminal_snapshot(agent: PassengerAgentNpc) -> Dictionary:
 	return agent.snapshot()
+
+
+func get_passenger_voyage_snapshot() -> Dictionary:
+	var operations := PassengerOperations.current(get_tree())
+	return operations.voyage_snapshot(get_active_ship() as BoatBody) if operations != null else {}

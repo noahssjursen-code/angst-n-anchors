@@ -271,11 +271,17 @@ func _toggle_autopilot() -> void:
 		_show_autopilot_toast("AUTOPILOT UNAVAILABLE — no navigation data")
 		return
 	var view := get_node_or_null("/root/LocalPlayerView")
-	var contracts: Array = view.get_active_contracts() if view != null else []
-	if contracts.is_empty():
-		_show_autopilot_toast("AUTOPILOT NEEDS AN ACTIVE FREIGHT ROUTE")
+	var contract := _navigation_order(view)
+	if contract.is_empty():
+		_show_autopilot_toast("AUTOPILOT NEEDS A BOOKED PASSENGER OR FREIGHT ROUTE")
 		return
-	var contract := contracts[0] as Dictionary
+	var passenger := bool(contract.get("passenger", false))
+	if passenger:
+		var origin := BerthApproachLanes.target_world_position(
+			str(contract.origin_port_id), str(contract.berth_id))
+		if Vector2(_boat_body.global_position.x - origin.x, _boat_body.global_position.z - origin.z).length() < 120.0:
+			GameMenu.notify("Back clear of the passenger pier and turn seaward before engaging passage autopilot.")
+			return
 	var destination_id := str(contract.get("destination_port_id", ""))
 	var destination := view.get_port_position(destination_id) as Vector3
 	if destination_id.is_empty() or not destination.is_finite():
@@ -289,21 +295,39 @@ func _toggle_autopilot() -> void:
 		str(contract.get("terminal_family", "")),
 		str(contract.get("commodity_id", "")),
 	)
+	if passenger: destination_berth_id = str(contract.destination_berth_id)
 	var plan := planner.plan_berth_to_berth(
 		start,
 		Vector2(destination.x, destination.z),
 		str(contract.get("origin_port_id", "")),
-		str(contract.get("berth_id", "")),
+		"" if passenger else str(contract.get("berth_id", "")),
 		destination_id,
 		destination_berth_id,
 	)
-	if not _autopilot.engage(plan):
+	if passenger and plan.is_valid():
+		var direction := (plan.point_at_distance(85.0) - start).normalized()
+		if NavigationAxes.vessel_bow_horizontal(_boat_body).dot(direction) < 0.5:
+			GameMenu.notify("Turn towards the outbound passage before engaging autopilot.")
+			return
+	if not _autopilot.engage(plan, -1.0, 200.0 if passenger else VesselAutopilot.ARRIVAL_STOP_M):
 		_show_autopilot_toast("AUTOPILOT COULD NOT FIND A SAFE SEA ROUTE")
 		return
 	_thruster_mode = 0
 	_lateral = 0.0
 	_show_autopilot_toast("AUTOPILOT ENGAGED TO %s — [P] disengage" % \
 		str(view.get_port_display_name(destination_id)).to_upper(), 5.0)
+
+
+func _navigation_order(view: Node) -> Dictionary:
+	var operations := PassengerOperations.current(get_tree())
+	if operations != null:
+		var sailing := operations.service.active_for(_boat_body)
+		if not sailing.is_empty(): return operations.navigation_order(_boat_body)
+	var contracts: Array = view.get_active_contracts() if view != null else []
+	var uid := str(_boat_body.get_meta("vessel_uid", ""))
+	for item: Dictionary in contracts:
+		if str(item.get("vessel_uid", "")) == uid and not uid.is_empty(): return item
+	return {}
 
 
 func _manual_override_requested() -> bool:
