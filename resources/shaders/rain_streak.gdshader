@@ -15,5 +15,5 @@ void fragment() {
 	ALBEDO = vec3(0.62, 0.68, 0.72);
 	ROUGHNESS = 0.5;
 	SPECULAR = 0.35;
-	ALPHA = cross_section * tail * distance_fade * intersection_fade * 0.38;
+	ALPHA = cross_section * tail * distance_fade * intersection_fade * COLOR.a * 0.38;
 }

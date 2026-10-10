@@ -1,0 +1,33 @@
+Local precipitation presentation
+===============================
+RainField reads WeatherLighting's composed precipitation; it never invents a
+separate weather state. WeatherSample.supported_precipitation caps rain against
+cloud cover. Rain quads use the actual scene light and depth rather than glow.
+
+Roof shelter (10 October 2026)
+- One world-aligned GPUParticlesCollisionHeightField3D covers80x80m locally,
+  with64m vertical range and512x512 resolution. A snapped4m origin updates at
+  most8Hz, including moving ship roofs; it does not follow the camera every frame.
+- Rendering layer20 marks rain particles for collision. Ordinary geometry can
+  occlude them; unrelated particle effects are not affected by this rain field.
+- Drops spawn6-10m above the camera instead of a box extending below eye height.
+  At60Hz, contact hiding includes the optical half-streak so tails do not flash
+  through thin roofs. The collider stays until residual drops expire, then turns
+  off entirely in dry weather.
+- This is a top-down shelter approximation. It does not simulate wind recirculation
+  through open windows, horizontal wall impacts, drips or impact splashes. It is
+  bounded local rendering work, with no per-drop scene nodes or CPU ray queries.
+
+Review, in rendered Godot with -- --shipyard-playtest:
+- tests/rain_shelter_review.tscn: canopy removed/replaced, imported bridge at rest
+  and moving, exposed deck and dry state; paired actual-image pixel checks.
+  --reproduce-roof-leak disables shelter and restores the old emission box;
+  it deliberately fails the covered-pixel checks.
+- tests/rain_shelter_world_review.tscn: production world, loaded forests/port,
+  actual ship, and repeated enabled/disabled GPU cost comparisons.
+- tests/rain_presentation_review.tscn: clear/cloud/rain/wind/night visual matrix.
+All images/reports archive under C:/Users/noahs/Pictures/machinescreenshots.
+
+Godot reference:
+https://docs.godotengine.org/en/stable/classes/class_gpuparticlescollisionheightfield3d.html
+https://docs.godotengine.org/en/stable/classes/class_gpuparticlescollision3d.html

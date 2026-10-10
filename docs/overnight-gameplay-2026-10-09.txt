@@ -800,3 +800,30 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
 - Next: rain presently passes through roofs and can spawn below roof height.
   Investigating bounded local GPU heightfield collision, with sheltered/exposed
   comparisons and actual vessel review before acceptance. No implementation yet.
+2026-10-10 03:06 Oslo - Rain shelter and actual bridge review
+- Drops now spawn above eye level and stop at a bounded local GPU heightfield.
+  One80x80m/512-map, snapped4m, at most8Hz while wet; dry weather stops work after
+  residual drops expire. Layer20 isolates rain from other particle collisions.
+  No per-drop nodes/CPU rays. Top-down shelter approximation, not wind-through-
+  window fluid simulation or impact splashes. Details in docs/weather-rain.txt.
+- Baseline rain-shelter-1791593393-899 reproduces streaks through the covered
+  canopy and actual imported feeder bridge. Pixel counts247/304 under canopy,
+  103 stationary bridge and138 moving bridge. New final1791593934-069 has zero
+  covered pixels in all four regions; removed roof496 and exposed deck453
+  confirm outside rain still renders. Dry emitter and collider disabled; no
+  failures. Earlier fixture had wrong material profile; corrected before the
+  valid baseline. One later check caught a9-pixel optical tail at a roof edge:
+ 60Hz particle steps and a half-streak contact radius fixed that actual leak.
+- Production compact-world-1791594037-481 fully loaded terrain/forest/port,
+  bridge, deck and public quay captures inspected. First world1791593537-35
+  had an invalid under-foundation quay camera; replaced using public spawn.
+  Final report no failures, final runtime no script/render errors. Repeated
+  collider on/off: GPU medians2.19-3.60ms, deltas -0.008 to+0.017ms; GPU p95
+  deltas at most+0.046ms in these views. Frame p95 up to17.572ms at1600x900,
+  RTX5070/vsync60. These are bounded local measurements, not universal FPS.
+- Seven-state weather matrix rain-1791594182-6175 complete; invalid clear/fair
+  precipitation and dry overcast emit no rain; drizzle/rain/wind/night visually
+  inspected. Median16.658-16.713ms,p9516.904-17.374ms. Existing lighting-showcase
+  shutdown RID leaks remain; no runtime/shader errors. All produced reports read.
+- Captures remain under C:/Users/noahs/Pictures/machinescreenshots. Separate
+  narrow funnel contact-face repair found during this review follows this batch.
