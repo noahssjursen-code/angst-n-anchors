@@ -571,7 +571,17 @@ Verify with `tests/shipyard_floor_test.tscn`.
 `surface_tiles` contains 109 individual Blender source/export pairs: full 0.5 m
 panels, exact triangular boundary fillers and three roof-edge profiles. Use
 `_source/surface_tiles/build_tiles.py` to regenerate. `ShipSurfaceKit` selects
-and places these imported assets; it does not generate runtime mesh vertices.
+and places these imported assets; it does not invent replacement surface geometry.
+Infill triangles are baked into bounded draw batches in the assembly's shared
+local frame. This prevents per-tile world-transform rounding from opening a
+visible grid at distant harbours. Authored crown, normals, UVs and named paint
+regions survive; eaves retain their individual miter/crown models. Each batch
+has at most 4096 triangles so the existing ship walk-body compound stays within
+Jolt's subshape limits. Up to 16 assemblies / 32 MiB of estimated mesh storage
+are cached; paint overrides remain per instance. Save records are unchanged.
+`tests/surface_precision_review.tscn -- --shipyard-playtest` compares origin/far
+renders and original/imported triangle corners, crown and paint isolation.
+Thin separate-eave edge glints are still possible at far coordinates.
 
 Palette exposes only Floor and Roof. Click a closed 0.5 m lattice outline;
 Enter or clicking its first point finishes, Backspace removes a point, Esc/RMB

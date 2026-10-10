@@ -3,6 +3,7 @@ extends Node
 var editor: ShipyardBrickEditor
 var parts: ImportedShipPartsEditor
 const OUT := "C:/Users/noahs/Documents/Codex/2026-10-05/referenced-chatgpt-conversation-this-is-an/outputs/roof-kit/"
+var capture_archive := "C:/Users/noahs/Pictures/machinescreenshots/surface-kit-"+str(Time.get_unix_time_from_system()).replace(".","-")
 
 func _ready() -> void:
 	editor=ShipyardBrickEditor.new()
@@ -132,4 +133,8 @@ func _shot(filename: String) -> void:
 	for i in 5: await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	DirAccess.make_dir_recursive_absolute(OUT)
-	get_viewport().get_texture().get_image().save_png(OUT+filename)
+	DirAccess.make_dir_recursive_absolute(capture_archive)
+	var image := get_viewport().get_texture().get_image()
+	image.save_png(OUT+filename)
+	image.save_png(capture_archive.path_join(filename))
+	print("SURFACE EDITOR CAPTURE ",capture_archive.path_join(filename))

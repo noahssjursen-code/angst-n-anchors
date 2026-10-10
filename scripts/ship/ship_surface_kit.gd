@@ -1,6 +1,10 @@
 class_name ShipSurfaceKit
 extends RefCounted
 const POINTS := [Vector2(0,0),Vector2(.25,0),Vector2(.5,0),Vector2(.5,.25),Vector2(.5,.5),Vector2(.25,.5),Vector2(0,.5),Vector2(0,.25)]
+static var _infill_meshes: Dictionary = {}
+static var _infill_cache_bytes := 0
+const INFILL_CACHE_BYTES := 32 * 1024 * 1024
+const INFILL_BATCH_TRIANGLES := 4096
 static func is_surface(id: String) -> bool:
 	return id == "floor_tile" or id == "roof_tile"
 static func polygon(record: Dictionary) -> PackedVector2Array:
@@ -71,7 +75,7 @@ static func tiles(poly: PackedVector2Array, style: String) -> Array[Dictionary]:
 					ids.sort()
 					result.append({"id":"%s_tri_%d_%d_%d" % [style,ids[0],ids[1],ids[2]],"origin":origin,"area":area(triangle)})
 	return result
-static func create(record: Dictionary, finish := true) -> Node3D:
+static func create(record: Dictionary, finish := true, combine_infill := true) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Roof" if record["asset_id"]=="roof_tile" else "Floor"
 	var poly := polygon(record)
@@ -84,11 +88,31 @@ static func create(record: Dictionary, finish := true) -> Node3D:
 	var center := (min_x+max_x)*.5
 	var half_width := maxf((max_x-min_x)*.5,.25)
 	var rise := minf(.12,half_width*.08) if record.get("crown",false) and style=="roof" else 0.0
-	for tile in tiles(poly,style):
-		var model := BrickCatalog.create_visual(tile["id"], {"skip_finish":not finish})
-		model.position=Vector3(tile["origin"].x,0,tile["origin"].y)
-		root.add_child(model)
-		_crown(model,"Crown",tile["origin"].x,1.0,center,half_width,rise)
+	var mesh_key := var_to_str([style,poly,rise])
+	var combined: Array = _infill_meshes.get(mesh_key,[])
+	if not combine_infill or combined.is_empty():
+		for tile in tiles(poly,style):
+			# Finish once after assembly, retaining the original authored materials.
+			var model := BrickCatalog.create_visual(tile["id"], {"skip_finish":true})
+			model.position=Vector3(tile["origin"].x,0,tile["origin"].y)
+			root.add_child(model)
+			_crown(model,"Crown",tile["origin"].x,1.0,center,half_width,rise)
+		if combine_infill:
+			combined=_combine_infill(root)
+			var bytes := 0
+			for mesh: ArrayMesh in combined:
+				for surface in mesh.get_surface_count():
+					bytes+=mesh.surface_get_array_len(surface)*64+mesh.surface_get_array_index_len(surface)*4
+			if _infill_meshes.size()>=16 or _infill_cache_bytes+bytes>INFILL_CACHE_BYTES:
+				_infill_meshes.clear();_infill_cache_bytes=0
+			if bytes<=INFILL_CACHE_BYTES:
+				_infill_meshes[mesh_key]=combined;_infill_cache_bytes+=bytes
+	if combine_infill:
+		for mesh: ArrayMesh in combined:
+			var infill := MeshInstance3D.new()
+			infill.name="AuthoredInfill" if root.get_child_count()==0 else "AuthoredInfill%d"%root.get_child_count()
+			infill.mesh=mesh
+			root.add_child(infill)
 	if style=="roof":
 		# Normalize winding: outside of a CCW XZ polygon is to the right.
 		if Geometry2D.is_polygon_clockwise(poly): poly.reverse()
@@ -124,6 +148,76 @@ static func create(record: Dictionary, finish := true) -> Node3D:
 				_crown_edge(model,p.x-center,(e.y+e.x*start)*model.scale.x,e.x,e.x*(end-start)*model.scale.x/length,half_width,rise)
 	if finish: SurfaceMaterialLibrary.apply(root, style)
 	return root
+
+static func _combine_infill(root: Node3D) -> Array[ArrayMesh]:
+	# Adjacent half-metre meshes accumulate independent world-matrix rounding
+	# at harbour coordinates. One local render frame closes those visible cracks.
+	# This copies Blender triangles; it does not replace the authored part library.
+	var surfaces: Dictionary = {}
+	var poses: Dictionary = {}
+	for node in SurfaceMaterialLibrary.meshes(root):
+		var source := node as MeshInstance3D
+		var pose := source.transform
+		var parent := source.get_parent()
+		while parent != root:
+			if parent is Node3D: pose=parent.transform*pose
+			parent=parent.get_parent()
+		# Crown is constant down a column: bake an imported shape once per pose,
+		# not once per tile (which would repeatedly upload/read back GPU meshes).
+		var weights := PackedFloat32Array()
+		for index in source.get_blend_shape_count(): weights.append(source.get_blend_shape_value(index))
+		var pose_key := str(source.mesh.get_instance_id())+var_to_str(weights)
+		if not poses.has(pose_key): poses[pose_key]=_posed_infill(source)
+		var baked := poses[pose_key] as Mesh
+		for surface in baked.get_surface_count():
+			var original := source.mesh.surface_get_material(surface)
+			var key := original.resource_name.get_slice(".",0)
+			var groups: Array = surfaces.get_or_add(key,[])
+			var array_mesh := baked as ArrayMesh
+			var triangles := array_mesh.surface_get_array_index_len(surface)/3
+			if triangles==0: triangles=array_mesh.surface_get_array_len(surface)/3
+			# Each draw remains a bounded collision subshape in the existing ship
+			# walk body. A whole subdivided roof can exceed Jolt's subshape-ID bits.
+			# All batches have the SAME local frame, so no tile-world rounding gap.
+			if groups.is_empty() or int(groups[-1].triangles)+triangles>INFILL_BATCH_TRIANGLES:
+				var tool := SurfaceTool.new();tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+				tool.set_material(original);groups.append({"tool":tool,"triangles":0})
+			(groups[-1].tool as SurfaceTool).append_from(baked,surface,pose)
+			groups[-1].triangles+=triangles
+	var result: Array[ArrayMesh] = []
+	for groups: Array in surfaces.values():
+		for group: Dictionary in groups:
+			var tool := group.tool as SurfaceTool
+			tool.generate_tangents()
+			result.append(tool.commit())
+	for child in root.get_children(): child.free()
+	return result
+
+static func _posed_infill(source: MeshInstance3D) -> Mesh:
+	var weights: Dictionary = {}
+	for index in source.get_blend_shape_count():
+		var weight := source.get_blend_shape_value(index)
+		if not is_zero_approx(weight): weights[index]=weight
+	if weights.is_empty(): return source.mesh
+	var result := ArrayMesh.new()
+	for surface in source.mesh.get_surface_count():
+		var arrays := source.mesh.surface_get_arrays(surface)
+		var shapes := source.mesh.surface_get_blend_shape_arrays(surface)
+		for channel in [Mesh.ARRAY_VERTEX,Mesh.ARRAY_NORMAL]:
+			var base: PackedVector3Array=arrays[channel]
+			var values := base.duplicate()
+			for index: int in weights:
+				var shape: PackedVector3Array=shapes[index][channel]
+				if shape.size()!=base.size(): continue
+				for i in values.size():
+					values[i]+=(shape[i]-base[i] if source.mesh.blend_shape_mode==Mesh.BLEND_SHAPE_MODE_NORMALIZED else shape[i])*float(weights[index])
+			if channel==Mesh.ARRAY_NORMAL:
+				for i in values.size(): values[i]=values[i].normalized()
+			arrays[channel]=values
+		# Recreate the UV tangent basis after the static crown has been applied.
+		arrays[Mesh.ARRAY_TANGENT]=null
+		result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	return result
 static func _eave_width(direction: Vector2, visor_direction: int) -> float:
 	var outward := Vector2(direction.y,-direction.x)
 	var facing: Vector2 = [Vector2.ZERO,Vector2(0,-1),Vector2(0,1),Vector2(-1,0),Vector2(1,0)][clampi(visor_direction,0,4)]

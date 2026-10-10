@@ -878,3 +878,34 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
 - Reference and opt-in policy: docs/weather-rain.txt and material README.
   Next investigate observed shared floor/roof tile glints at far world positions,
   first with a controlled origin/far comparison. No geometry change started.
+
+2026-10-10 03:48 Oslo - Shared-frame ship floors and roofs
+- Reproduced a visible tile grid at (12500,10,-13800), absent at origin:
+  surface-precision-1791595534-832. Independent per-tile world matrices lose
+  matching precision. ShipSurfaceKit now copies the authored infill triangles,
+  crown normals and UVs into bounded draw batches sharing one local frame.
+  Blender source modules, outlines, paint regions and saved records unchanged.
+- First single-mesh prototype fixed the image but FAILED the real feeder test:
+  Jolt compound subshape-ID overflow removed walk collision, blocking bridge
+  entry. Corrected to at most4096 triangles per batch; no physics solver or
+  accepted player movement changes. Final container_feeder_test passes cargo,
+  save, both real-player stair flights and bridge door/entry. Full log read.
+- Final surface-precision-1791596444-133:20 checks pass, original versus baked
+  triangle corners across six floor/roof outlines, crown, independent paint and
+  shared bounded cache. Origin/far floor/roof images inspected. Cache is capped
+  at16 assemblies/32MiB estimated mesh storage. First8x8m construction measured
+  floor307ms, roof581ms; repeat geometry is reused, not baked every frame.
+- Actual Shipyard drawing/preview,26/45/concave and both-winding coverage,
+  perimeter miters/crown, paint, save/reload and erase/undo all pass:
+  surface-kit-1791596636-471. Every editor capture now also uses the archive.
+- Actual loaded world compact-world-1791596659-725:14 checks pass, all terrain
+  and forest streaming complete. Bridge floor grid/ceiling seam gone compared
+  with1791594037-481; exposed deck and quay also inspected.1600x900 RTX5070:
+  bridge2443->1811 draw calls, GPU3.578->3.440ms. Final views GPU2.116-3.440ms,
+  frame p95 16.946-17.581ms, vsync60. Short local measurements, not universal FPS.
+- Separate roof eaves keep their original morph/miter structure; thin far-edge
+  glints remain possible. This does not claim a global floating-origin fix.
+  Intermediate fixture errors (paint lookup/early-return guard) corrected before
+  the final clean20-check run. Reports and failed-attempt logs retained.
+- Resume actual-world atmosphere/coastal review, no repeat of completed ferry,
+  cargo, water or walking work. No multiplayer.
