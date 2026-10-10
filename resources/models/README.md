@@ -156,6 +156,13 @@ bow/stern, bridge, side-walkway and helm views. C switches cargo; 1–5 switches
 `--capture` archives actual rendered views and a warmed frame-time sample under
 `C:/Users/noahs/Pictures/machinescreenshots`. Captain saves are never opened.
 
+Funnel contact-face correction (10 October): the buried bottom cap of the
+mounting flange was coplanar with the bridge ceiling. Its two triangles are now
+omitted from the Blender source and GLB; outside bevels, material groups, bounds
+and placement datum are unchanged. Existing owned layouts benefit without save
+rewrites. Actual interior and moving-bridge captures are part of
+`tests/rain_shelter_review.tscn -- --shipyard-playtest`.
+
 ## Mandatory material acceptance for every physical item
 
 Current implementation: `SurfaceMaterialLibrary` and

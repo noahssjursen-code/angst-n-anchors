@@ -827,3 +827,24 @@ Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
   shutdown RID leaks remain; no runtime/shader errors. All produced reports read.
 - Captures remain under C:/Users/noahs/Pictures/machinescreenshots. Separate
   narrow funnel contact-face repair found during this review follows this batch.
+2026-10-10 03:07 Oslo - Northline bridge ceiling contact-face repair
+- Actual rain review exposed the funnel flange's bottom cap coplanar with the
+  underside of the roof: a large orange flickering patch over the helm. Removed
+  only the two buried contact-face triangles in Blender. Source generator,
+  editable .blend and GLB agree. Exact per-material bounds unchanged; all four
+  finish groups retained. No stock recipe, saved placement, collision bounds,
+  propulsion or accepted locomotion changes. Existing owned vessels use this fix.
+- Baseline interior rain-shelter-1791593393-899; final stationary/moving interior
+  1791593934-069 inspected, large orange patch gone. Production-world final
+  compact-world-1791594037-481 confirms the same at real port coordinates.
+  Narrow tile-edge glints remain visible on floors at large world coordinates;
+  investigate shared surface rendering precision separately, do not pretend this
+  contact-cap correction solves every tile seam.
+- Blender source rebuild/export and Godot reimport clean. Geometry comparison
+  confirms identical bounds and exactly two fewer triangles (5076 to5074).
+  Full rain shelter acceptance remains passing. Other ship gameplay was unchanged,
+  so completed cargo/journey tests were not repeated for a hidden visual face.
+- Rain batch commit7499c20. Next useful atmosphere work: inspect outdoor ground
+  response to sustained rain (currently the surfaces stay dry); keep any wetness
+  out of cabin interiors. Shared floor/roof edge precision is a separate observed
+  visual issue. Finish scoped work with actual views/performance, no multiplayer.

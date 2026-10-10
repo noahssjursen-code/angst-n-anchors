@@ -102,7 +102,18 @@ paint=mat('Warm white painted steel',(.77,.77,.68));steel=mat('Fixed_Galvanized'
 dark=mat('Fixed_ExhaustOutlet',(.06,.065,.06));rubber=mat('Fixed_Rubber',(.035,.04,.04),0)
 orange=mat('Fixed_FloatOrange',(.82,.26,.055),0)
 clear()
-box('Funnel base',(0,0,.14),(2.4,2.2,.28),paint)
+base=box('Funnel base',(0,0,.14),(2.4,2.2,.28),paint)
+# This flange is mounted into a deck/roof slab. Its hidden underside was
+# coplanar with the cabin ceiling and flickered orange through it. Keep the
+# datum, bounds and outside bevel, but omit the buried contact face.
+bpy.context.view_layer.objects.active=base
+for modifier in list(base.modifiers):
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+bm=bmesh.new();bm.from_mesh(base.data)
+bottom=[face for face in bm.faces if face.normal.z < -.999]
+assert len(bottom)==1
+bmesh.ops.delete(bm,geom=bottom,context='FACES')
+bm.to_mesh(base.data);bm.free()
 box('Casing',(0,0,1.9),(2,1.8,3.5),paint)
 box('Heat shield cap',(0,0,3.69),(2.18,1.98,.12),dark)
 for x in [-.55,.55]:
