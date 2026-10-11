@@ -42,7 +42,7 @@ static func _cache_key(
 	var site_seed := definition.site_seed if definition.site_seed != 0 \
 			else world_seed ^ definition.port_id.hash()
 	var attrs_hash := extra_attributes.hash() if not extra_attributes.is_empty() else 0
-	return "%s|%d|%d|%d|%s|%d|%d|%d|%d" % [
+	return "%s|%d|%d|%d|%s|%d|%d|%d|%d|%d" % [
 		definition.port_id,
 		world_seed,
 		site_seed,
@@ -52,4 +52,5 @@ static func _cache_key(
 		definition.site_max_size,
 		int(definition.region_kind),
 		attrs_hash,
+		int(definition.development_facilities),
 	]

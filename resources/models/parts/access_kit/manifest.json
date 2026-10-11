@@ -1,0 +1,47 @@
+{
+  "units": "metres",
+  "floor_rise_m": 2.2,
+  "stair_run_m": 3.0,
+  "riser_count": 11,
+  "assets": [
+    {
+      "id": "deck_stair_220cm",
+      "kind": "furniture",
+      "style": "stair",
+      "model": "res://resources/models/parts/access_kit/deck_stair_220cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -3
+      ],
+      "height_start_m": 3.23,
+      "height_end_m": 3.23,
+      "paintable": true,
+      "walk_exclude_materials": [
+        "Fixed_Nonslip",
+        "Fixed_TreadGrip",
+        "Fixed_StepEdge"
+      ]
+    },
+    {
+      "id": "deck_bracket_2m",
+      "kind": "furniture",
+      "style": "support",
+      "model": "res://resources/models/parts/access_kit/deck_bracket_2m.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        2,
+        0
+      ],
+      "height_start_m": 1,
+      "height_end_m": 1,
+      "paintable": true
+    }
+  ]
+}

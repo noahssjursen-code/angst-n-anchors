@@ -68,7 +68,6 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	theme = HudStyle.make_theme()
 	_build_toolbar()
 	_build_pick_panel()
 	_load_layer_preferences()
@@ -129,7 +128,7 @@ func get_selected_port_id() -> String:
 
 func open_navigation() -> void:
 	mode = Mode.NAVIGATION
-	if data == null or not data.is_valid():
+	if data == null or not data.is_valid() or not data.matches_live_tree(get_tree()):
 		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
 	## Reload prefs — home-port pick forces its own overlay set and must not
 	## stick on the shared gameplay chart after the captain sails.
@@ -152,7 +151,7 @@ func ensure_live_data() -> bool:
 	## live world tree (and never thrash PortCatalog while the menu is up).
 	if mode == Mode.HOME_PORT_PICK:
 		return data != null and data.is_valid()
-	if data == null or not data.is_valid():
+	if data == null or not data.is_valid() or not data.matches_live_tree(get_tree()):
 		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
 	return data != null and data.is_valid()
 
@@ -323,7 +322,7 @@ func _draw() -> void:
 
 
 func _build_pick_panel() -> void:
-	pick_panel = PanelContainer.new()
+	pick_panel = Ui.sheet()
 	pick_panel.name = "HomePortPickPanel"
 	pick_panel.visible = false
 	pick_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -337,42 +336,19 @@ func _build_pick_panel() -> void:
 	pick_panel.offset_top = TOP_H + 6.0
 	pick_panel.offset_right = FRAME + 320.0
 	pick_panel.offset_bottom = -(BOTTOM_H + 10.0)
-	var panel_sb := StyleBoxFlat.new()
-	panel_sb.bg_color = Color(HudStyle.C_BG.r, HudStyle.C_BG.g, HudStyle.C_BG.b, 0.94)
-	panel_sb.border_color = HudStyle.C_BRASS
-	panel_sb.set_border_width_all(1)
-	panel_sb.set_content_margin_all(16)
-	pick_panel.add_theme_stylebox_override("panel", panel_sb)
 	add_child(pick_panel)
 
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var vbox := Ui.vbox(10)
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	pick_panel.add_child(vbox)
+	vbox.add_child(Ui.eyebrow("Home harbour"))
 
-	var eyebrow := Label.new()
-	eyebrow.text = "HOME HARBOUR"
-	eyebrow.add_theme_font_size_override("font_size", 12)
-	eyebrow.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	if HudStyle.font_medium() != null:
-		eyebrow.add_theme_font_override("font", HudStyle.font_medium())
-	vbox.add_child(eyebrow)
-
-	pick_title = Label.new()
-	pick_title.text = "Select a harbour"
+	pick_title = Ui.heading("Select a harbour")
 	pick_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pick_title.add_theme_font_size_override("font_size", 28)
-	pick_title.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	if HudStyle.font_display() != null:
-		pick_title.add_theme_font_override("font", HudStyle.font_display())
 	vbox.add_child(pick_title)
 
-	pick_meta = Label.new()
-	pick_meta.text = "Click a marker on the chart"
+	pick_meta = Ui.caption("Click a marker on the chart", "caution")
 	pick_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pick_meta.add_theme_font_size_override("font_size", 13)
-	pick_meta.add_theme_color_override("font_color", HudStyle.C_COPPER)
 	vbox.add_child(pick_meta)
 
 	pick_body = RichTextLabel.new()
@@ -380,8 +356,6 @@ func _build_pick_panel() -> void:
 	pick_body.fit_content = true
 	pick_body.scroll_active = false
 	pick_body.custom_minimum_size = Vector2(0, 120)
-	pick_body.add_theme_font_size_override("normal_font_size", 14)
-	pick_body.add_theme_color_override("default_color", HudStyle.C_TEXT)
 	vbox.add_child(pick_body)
 
 	## Push actions to the bottom of the dock.
@@ -395,33 +369,13 @@ func _build_pick_panel() -> void:
 	row.size_flags_vertical = Control.SIZE_SHRINK_END
 	vbox.add_child(row)
 
-	pick_back = Button.new()
-	pick_back.text = "Back"
+	pick_back = Ui.button("Back", "ghost", func() -> void: home_port_cancelled.emit())
 	pick_back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pick_back.pressed.connect(func() -> void: home_port_cancelled.emit())
 	row.add_child(pick_back)
 
-	pick_confirm = Button.new()
-	pick_confirm.text = "Sail from here"
+	pick_confirm = Ui.button("Sail from here", "primary", _confirm_home_port)
 	pick_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pick_confirm.disabled = true
-	pick_confirm.pressed.connect(_confirm_home_port)
-	var confirm_normal := StyleBoxFlat.new()
-	confirm_normal.bg_color = Color(0.22, 0.42, 0.36, 1.0)
-	confirm_normal.border_color = HudStyle.C_COPPER
-	confirm_normal.set_border_width_all(1)
-	confirm_normal.set_content_margin_all(10)
-	var confirm_hover := confirm_normal.duplicate()
-	confirm_hover.bg_color = Color(0.28, 0.52, 0.44, 1.0)
-	var confirm_disabled := confirm_normal.duplicate()
-	confirm_disabled.bg_color = Color(0.16, 0.20, 0.19, 1.0)
-	confirm_disabled.border_color = Color(0.30, 0.34, 0.32, 0.6)
-	pick_confirm.add_theme_stylebox_override("normal", confirm_normal)
-	pick_confirm.add_theme_stylebox_override("hover", confirm_hover)
-	pick_confirm.add_theme_stylebox_override("pressed", confirm_hover)
-	pick_confirm.add_theme_stylebox_override("disabled", confirm_disabled)
-	pick_confirm.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	pick_confirm.add_theme_color_override("font_disabled_color", Color(0.45, 0.50, 0.48))
 	row.add_child(pick_confirm)
 
 
@@ -532,41 +486,27 @@ func _build_toolbar() -> void:
 	bar.add_theme_constant_override("separation", 8)
 	add_child(bar)
 
-	title_label = Label.new()
-	title_label.text = "NAVIGATION CHART"
-	title_label.custom_minimum_size.x = 190.0
-	title_label.add_theme_font_size_override("font_size", 18)
-	title_label.add_theme_color_override("font_color", Color(0.92, 0.86, 0.62))
+	title_label = Ui.eyebrow("Navigation chart")
+	title_label.custom_minimum_size.x = 220.0
 	bar.add_child(title_label)
 
-	hint_label = Label.new()
+	hint_label = Ui.caption("Click a harbour for details, then confirm")
 	hint_label.visible = false
-	hint_label.text = "Click a harbour for details, then confirm"
 	hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hint_label.add_theme_font_size_override("font_size", 15)
-	hint_label.add_theme_color_override("font_color", Color(0.90, 0.92, 0.82))
 	bar.add_child(hint_label)
 
-	weather_button = Button.new()
-	weather_button.text = "Weather"
-	weather_button.toggle_mode = true
+	weather_button = Ui.button("Weather", "chip")
 	weather_button.pressed.connect(_toggle_overlay.bind("weather"))
 	bar.add_child(weather_button)
 
-	fishing_button = Button.new()
-	fishing_button.text = "Fishing"
-	fishing_button.toggle_mode = true
+	fishing_button = Ui.button("Fishing", "chip")
 	fishing_button.pressed.connect(_toggle_overlay.bind("fishing"))
 	bar.add_child(fishing_button)
 
-	center_button = Button.new()
-	center_button.text = "Center"
-	center_button.pressed.connect(_home)
+	center_button = Ui.button("Center", "secondary", _home)
 	bar.add_child(center_button)
 
-	close_button = Button.new()
-	close_button.text = "Close"
-	close_button.pressed.connect(func() -> void: close_requested.emit())
+	close_button = Ui.button("Close", "ghost", func() -> void: close_requested.emit())
 	bar.add_child(close_button)
 	_refresh_mode_buttons()
 

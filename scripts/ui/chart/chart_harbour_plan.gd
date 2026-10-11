@@ -26,6 +26,7 @@ var asphalt_meta: Array[Dictionary] = []
 var bounds := Rect2()
 
 static var _cache: Dictionary = {} ## port_id -> ChartHarbourPlan
+static var _cache_snapshot_id := 0
 
 
 static func clear_cache() -> void:
@@ -42,6 +43,10 @@ static func is_cached(port_id: String) -> bool:
 
 
 static func for_port(port_id: String, tree: SceneTree, chart_snapshot) -> ChartHarbourPlan:
+	var snapshot_id: int = chart_snapshot.get_instance_id() if chart_snapshot != null else 0
+	if snapshot_id != _cache_snapshot_id:
+		clear_cache()
+		_cache_snapshot_id = snapshot_id
 	var pid := port_id.strip_edges()
 	if pid.is_empty():
 		return null
@@ -58,7 +63,8 @@ static func for_port(port_id: String, tree: SceneTree, chart_snapshot) -> ChartH
 
 
 static func resolve_port_data(port_id: String, tree: SceneTree, chart_snapshot) -> PortData:
-	if tree != null:
+	var live: bool = chart_snapshot == null or not chart_snapshot.preview
+	if tree != null and live:
 		var harbour := HarbourRegistry.controller(port_id)
 		if harbour != null:
 			var plot := harbour.get_parent() as PortPlot
@@ -70,7 +76,7 @@ static func resolve_port_data(port_id: String, tree: SceneTree, chart_snapshot) 
 	if chart_snapshot == null or chart_snapshot.layout == null:
 		return null
 	var info: Dictionary = {}
-	if tree != null:
+	if tree != null and live:
 		var catalog := tree.root.get_node_or_null("/root/PortCatalog")
 		if catalog != null:
 			info = catalog.call("get_port_info", port_id) as Dictionary

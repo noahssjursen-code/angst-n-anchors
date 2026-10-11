@@ -11,8 +11,8 @@ extends Node3D
 static func aabb_faces(size: Vector3) -> Array[Dictionary]:
 	var half := size * 0.5
 	return [
-		_face("px", Vector3(1, 0, 0), Vector3.UP, Vector2(size.z, size.y), Vector3(half.x, 0, 0), Vector3(0, -PI * 0.5, 0)),
-		_face("nx", Vector3(-1, 0, 0), Vector3.UP, Vector2(size.z, size.y), Vector3(-half.x, 0, 0), Vector3(0, PI * 0.5, 0)),
+		_face("px", Vector3(1, 0, 0), Vector3.UP, Vector2(size.z, size.y), Vector3(half.x, 0, 0), Vector3(0, PI * 0.5, 0)),
+		_face("nx", Vector3(-1, 0, 0), Vector3.UP, Vector2(size.z, size.y), Vector3(-half.x, 0, 0), Vector3(0, -PI * 0.5, 0)),
 		_face("py", Vector3(0, 1, 0), Vector3(0, 0, -1), Vector2(size.x, size.z), Vector3(0, half.y, 0), Vector3(-PI * 0.5, 0, 0)),
 		_face("ny", Vector3(0, -1, 0), Vector3(0, 0, 1), Vector2(size.x, size.z), Vector3(0, -half.y, 0), Vector3(PI * 0.5, 0, 0)),
 		_face("pz", Vector3(0, 0, 1), Vector3.UP, Vector2(size.x, size.y), Vector3(0, 0, half.z), Vector3.ZERO),
@@ -67,7 +67,8 @@ func _add_face(
 	mi.rotation = rotation
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	mat.roughness = 0.95
 	# Scissor keeps six-face sorting cheap while punching out clear bake pixels.
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	mat.alpha_scissor_threshold = 0.08

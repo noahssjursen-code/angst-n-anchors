@@ -1,0 +1,37 @@
+Game UI teardown — 9 October 2026
+
+Noah requested removal of the game interface and will direct the replacement.
+Removed: title/captain/company onboarding, pause/settings/company screens, NPC
+dialogue/catalog/operator panels, walking/ship HUDs, tutorial hints, interaction
+prompts, and floating NPC/player/ship nameplates. Removed UI-only scenes/tests.
+
+Retained: chart/minimap; authoring editors, developer overlays and test/showcase
+controls; shared editor/chart theme helpers and fonts; all physical signage.
+GameMenu is now only the chart/minimap host. Escape closes the map and otherwise
+passes through to gameplay. There is no pause screen or automatic title launch.
+Use F6 on an editor/test/world scene until Noah requests the new entry flow.
+
+NPC models, vessel deployment, berth authority, cargo/equipment operations,
+ship controls, fishing, doors, network profiles and save data remain. No new
+replacement interface was built. NPC operation methods remain callable by the
+gameplay regression fixtures; interacting no longer locks the mouse in a panel.
+
+Before removal, scripts/scenes/tests/fonts/theme/project settings were copied to:
+C:\Users\noahs\Documents\Codex\2026-10-05\referenced-chatgpt-conversation-this-is-an\work\ui-wipe-backup-20261009-162031
+The backup also includes the existing staged/unstaged patches and wipe manifest.
+Earlier character, movement, mooring, material import and company work was not
+reset. Authoring scripts are byte-identical to the pre-wipe backup.
+
+Godot 4.6.1 isolated checks passed:
+- game_ui_removal_test: map open/close, restored mouse mode, shared minimap,
+  no NPC panels/prompts/cursor trap, no helm HUD, shipyard editor shell, no save IO.
+- harbour_service_routing_test: real NPC deployment/replacement, compatible berth
+  selection, cargo capacity and door interaction through authority.
+- bulk_crane_operation_test: load/unload transfer, duplicate request handling,
+  stop/resume, impossible target failure, inventory/mass conservation.
+- No remaining code/scene references to removed files.
+
+The old standalone helm_minimap_test could not run correctly: its SceneTree
+preloads depend on autoload identifiers before they are registered. Its printed
+success line is not a pass. The scene-based removal test covers the retained
+chart/minimap with actual project autoloads. No claim of a full gameplay playthrough.

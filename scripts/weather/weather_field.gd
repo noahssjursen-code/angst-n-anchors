@@ -121,7 +121,7 @@ static func sample(world_pos: Vector3, game_time: float = -1.0) -> WeatherSample
 
 	# Independent authored components selected by deterministic moving cells.
 	s.cloud_cover = clampf(float(components.get("cloud_cover", 0.2)), 0.0, 1.0)
-	s.precipitation = clampf(float(components.get("precipitation", 0.0)), 0.0, 1.0)
+	s.precipitation = WeatherSample.supported_precipitation(float(components.get("precipitation", 0.0)), s.cloud_cover)
 	s.visibility = 1.0 - clampf(float(components.get("fog_density", 0.0)), 0.0, 1.0)
 	s.sea_state = clampf(float(components.get("sea_state", 0.2)), 0.0, 1.0)
 	s.convection_index = clampf(float(components.get("convection_index", 0.0)), 0.0, 1.0)

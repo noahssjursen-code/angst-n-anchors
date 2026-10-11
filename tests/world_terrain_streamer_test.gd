@@ -210,6 +210,8 @@ func _test_chunk_zone_filtering() -> void:
 	_check(selected.size() == 1 and selected[0] == near_zone, "chunk filtering drops distant terrain zones")
 	var adjacent := STREAMER.zones_intersecting_chunk([near_zone], Vector2i(1, 0))
 	_check(adjacent.size() == 1, "chunk filtering retains zone falloff across a chunk edge")
+	var forest_patch := STREAMER.zones_intersecting_chunk([near_zone, far_zone], Vector2i(3, 1), 256.0)
+	_check(forest_patch.size() == 1 and forest_patch[0] == near_zone, "forest patch filtering uses its own physical size")
 
 
 func _test_collision_selection() -> void:

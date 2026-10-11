@@ -2,6 +2,9 @@ extends Control
 
 ## Title orchestrator — pages call services; services own persistence/network.
 
+@export var preview_mode := false
+@export var show_backdrop := true
+
 const RosterPanelScript := preload("res://scripts/ui/captain_roster_panel.gd")
 const MenuBackdropScript := preload("res://scripts/ui/menu_backdrop.gd")
 const ChartPreviewBootstrapScript := preload("res://scripts/ui/chart/chart_preview_bootstrap.gd")
@@ -53,12 +56,17 @@ var _authority_join_generation := 0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	GameMenu.set_gameplay_hud_visible(false)
+	if ShipyardPlaytestMode.active() and LocalCaptainStore.root_override.is_empty():
+		preview_mode = true
 	_ensure_menu_offline()
-	LocalCaptainStore.ensure_migrated()
+	if not preview_mode:
+		LocalCaptainStore.ensure_migrated()
 
 	_backdrop = MenuBackdropScript.new()
 	_backdrop.name = "MenuBackdrop"
-	add_child(_backdrop)
+	if show_backdrop:
+		add_child(_backdrop)
 
 	_build_vignette()
 	_build_mode_page()
@@ -94,10 +102,9 @@ func _ready() -> void:
 
 
 func _build_vignette() -> void:
-	# Light overall wash only — ocean stays the stage.
 	var wash := ColorRect.new()
 	wash.set_anchors_preset(Control.PRESET_FULL_RECT)
-	wash.color = Color(0.02, 0.04, 0.05, 0.16)
+	wash.color = Color(0.031, 0.039, 0.047, 0.18)
 	wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(wash)
 
@@ -106,56 +113,34 @@ func _build_mode_page() -> void:
 	_mode_root = _make_brand_page_root("ModeSelectPage")
 	var stack := _mode_root.get_node("Align/Stack") as VBoxContainer
 
-	var brand := VBoxContainer.new()
-	brand.add_theme_constant_override("separation", 0)
+	var brand := Ui.vbox(0)
 	stack.add_child(brand)
-
-	var angst := Label.new()
-	angst.text = "ANGST"
+	var angst := Ui.hero("Angst")
 	angst.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	HudStyle.apply_display_font(angst, 92, HudStyle.C_TEXT)
 	brand.add_child(angst)
-
-	var anchors := Label.new()
-	anchors.text = "'N ANCHORS"
+	var anchors := Ui.display("'N Anchors")
+	anchors.add_theme_color_override("font_color", UiPalette.CRANE)
 	anchors.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	HudStyle.apply_display_font(anchors, 56, HudStyle.C_AMBER)
 	brand.add_child(anchors)
-
-	var rule := ColorRect.new()
-	rule.custom_minimum_size = Vector2(148, 2)
-	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	rule.color = HudStyle.C_COPPER
-	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rule_pad := MarginContainer.new()
-	rule_pad.add_theme_constant_override("margin_top", 8)
-	rule_pad.add_theme_constant_override("margin_bottom", 12)
-	rule_pad.add_child(rule)
+	rule_pad.add_theme_constant_override("margin_top", 10)
+	rule_pad.add_theme_constant_override("margin_bottom", 14)
+	rule_pad.add_child(Ui.hazard(6.0))
 	brand.add_child(rule_pad)
+	brand.add_child(Ui.paragraph("Build a company on cold northern waters."))
 
-	var tag := Label.new()
-	tag.text = "Build a company on cold northern waters"
-	HudStyle.apply_body_font(tag, 15, HudStyle.C_LABEL)
-	brand.add_child(tag)
-
-	var actions := VBoxContainer.new()
-	actions.add_theme_constant_override("separation", 4)
+	var actions := Ui.vbox(4)
 	var actions_pad := MarginContainer.new()
-	actions_pad.add_theme_constant_override("margin_top", 32)
+	actions_pad.add_theme_constant_override("margin_top", 28)
 	actions_pad.add_child(actions)
 	stack.add_child(actions_pad)
-
 	_add_action(actions, "Singleplayer", func() -> void: _show_page(Page.SINGLEPLAYER))
 	_add_action(actions, "Multiplayer", func() -> void: _show_page(Page.MULTIPLAYER))
 
 	var quit_pad := MarginContainer.new()
-	quit_pad.add_theme_constant_override("margin_top", 20)
+	quit_pad.add_theme_constant_override("margin_top", 16)
 	stack.add_child(quit_pad)
-	var quit := MenuActionButton.new()
-	quit.text = "Quit"
-	HudStyle.apply_body_font(quit, 14, HudStyle.C_LABEL, false)
-	quit.pressed.connect(_on_quit)
-	quit_pad.add_child(quit)
+	quit_pad.add_child(Ui.button("Quit", "ghost", _on_quit))
 
 
 func _build_singleplayer_page() -> void:
@@ -166,11 +151,12 @@ func _build_singleplayer_page() -> void:
 	_sp_roster = RosterPanelScript.new()
 	_sp_roster.configure(true, false)
 	_sp_roster.sail_pressed.connect(_on_sp_sail)
-	_sp_roster.delete_pressed.connect(func(id: String) -> void: _captains.delete_selected_or(id))
+	_sp_roster.delete_pressed.connect(_on_delete_captain)
 	_sp_roster.create_pressed.connect(_on_new_captain)
 	_sp_roster.selected.connect(func(id: String) -> void: _captains.select(id))
 	_sp_roster.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_sp_roster)
+	_add_action(vbox, "Development captain · all ships", _on_development_captain)
 	_add_action(vbox, "Back", func() -> void: _show_page(Page.MODE_SELECT))
 
 
@@ -180,10 +166,7 @@ func _build_multiplayer_page() -> void:
 	var vbox := _mp_root.get_node("Panel/Margin/VBox") as VBoxContainer
 	_add_page_heading(vbox, "MULTIPLAYER", "Shared waters · pick a harbour net")
 
-	var servers_lbl := Label.new()
-	servers_lbl.text = "SERVERS"
-	HudStyle.apply_body_font(servers_lbl, 11, HudStyle.C_COPPER, true)
-	vbox.add_child(servers_lbl)
+	vbox.add_child(Ui.eyebrow("Servers"))
 
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 100)
@@ -199,39 +182,23 @@ func _build_multiplayer_page() -> void:
 	_account_panel = VBoxContainer.new()
 	_account_panel.add_theme_constant_override("separation", 7)
 	vbox.add_child(_account_panel)
-	var account_heading := Label.new()
-	account_heading.text = "SERVER ACCOUNT"
-	HudStyle.apply_body_font(account_heading, 11, HudStyle.C_COPPER, true)
-	_account_panel.add_child(account_heading)
-	_account_status = Label.new()
-	_account_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_account_status, 12, HudStyle.C_LABEL)
+	_account_panel.add_child(Ui.eyebrow("Server account"))
+	_account_status = Ui.paragraph("Select a server, then log in to see your captains.")
 	_account_panel.add_child(_account_status)
-	_account_email = LineEdit.new()
-	_account_email.placeholder_text = "Email"
-	_account_email.custom_minimum_size.y = 34
+	_account_email = Ui.line_edit("Email")
 	_account_panel.add_child(_account_email)
-	_account_password = LineEdit.new()
-	_account_password.placeholder_text = "Password (10 characters minimum)"
+	_account_password = Ui.line_edit("Password (10 characters minimum)")
 	_account_password.secret = true
-	_account_password.custom_minimum_size.y = 34
 	_account_password.text_submitted.connect(func(_value: String) -> void: _login_remote_account())
 	_account_panel.add_child(_account_password)
-	var account_actions := HBoxContainer.new()
-	account_actions.add_theme_constant_override("separation", 8)
+	var account_actions := Ui.hbox(8)
 	_account_panel.add_child(account_actions)
-	_account_login = Button.new()
-	_account_login.text = "Log in"
-	_account_login.pressed.connect(_login_remote_account)
+	_account_login = Ui.button("Log in", "primary", _login_remote_account)
 	account_actions.add_child(_account_login)
-	_account_register = Button.new()
-	_account_register.text = "Create account"
-	_account_register.pressed.connect(_register_remote_account)
+	_account_register = Ui.button("Create account", "secondary", _register_remote_account)
 	account_actions.add_child(_account_register)
-	_account_logout = Button.new()
-	_account_logout.text = "Sign out"
+	_account_logout = Ui.button("Sign out", "ghost", _logout_remote_account)
 	_account_logout.visible = false
-	_account_logout.pressed.connect(_logout_remote_account)
 	account_actions.add_child(_account_logout)
 
 	_mp_roster = RosterPanelScript.new()
@@ -239,15 +206,14 @@ func _build_multiplayer_page() -> void:
 		push_warning("Debug balance writes are disabled in multiplayer; economy mutations are server-authoritative.")
 	)
 	_mp_roster.sail_pressed.connect(_on_mp_sail)
-	_mp_roster.delete_pressed.connect(func(id: String) -> void: _captains.delete_selected_or(id))
+	_mp_roster.delete_pressed.connect(_on_delete_captain)
 	_mp_roster.create_pressed.connect(_on_new_captain)
 	_mp_roster.selected.connect(_on_mp_select)
 	_mp_roster.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_mp_roster)
 
-	_mp_status = Label.new()
+	_mp_status = Ui.caption("")
 	_mp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_mp_status, 12, HudStyle.C_LABEL)
 	vbox.add_child(_mp_status)
 	_mp_roster.visible = false
 	_account_status.text = "Select a server, then log in to see your captains."
@@ -296,6 +262,14 @@ func _show_page(page: Page) -> void:
 	_home_port_layer.visible = page == Page.HOME_PORT
 	if page != Page.HOME_PORT:
 		_teardown_home_port_chart()
+	if preview_mode:
+		_multiplayer_flow = page == Page.MULTIPLAYER
+		if page == Page.SINGLEPLAYER:
+			_captains._entries = [{"id":"sample","display_name":"Noah","company_name":"Nordvik Shipping","marks":9100}]
+			_sp_roster.set_entries(_captains.entries(), "sample")
+		elif page == Page.MULTIPLAYER:
+			_refresh_servers()
+		return
 
 	match page:
 		Page.SINGLEPLAYER:
@@ -345,12 +319,14 @@ func _on_captain_error(message: String) -> void:
 
 
 func _on_new_captain() -> void:
-	if _page == Page.MULTIPLAYER and not _captains.has_remote_account():
+	if _page == Page.MULTIPLAYER and not preview_mode and not _captains.has_remote_account():
 		_account_status.text = "Log in before creating a captain on this server."
 		return
 	_creating_new = true
 	_multiplayer_flow = _page == Page.MULTIPLAYER
-	if _multiplayer_flow:
+	if preview_mode:
+		_pending_seed = 424242
+	elif _multiplayer_flow:
 		_pending_seed = int(_mp_world_options.get("world_seed", 0))
 		if _pending_seed <= 0:
 			_waiting_to_create_mp = true
@@ -367,8 +343,9 @@ func _on_creator_confirmed(display_name: String, appearance: CharacterAppearance
 	_pending_name = display_name
 	_pending_appearance = appearance
 	if _creating_new:
-		_company_setup.open_for_captain(_pending_name)
+		_company_setup.open_for_captain(_pending_name, not _multiplayer_flow)
 		_show_page(Page.COMPANY_SETUP)
+		_company_setup.show_world_size_choice(not _multiplayer_flow)
 	else:
 		_show_page(Page.SINGLEPLAYER)
 
@@ -385,6 +362,8 @@ func _on_company_confirmed(company_name: String, brand_color: Color, starter_ves
 	_pending_company_name = company_name
 	_pending_brand_color = brand_color
 	_pending_starter_vessel = starter_vessel
+	if not _multiplayer_flow:
+		GameSettings.apply_world_size_preset(_company_setup.selected_world_preset())
 	# Brand colours are part of the shared appearance record so future company
 	# uniforms render identically for the player, hired NPCs and remote clients.
 	if _pending_appearance != null:
@@ -400,6 +379,8 @@ static func _company_accent_for(primary: Color) -> Color:
 
 
 func _show_home_port_picker() -> void:
+	if preview_mode:
+		return
 	if _pending_seed <= 0:
 		if _multiplayer_flow:
 			_mp_status.text = "Server world settings are not ready."
@@ -436,6 +417,8 @@ static func _starter_terminal_family(starter_vessel: String) -> String:
 
 
 func _on_home_port_confirmed(port_id: String) -> void:
+	if preview_mode:
+		return
 	var preview_checksum := ""
 	var preview_snapshot = _chart_bootstrap.snapshot if _chart_bootstrap != null else null
 	if preview_snapshot != null:
@@ -457,10 +440,14 @@ func _on_home_port_confirmed(port_id: String) -> void:
 		_creating_new = false
 		_show_page(Page.MULTIPLAYER)
 		return
-	_captains.create_local(
+	var created := _captains.create_local(
 		_pending_name, _pending_appearance, port_id, _pending_seed,
-		_pending_company_name, _pending_brand_color, _pending_starter_vessel,
+		_pending_company_name, _pending_brand_color, "",
 	)
+	if created == null:
+		_show_page(Page.SINGLEPLAYER)
+		_sp_roster.set_message("Could not save the new captain. Please try again.")
+		return
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
 		session.data.world_context = {
@@ -472,7 +459,10 @@ func _on_home_port_confirmed(port_id: String) -> void:
 			"layout_checksum": preview_checksum,
 		}
 		# Save without letting an empty live-world snapshot wipe the seed again.
-		session.save_now()
+		if not session.save_now():
+			_show_page(Page.SINGLEPLAYER)
+			_sp_roster.set_message("Could not save the home port. The voyage has not started.")
+			return
 		WorldBootstrapScript.apply_seed(_pending_seed, gen_version, preview_checksum, 3, world_size_m, world_preset)
 	_creating_new = false
 	WorldBootstrapScript.enter_world(get_tree(), false)
@@ -491,7 +481,17 @@ func _teardown_home_port_chart() -> void:
 		_home_port_chart.visible = false
 
 
+func _on_development_captain() -> void:
+	if preview_mode:
+		return
+	var player: PlayerData = _captains.create_development_local()
+	if player != null:
+		_sp_roster.set_message("Development fleet ready · %d ships owned. Select Sail to play." % player.owned_vessels.size())
+
+
 func _on_sp_sail(captain_id: String) -> void:
+	if preview_mode:
+		return
 	if not _captains.load_local_into_session(captain_id):
 		_sp_roster.set_message("Could not load that captain.")
 		return
@@ -501,6 +501,8 @@ func _on_sp_sail(captain_id: String) -> void:
 
 
 func _on_mp_select(captain_id: String) -> void:
+	if preview_mode:
+		return
 	if not _captains.has_remote_account():
 		_account_status.text = "Log in before selecting a captain."
 		return
@@ -515,6 +517,8 @@ func _on_mp_select(captain_id: String) -> void:
 
 
 func _on_mp_sail(captain_id: String) -> void:
+	if preview_mode:
+		return
 	if not _captains.has_remote_account():
 		_account_status.text = "Log in before joining shared waters."
 		return
@@ -606,6 +610,8 @@ func _cancel_authority_join() -> void:
 
 
 func _login_remote_account() -> void:
+	if preview_mode:
+		return
 	var email := _account_email.text.strip_edges()
 	var password := _account_password.text
 	if email.is_empty() or password.is_empty():
@@ -618,6 +624,8 @@ func _login_remote_account() -> void:
 
 
 func _register_remote_account() -> void:
+	if preview_mode:
+		return
 	var email := _account_email.text.strip_edges()
 	var password := _account_password.text
 	if email.is_empty() or password.length() < 10:
@@ -630,6 +638,8 @@ func _register_remote_account() -> void:
 
 
 func _logout_remote_account() -> void:
+	if preview_mode:
+		return
 	_mp_sail_requested = false
 	_captains.logout_remote_account()
 	_account_status.text = "Signing out…"
@@ -708,33 +718,32 @@ func _refresh_servers() -> void:
 
 
 func _add_server_row(s: Dictionary, config: Node) -> void:
-	var row := HBoxContainer.new()
+	var row := Ui.hbox(10)
 	_server_list.add_child(row)
-	var status_dot := Label.new()
-	status_dot.text = "●"
-	status_dot.add_theme_color_override("font_color", Color.GRAY)
+	var status_dot := Ui.text("●", "Lead", "faint")
 	row.add_child(status_dot)
-	var name_lbl := Label.new()
-	name_lbl.text = str(s["label"])
+	var name_lbl := Ui.text(str(s["label"]), "Lead")
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_lbl)
-	var ping_lbl := Label.new()
-	ping_lbl.text = "…"
+	var ping_lbl := Ui.text("…", "MetricSmall")
 	ping_lbl.custom_minimum_size.x = 70
 	row.add_child(ping_lbl)
-	var players_lbl := Label.new()
-	players_lbl.text = ""
+	var players_lbl := Ui.caption("")
 	players_lbl.custom_minimum_size.x = 80
 	row.add_child(players_lbl)
-	var select_btn := Button.new()
-	select_btn.text = "Select"
+	var select_btn := Ui.button("Select", "chip")
+	select_btn.toggle_mode = false
 	row.add_child(select_btn)
 
 	var is_active := str(config.get("preset")) == str(s["id"])
-	if is_active:
-		select_btn.text = "Active"
+	if preview_mode:
 		select_btn.disabled = true
-		name_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+		ping_lbl.text = "Offline"
+		return
+	if is_active:
+		select_btn.text = "ACTIVE"
+		select_btn.disabled = true
+		name_lbl.add_theme_color_override("font_color", UiPalette.CRANE)
 	else:
 		select_btn.pressed.connect(func() -> void:
 			# World identity belongs to the selected server. Never reuse options
@@ -765,7 +774,7 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 			return
 		var duration_ms := Time.get_ticks_msec() - start_time
 		if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
-			status_dot.add_theme_color_override("font_color", Color.GREEN)
+			status_dot.add_theme_color_override("font_color", UiPalette.STARBOARD)
 			ping_lbl.text = "%d ms" % duration_ms
 			var count := 0
 			var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
@@ -776,20 +785,22 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 				_captains.configure_remote(self, "%s://%s:%d" % [s["http_scheme"], s["http_host"], s["http_port"]])
 				_on_remote_account_changed(_captains.remote_account())
 		else:
-			status_dot.add_theme_color_override("font_color", Color.RED)
+			status_dot.add_theme_color_override("font_color", UiPalette.PORT_RED)
 			ping_lbl.text = "Offline"
 			players_lbl.text = "Offline"
 			if is_active:
 				_mp_roster.set_message("Server is offline.")
 	)
 	if http_req.request(http_url) != OK:
-		status_dot.add_theme_color_override("font_color", Color.RED)
+		status_dot.add_theme_color_override("font_color", UiPalette.PORT_RED)
 		ping_lbl.text = "Error"
 		http_req.queue_free()
 		_active_pings.erase(http_url)
 
 
 func _ensure_menu_offline() -> void:
+	if preview_mode:
+		return
 	if _authority_join_pending:
 		_cancel_authority_join()
 	var config := get_node_or_null("/root/ServerConfig")
@@ -804,20 +815,32 @@ func _ensure_menu_offline() -> void:
 
 
 func _on_quit() -> void:
+	if preview_mode:
+		return
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.has_method("save_now"):
 		session.call("save_now")
 	get_tree().quit()
 
 
+func _on_delete_captain(captain_id: String) -> void:
+	if not preview_mode:
+		_captains.delete_selected_or(captain_id)
+
+
+func _exit_tree() -> void:
+	if is_instance_valid(_backdrop) and _backdrop.get_parent() == null:
+		_backdrop.free()
+
+
 func _make_brand_page_root(page_name: String) -> MarginContainer:
 	var root := MarginContainer.new()
 	root.name = page_name
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("margin_left", 56)
-	root.add_theme_constant_override("margin_right", 56)
-	root.add_theme_constant_override("margin_top", 48)
-	root.add_theme_constant_override("margin_bottom", 48)
+	root.add_theme_constant_override("margin_left", 64)
+	root.add_theme_constant_override("margin_right", 64)
+	root.add_theme_constant_override("margin_top", 56)
+	root.add_theme_constant_override("margin_bottom", 56)
 	add_child(root)
 
 	var align := VBoxContainer.new()
@@ -826,11 +849,10 @@ func _make_brand_page_root(page_name: String) -> MarginContainer:
 	align.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(align)
 
-	var stack := VBoxContainer.new()
+	var stack := Ui.vbox(8)
 	stack.name = "Stack"
-	stack.add_theme_constant_override("separation", 8)
 	stack.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	stack.custom_minimum_size = Vector2(420, 0)
+	stack.custom_minimum_size = Vector2(460, 0)
 	align.add_child(stack)
 	return root
 
@@ -845,96 +867,32 @@ func _make_side_page_root(page_name: String) -> MarginContainer:
 	root.add_theme_constant_override("margin_bottom", 48)
 	add_child(root)
 
-	var panel := Panel.new()
+	var panel := Ui.sheet(Vector2(560, 560))
 	panel.name = "Panel"
-	panel.theme = HudStyle.make_theme()
-	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
-	panel.custom_minimum_size = Vector2(520, 520)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(panel)
 
 	var margin := MarginContainer.new()
 	margin.name = "Margin"
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
+	margin.add_theme_constant_override("margin_left", 0)
+	margin.add_theme_constant_override("margin_right", 0)
+	margin.add_theme_constant_override("margin_top", 0)
+	margin.add_theme_constant_override("margin_bottom", 0)
 	panel.add_child(margin)
 
-	var vbox := VBoxContainer.new()
+	var vbox := Ui.vbox(14)
 	vbox.name = "VBox"
-	vbox.add_theme_constant_override("separation", 14)
 	margin.add_child(vbox)
 	return root
 
 
 func _add_page_heading(parent: Node, title_text: String, subtitle: String) -> void:
-	var title := Label.new()
-	title.text = title_text
-	HudStyle.apply_display_font(title, 42, HudStyle.C_TEXT)
-	parent.add_child(title)
-	var sub := Label.new()
-	sub.text = subtitle
-	HudStyle.apply_body_font(sub, 13, HudStyle.C_LABEL)
-	parent.add_child(sub)
-	var rule := ColorRect.new()
-	rule.custom_minimum_size = Vector2(120, 2)
-	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	rule.color = HudStyle.C_COPPER
-	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	parent.add_child(rule)
+	parent.add_child(Ui.header("", title_text, subtitle))
+	parent.add_child(Ui.rule(true))
 
 
-func _add_action(parent: Node, text: String, on_press: Callable) -> MenuActionButton:
-	var button := MenuActionButton.new()
-	button.text = text
-	button.pressed.connect(on_press)
+func _add_action(parent: Node, text: String, on_press: Callable) -> Button:
+	var button := Ui.button(text, "row", on_press)
 	parent.add_child(button)
 	return button
-
-
-## Legacy helpers kept for any remaining call sites.
-func _make_page_root(page_name: String) -> CenterContainer:
-	var root := CenterContainer.new()
-	root.name = page_name
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
-	return root
-
-
-func _make_panel(root: CenterContainer, min_size: Vector2) -> VBoxContainer:
-	var panel := Panel.new()
-	panel.theme = HudStyle.make_theme()
-	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
-	panel.custom_minimum_size = min_size
-	root.add_child(panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 28)
-	margin.add_theme_constant_override("margin_bottom", 28)
-	panel.add_child(margin)
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 12)
-	margin.add_child(vbox)
-	return vbox
-
-
-func _add_title(parent: Node, text: String, size: int) -> void:
-	var title := Label.new()
-	title.text = text
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	HudStyle.apply_display_font(title, size, HudStyle.C_TEXT)
-	parent.add_child(title)
-
-
-func _add_tag(parent: Node, text: String) -> void:
-	var tag := Label.new()
-	tag.text = text
-	HudStyle.apply_body_font(tag, 13, HudStyle.C_LABEL)
-	parent.add_child(tag)
-
-
-func _add_button(parent: Node, text: String, on_press: Callable) -> Button:
-	return _add_action(parent, text, on_press)

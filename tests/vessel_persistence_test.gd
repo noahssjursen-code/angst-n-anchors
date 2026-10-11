@@ -157,12 +157,12 @@ func _ready() -> void:
 				(VesselSpawn.brick_layout_of({
 					"hull_id": prebuilt.get("hull_id", ""),
 					"brick_layout": prebuilt.get("prebuilt_layout", {}),
-				}).get("cells", {}) as Dictionary).size() > 0,
+				}).get("parts", []) as Array).size() > 0,
 				"ready-built catalog loads the exported deck layout",
 			)
 			_check(
-				str(prebuilt.get("registration_id", "")) == "fishing_vessel",
-				"ready-built catalog persists declared legal registration",
+				str(prebuilt.get("registration_id", "")) == "",
+				"imported starters do not need legal registration",
 			)
 			var catalog_record := VesselSpawn.normalize_record({
 				"uid": "catalog_persistence_test",

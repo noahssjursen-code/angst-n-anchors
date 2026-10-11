@@ -1,0 +1,706 @@
+{
+  "placements": [
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_10000_10000_0",
+      "position": [
+        -5,
+        4.5,
+        16
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        15
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        14
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        13
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        12
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        11
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        10
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        9
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        8
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        -1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        -2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        -3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        -4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        -5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -5,
+        4.5,
+        -6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_-2361",
+      "position": [
+        -5,
+        4.5,
+        -7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_10000_-2361_8944_-4472",
+      "position": [
+        -5,
+        4.5,
+        -8
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+      "position": [
+        -4.5,
+        4.5,
+        -9
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+      "position": [
+        -4.0,
+        4.5,
+        -10
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+      "position": [
+        -3.5,
+        4.5,
+        -11
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+      "position": [
+        -3.0,
+        4.5,
+        -12
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_port_miter_8944_-4472_8219_-5924",
+      "position": [
+        -2.5,
+        4.5,
+        -13
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_port_miter_8219_-5924_7071_-7071",
+      "position": [
+        -2.0,
+        4.5,
+        -14
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_port_miter_7071_-7071_7071_-7071",
+      "position": [
+        -1.5,
+        4.5,
+        -14.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_port_miter_7071_-7071_7071_-7071",
+      "position": [
+        -1.0,
+        4.5,
+        -15.0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_port_miter_7071_-7071_0_-14142",
+      "position": [
+        -0.5,
+        4.5,
+        -15.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_-10000_10000_0",
+      "position": [
+        5,
+        4.5,
+        16
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        15
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        14
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        13
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        12
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        11
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        10
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        9
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        8
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        -1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        -2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        -3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        -4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        -5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        5,
+        4.5,
+        -6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_2361",
+      "position": [
+        5,
+        4.5,
+        -7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_10000_2361_8944_4472",
+      "position": [
+        5,
+        4.5,
+        -8
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+      "position": [
+        4.5,
+        4.5,
+        -9
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+      "position": [
+        4.0,
+        4.5,
+        -10
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+      "position": [
+        3.5,
+        4.5,
+        -11
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+      "position": [
+        3.0,
+        4.5,
+        -12
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_26_starboard_miter_8944_4472_8219_5924",
+      "position": [
+        2.5,
+        4.5,
+        -13
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_starboard_miter_8219_5924_7071_7071",
+      "position": [
+        2.0,
+        4.5,
+        -14
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_starboard_miter_7071_7071_7071_7071",
+      "position": [
+        1.5,
+        4.5,
+        -14.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_starboard_miter_7071_7071_7071_7071",
+      "position": [
+        1.0,
+        4.5,
+        -15.0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_45_starboard_miter_7071_7071_0_14142",
+      "position": [
+        0.5,
+        4.5,
+        -15.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_-10000_10000_0",
+      "position": [
+        -5,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -4,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -3,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -2,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        -1,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        0,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        1,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        2,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+      "position": [
+        3,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_10000",
+      "position": [
+        4,
+        4.5,
+        16
+      ],
+      "yaw_degrees": -90.0
+    }
+  ]
+}

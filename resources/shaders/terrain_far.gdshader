@@ -1,38 +1,42 @@
 shader_type spatial;
-render_mode cull_back, diffuse_burley, specular_disabled;
-
-// Coarsest terrain ring. Vertex colour already contains the coast/inland
-// palette, so distant land needs only one low-frequency canopy lookup instead
-// of the near shader's twelve triplanar texture reads plus detail maps.
-
-uniform sampler2D forest_map : filter_linear_mipmap, repeat_disable;
-uniform float forest_world_half_extent_m = 20000.0;
-
-varying vec3 world_pos;
-varying vec3 world_normal;
-varying vec4 terrain_tint;
-
+render_mode cull_back, diffuse_burley;
+#include "terrain_surfaces.gdshaderinc"
 void vertex() {
-	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-	terrain_tint = COLOR;
+    world_pos=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;
+    world_normal=normalize(MODEL_NORMAL_MATRIX*NORMAL);
+    coast_w=clamp(COLOR.a,0.0,1.0);
 }
-
 void fragment() {
-	vec3 n = normalize(world_normal);
-	float slope = 1.0 - clamp(n.y, 0.0, 1.0);
-	float coast_w = clamp(terrain_tint.a, 0.0, 1.0);
-	vec3 albedo = terrain_tint.rgb;
-
-	vec2 forest_uv = world_pos.xz / max(forest_world_half_extent_m * 2.0, 1.0) + vec2(0.5);
-	float forest_w = texture(forest_map, clamp(forest_uv, vec2(0.0), vec2(1.0))).r;
-	forest_w *= (1.0 - slope * 0.85) * (1.0 - coast_w * 0.7);
-	albedo = mix(albedo, vec3(0.022, 0.048, 0.026), clamp(forest_w * 0.82, 0.0, 0.78));
-
-	float snow_w = smoothstep(850.0, 1250.0, world_pos.y) * smoothstep(0.72, 0.94, n.y);
-	albedo = mix(albedo, vec3(0.62, 0.66, 0.69), snow_w);
-	albedo *= mix(1.0, 0.72, slope * 0.75);
-
-	ALBEDO = clamp(albedo, vec3(0.015), vec3(0.72));
-	ROUGHNESS = 0.94;
+    vec3 n=normalize(world_normal);
+    vec3 w=terrain_weights(n);
+    vec3 macro=texture(macro_map,world_pos.xz*.0016).rgb;
+    vec2 forest_uv=world_pos.xz/(forest_world_half_extent_m*2.0)+vec2(.5);
+    float forest=texture(forest_map,clamp(forest_uv,vec2(0),vec2(1))).r;
+    vec3 habitat=terrain_habitat(world_pos,n,coast_w,forest,macro);
+    // Metre-scale source detail with matching non-repeating blends in every LOD.
+    vec3 rock=terrain_tri(stone_color,world_pos*.25,w);
+    vec3 heath=terrain_tile_colour(heath_color,world_pos.xz/2.1).rgb*vec3(.38,.53,.47);
+    vec3 soil=terrain_tile_colour(soil_color,world_pos.xz/1.4).rgb;
+    // Broad irregular moss patches; the old 28 m mask repeated visibly in rows.
+    vec2 turned=mat2(vec2(.8,.6),vec2(-.6,.8))*world_pos.xz;
+    float moss_field=texture(macro_map,world_pos.xz*.011+vec2(.31,.73)).g*.6
+        +texture(macro_map,turned*.017+vec2(.19,.47)).b*.4;
+    float moss_patches=smoothstep(.36,.64,moss_field);
+    soil=mix(soil,heath,.12+moss_patches*.22);
+    vec3 albedo=rock*habitat.x+soil*habitat.y+heath*habitat.z;
+    albedo*=mix(.78,1.12,macro.g);
+    float wet=coast_w*(1.0-smoothstep(.2,2.8,world_pos.y));
+    albedo*=mix(1.0,.48,wet);
+    float damp=rain_wetness*mix(.8,1.0,macro.b);
+    albedo*=1.0-damp*dot(habitat,vec3(.32,.28,.12));
+    float snow=smoothstep(850.0,1250.0,world_pos.y)*smoothstep(.7,.95,n.y);
+    albedo=mix(albedo,vec3(.65,.69,.72),snow);
+    // Canopy is only a distant coverage substitute; near trees sit on soil.
+    float canopy=smoothstep(600.0,1300.0,length(VERTEX))*habitat.y;
+    albedo=mix(albedo,canopy_colour(world_pos.xz),canopy);
+    ALBEDO=albedo;
+    SPECULAR=.25;
+    ROUGHNESS=mix(.92,.48,wet);
+    float damp_rough=dot(habitat,vec3(.40,.72,.86));
+    ROUGHNESS=mix(ROUGHNESS,min(ROUGHNESS,damp_rough),damp*(1.0-canopy)*(1.0-snow));
 }

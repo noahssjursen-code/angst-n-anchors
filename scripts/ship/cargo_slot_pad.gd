@@ -3,7 +3,7 @@ class_name CargoSlotPadComponent
 extends Node3D
 
 ## Visible container slot grid on a ship deck. Cells are 1 m (DeckGrid.CELL_M).
-## Containers reserve a footprint block (default 4×4 m — two wide on an 8 m pad).
+## ContainerUnit converts physical clearance to each pad's own lattice.
 
 const PAD_GROUP := "cargo_slot_pad"
 const YARD_PAD_GROUP := "container_yard_pad"
@@ -35,6 +35,11 @@ signal container_landed(component: CargoSlotPadComponent, unit: ContainerUnit)
 @export var affects_boat_cargo_mass: bool = true
 ## Quay stack yard — same slot tiling as ship pads; joins container_yard_pad.
 @export var is_quay_yard_pad: bool = false
+## Invisible yard bounds keep slot/authority logic on the existing asphalt.
+@export var show_pad_visual: bool = true:
+	set(v):
+		show_pad_visual = v
+		_rebuild_visual()
 @export var pad_color: Color = Color(0.16, 0.18, 0.22, 0.92):
 	set(v):
 		pad_color = v
@@ -154,7 +159,9 @@ func clear_all() -> void:
 func add_container(unit: ContainerUnit, world_hint: Vector3 = Vector3.INF) -> int:
 	if unit == null:
 		return -1
-	var fp := unit.footprint
+	for existing in get_containers():
+		if existing.id == unit.id: return -1
+	var fp := unit.footprint_cells(cell_size_m)
 	if fp.x < 1 or fp.y < 1:
 		fp = ContainerUnit.DEFAULT_FOOTPRINT
 	var preferred := Vector2.ZERO
@@ -178,11 +185,13 @@ func add_container(unit: ContainerUnit, world_hint: Vector3 = Vector3.INF) -> in
 func place_container_node(node: ContainerNode, world_hint: Vector3 = Vector3.INF) -> int:
 	if node == null or node.unit == null:
 		return -1
+	if contains_node(node): return _origin_for_node(node)
+	for existing in get_containers():
+		if existing.id == node.unit.id: return -1
 	var unit := node.unit
-	var fp := unit.footprint
+	var fp := unit.footprint_cells(cell_size_m)
 	if fp.x < 1 or fp.y < 1:
 		fp = ContainerUnit.DEFAULT_FOOTPRINT
-		unit.footprint = fp
 	var preferred := Vector2.ZERO
 	var use_hint := false
 	if world_hint != Vector3.INF:
@@ -201,7 +210,7 @@ func place_container_node(node: ContainerNode, world_hint: Vector3 = Vector3.INF
 	if node.get_parent() != _container_root:
 		node.reparent(_container_root, true)
 	node.position = _cell_center_local(origin, fp)
-	node.position.y = ContainerNode.floor_offset_y()
+	node.position.y = ContainerNode.floor_offset_y() if show_pad_visual else 0.0
 	node.rotation = Vector3.ZERO
 	_nodes[origin] = node
 	_refresh_mass()
@@ -217,7 +226,7 @@ func take_container_node(node: ContainerNode) -> ContainerUnit:
 	if origin < 0:
 		return node.unit
 	var unit: ContainerUnit = _cells.get(origin) as ContainerUnit
-	var fp := unit.footprint if unit != null else ContainerUnit.DEFAULT_FOOTPRINT
+	var fp := unit.footprint_cells(cell_size_m) if unit != null else get_slot_footprint()
 	for cell_idx in _block_cells(origin, fp):
 		_cells.erase(cell_idx)
 	_nodes.erase(origin)
@@ -331,7 +340,7 @@ func remove_container_at(origin_idx: int) -> ContainerUnit:
 	var unit: ContainerUnit = null
 	if _cells.has(origin_idx):
 		unit = _cells[origin_idx] as ContainerUnit
-	var fp := unit.footprint if unit != null else ContainerUnit.DEFAULT_FOOTPRINT
+	var fp := unit.footprint_cells(cell_size_m) if unit != null else get_slot_footprint()
 	for cell_idx in _block_cells(origin_idx, fp):
 		_cells.erase(cell_idx)
 	var node: Node = _nodes.get(origin_idx) as Node
@@ -348,9 +357,10 @@ func find_free_slot(fp: Vector2i = Vector2i.ZERO) -> int:
 	return _find_free_block(use_fp, Vector2.ZERO, false)
 
 
-func slot_drop_world_for_free(fp: Vector2i = Vector2i.ZERO) -> Vector3:
+func slot_drop_world_for_free(fp: Vector2i = Vector2i.ZERO, world_hint: Vector3 = Vector3.INF) -> Vector3:
 	var use_fp := fp if fp.x >= 1 and fp.y >= 1 else get_slot_footprint()
-	var origin := _find_free_block(use_fp, Vector2.ZERO, false)
+	var local_hint := to_local(world_hint) if world_hint != Vector3.INF else Vector3.ZERO
+	var origin := _find_free_block(use_fp, Vector2(local_hint.x, local_hint.z), world_hint != Vector3.INF)
 	if origin < 0:
 		return Vector3.INF
 	return to_global(_cell_center_local(origin, use_fp))
@@ -435,8 +445,8 @@ func _spawn_node(origin: int, unit: ContainerUnit) -> void:
 		_container_root.name = "Containers"
 		add_child(_container_root)
 	_container_root.add_child(node)
-	node.position = _cell_center_local(origin, unit.footprint)
-	node.position.y = ContainerNode.floor_offset_y()
+	node.position = _cell_center_local(origin, unit.footprint_cells(cell_size_m))
+	node.position.y = ContainerNode.floor_offset_y() if show_pad_visual else 0.0
 	## Quay yards still skip boat mass, but containers must block walking.
 	node.setup(unit, false)
 	_nodes[origin] = node
@@ -452,6 +462,8 @@ func _origin_for_node(node: ContainerNode) -> int:
 func _rebuild_visual() -> void:
 	if _visual_root != null and is_instance_valid(_visual_root):
 		_visual_root.queue_free()
+	_visual_root = null
+	if not show_pad_visual: return
 	_visual_root = Node3D.new()
 	_visual_root.name = "PadVisual"
 	add_child(_visual_root)
@@ -523,14 +535,15 @@ func _refresh_mass() -> void:
 		boat.set_mass_entry(
 			"%s%d" % [_mass_prefix(), i],
 			kg,
-			boat.to_local(node.global_position),
+			boat.to_local(node.to_global(Vector3(0,node.unit.dimensions_m().y*.5,0))),
 			"cargo",
 		)
 		i += 1
 
 
 func _mass_prefix() -> String:
-	return MASS_PREFIX + name + "_"
+	# Several imported beds share a node name; their mass entries must not collide.
+	return MASS_PREFIX + str(get_instance_id()) + "_"
 
 
 func _resolve_boat() -> BoatBody:

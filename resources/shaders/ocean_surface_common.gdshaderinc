@@ -30,17 +30,6 @@ float ocean_fbm(vec2 p) {
 	return v;
 }
 
-vec2 ocean_chop_gradient(vec2 xz, float wt) {
-	vec2 d = vec2(0.0);
-	float p1 = dot(xz, vec2(1.73, -1.19)) + wt * 2.15;
-	float p2 = dot(xz, vec2(-2.41, 1.37)) + wt * 2.85;
-	float p3 = dot(xz, vec2(0.91, 2.63)) + wt * (-3.35);
-	d += vec2(1.73, -1.19) * cos(p1) * 0.55;
-	d += vec2(-2.41, 1.37) * cos(p2) * 0.35;
-	d += vec2(0.91, 2.63) * cos(p3) * 0.22;
-	return d;
-}
-
 vec2 ocean_wake_uv(vec2 world_xz, vec2 wake_origin, float wake_extent) {
 	return (world_xz - wake_origin) / max(wake_extent, 0.001);
 }
@@ -82,34 +71,66 @@ vec3 ocean_body(
 	float crest,
 	float noise
 ) {
-	float facing = pow(clamp(dot(normal_world, view_dir), 0.001, 1.0), 0.7);
-	float height_rel = clamp((world_pos.y - water_level_value) * 0.55, -0.5, 1.0);
-	vec3 body = mix(deep_color, shallow_color, (1.0 - facing) * (0.25 + near_lift * 0.4));
-	body = mix(body, vec3(0.015, 0.11, 0.13), crest * 0.32);
-	float trough = clamp(-height_rel, 0.0, 0.4) * mix(0.55, 1.0, noise);
-	return body * (1.0 - trough * 0.28);
+	// Absorbed/scattered water colour. Angle-dependent sky colour belongs in
+	// environment reflection, not this diffuse term. Avoid height-painted bands.
+	return mix(deep_color, shallow_color, 0.08 + crest * 0.10);
 }
 
-vec3 ocean_sky_reflection(
-	vec3 body,
-	vec3 horizon_color,
-	vec3 top_color,
-	vec3 normal_world,
-	vec3 view_dir,
-	float fresnel,
-	float sky_mix
-) {
-	float facing = pow(clamp(dot(normal_world, view_dir), 0.001, 1.0), 0.7);
-	vec3 ref_dir = reflect(-view_dir, normal_world);
-	float sky_t = pow(clamp(ref_dir.y * 0.5 + 0.5, 0.0, 1.0), 0.85);
-	vec3 sky_col = mix(horizon_color, top_color, sky_t);
-	float sky_w = fresnel * sky_mix * mix(1.15, 0.35, facing);
-	return mix(body, sky_col, clamp(sky_w, 0.0, 0.92));
+// Independent high-precision hash: the legacy noise hash multiplies very large
+// float values before fract(), which quantizes cell jitter into visible rows.
+float ocean_foam_hash(vec2 p) {
+	vec3 q = fract(vec3(p.xyx) * 0.1031);
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.x + q.y) * q.z);
 }
 
-float ocean_glint(vec3 normal_world, vec3 view_dir, vec3 sun_dir, float distance_to_camera) {
-	float ndh = clamp(dot(normal_world, normalize(view_dir + sun_dir)), 0.0, 1.0);
-	float glint = pow(ndh, 96.0) * 0.35 + pow(ndh, 420.0) * 0.55;
-	glint *= 1.0 - smoothstep(50.0, 450.0, distance_to_camera) * 0.9;
-	return min(glint, 0.85);
+float ocean_foam_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(ocean_foam_hash(i), ocean_foam_hash(i + vec2(1,0)), u.x),
+		mix(ocean_foam_hash(i + vec2(0,1)), ocean_foam_hash(i + vec2(1)), u.x), u.y);
+}
+
+// Coarse FFT compression decides where foam is possible, not its texture.
+float ocean_foam_coverage(vec2 xz, float wt, float breaking, float steep) {
+	vec2 drift = xz + wt * vec2(0.16, -0.11);
+	float footprint = max(length(dFdx(xz)), length(dFdy(xz)));
+	// Break up the periodic FFT compression envelope with metre-scale rafts.
+	// Non-periodic world noise modulates coverage only, never the wave geometry.
+	vec2 warp = vec2(ocean_foam_noise(drift*.19), ocean_foam_noise(drift*.19+vec2(17.3,41.7)));
+	float patches = ocean_foam_noise(drift*.43+warp*1.7);
+	float patch_weight = 1.0-smoothstep(.5,3.0,footprint);
+	float rafts = mix(0.5, ocean_foam_noise(drift * 2.3+warp), 1.0 - smoothstep(0.12, 0.6, footprint));
+	float lace = mix(0.5, ocean_foam_noise(drift * 9.7 + vec2(rafts * 2.0)), 1.0 - smoothstep(0.03, 0.18, footprint));
+	float density = breaking + steep * 0.10 - rafts * 0.45 - lace * 0.30
+		- (.1 + (patches-.5)*.42*patch_weight);
+	return smoothstep(0.24, 0.37, density);
+}
+
+float ocean_foam_bubbles(vec2 xz, float wt, float footprint) {
+	vec2 drift = xz + wt * vec2(0.16, -0.11);
+	vec2 p = drift * 14.0;
+	p += vec2(ocean_foam_noise(drift * 3.1), ocean_foam_noise(drift * 3.1 + vec2(37.1))) * 2.0;
+	vec2 cell = floor(p);
+	vec2 local = fract(p);
+	float nearest = 10.0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 offset = vec2(float(x), float(y));
+			vec2 id = cell + offset;
+			vec2 centre = vec2(ocean_foam_hash(id), ocean_foam_hash(id + vec2(37.2, 11.8)));
+			float radius = mix(0.08, 0.40, ocean_foam_hash(id + vec2(9.3, 53.1)));
+			nearest = min(nearest, length(offset + centre - local) - radius);
+		}
+	}
+	float aa = clamp(footprint * 14.0, 0.025, 0.3);
+	float holes = smoothstep(-aa, aa, nearest);
+	float resolved = 1.0 - smoothstep(0.018, 0.06, footprint);
+	return mix(0.78, mix(0.25, 1.0, holes), resolved);
+}
+
+// Fade before the 1536 m horizon boundary; never use a different gain per ring.
+float ocean_foam_distance_fade(float distance_to_camera) {
+	return 1.0 - smoothstep(800.0, 1400.0, distance_to_camera);
 }

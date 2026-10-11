@@ -1,0 +1,57 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "passenger_pier_6m",
+      "model": "res://resources/models/parts/passenger_terminal/passenger_pier_6m.glb"
+    },
+    {
+      "id": "terminal_glazed_bay_3m",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_glazed_bay_3m.glb"
+    },
+    {
+      "id": "terminal_solid_bay_3m",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_solid_bay_3m.glb"
+    },
+    {
+      "id": "terminal_entry_3m",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_entry_3m.glb"
+    },
+    {
+      "id": "terminal_roof_3x10m",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_roof_3x10m.glb"
+    },
+    {
+      "id": "terminal_gable_10m",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_gable_10m.glb"
+    },
+    {
+      "id": "terminal_canopy_3m",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_canopy_3m.glb"
+    },
+    {
+      "id": "terminal_canopy_post",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_canopy_post.glb"
+    },
+    {
+      "id": "terminal_waiting_bench",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_waiting_bench.glb"
+    },
+    {
+      "id": "terminal_information_pylon",
+      "model": "res://resources/models/parts/passenger_terminal/terminal_information_pylon.glb"
+    },
+    {
+      "id": "passenger_berth_fender",
+      "model": "res://resources/models/parts/passenger_terminal/passenger_berth_fender.glb"
+    },
+    {
+      "id": "passenger_pier_guard_3m",
+      "model": "res://resources/models/parts/passenger_terminal/passenger_pier_guard_3m.glb"
+    },
+    {
+      "id": "passenger_pier_guard_post",
+      "model": "res://resources/models/parts/passenger_terminal/passenger_pier_guard_post.glb"
+    }
+  ]
+}

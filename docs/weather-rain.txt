@@ -1,0 +1,71 @@
+Local precipitation presentation
+===============================
+RainField reads WeatherLighting's composed precipitation; it never invents a
+separate weather state. WeatherSample.supported_precipitation caps rain against
+cloud cover. Rain quads use the actual scene light and depth rather than glow.
+
+Roof shelter (10 October 2026)
+- One world-aligned GPUParticlesCollisionHeightField3D covers80x80m locally,
+  with64m vertical range and512x512 resolution. A snapped4m origin updates at
+  most8Hz, including moving ship roofs; it does not follow the camera every frame.
+- Rendering layer20 marks rain particles for collision. Ordinary geometry can
+  occlude them; unrelated particle effects are not affected by this rain field.
+- Drops spawn6-10m above the camera instead of a box extending below eye height.
+  At60Hz, contact hiding includes the optical half-streak so tails do not flash
+  through thin roofs. The collider stays until residual drops expire, then turns
+  off entirely in dry weather.
+- This is a top-down shelter approximation. It does not simulate wind recirculation
+  through open windows, horizontal wall impacts, drips or impact splashes. It is
+  bounded local rendering work, with no per-drop scene nodes or CPU ray queries.
+
+Review, in rendered Godot with -- --shipyard-playtest:
+- tests/rain_shelter_review.tscn: canopy removed/replaced, imported bridge at rest
+  and moving, exposed deck and dry state; paired actual-image pixel checks.
+  --reproduce-roof-leak disables shelter and restores the old emission box;
+  it deliberately fails the covered-pixel checks.
+- tests/rain_shelter_world_review.tscn: production world, loaded forests/port,
+  actual ship, and repeated enabled/disabled GPU cost comparisons.
+- tests/rain_presentation_review.tscn: clear/cloud/rain/wind/night visual matrix.
+All images/reports archive under C:/Users/noahs/Pictures/machinescreenshots.
+
+Godot reference:
+https://docs.godotengine.org/en/stable/classes/class_gpuparticlescollisionheightfield3d.html
+https://docs.godotengine.org/en/stable/classes/class_gpuparticlescollision3d.html
+
+Wet ground (10 October 2026)
+- SurfaceWetness is local presentation driven by WeatherLighting.rain_amount,
+  not another weather authority or persistent hydrology simulation. Entering a
+  rainy world starts damp. Subsequent rain wets ground over tens of seconds;
+  after rain stops, drying takes several minutes of real play time. Updates at
+  most8Hz and stops uniform work when stable. Streamed materials inherit the
+  current amount; weak references do not retain discarded terrain/materials.
+- Quay paving and road paint opt in through HarbourEnvironmentKit. Village
+  asphalt/gravel opt in explicitly through SurfaceMaterialLibrary's rain_exposed
+  argument. Cached exposed and sheltered instances are separate. Default ship,
+  cabin, clothing and imported finishes remain dry; material names alone never
+  establish exposure. Future sheltered exterior geometry needs explicit masking.
+- Original source maps remain unchanged. Damp asphalt darkens and gains a
+  broad sheen, gravel stays rough. Both terrain LODs share habitat-dependent
+  darkening: bedrock/soil stronger, heath restrained. Existing tidal dampness
+  remains. Snow and distant canopy never inherit glossy ground roughness.
+- No puddle geometry, water depth, impact splashes or screen reflection pass is
+  added. This is a low-cost damp-surface response, not pooled water simulation.
+- tests/wet_ground_review.tscn compares sourced finishes and both terrain LODs,
+  checks temporal response, late streaming and sheltered material isolation.
+  tests/wet_ground_world_review.tscn compares actual harbour day/night and inland
+  terrain under identical weather, with archived images and timing reports.
+
+Material response reference (porosity, roughness, accumulation and drying):
+https://seblagarde.wordpress.com/2013/04/14/water-drop-3b-physically-based-wet-surfaces/
+
+Weather sound alignment (10 October 2026)
+- Atmosphere beds use supported local rain and wind, with the existing smooth
+  onset/tail. Cloudiness and fog no longer trigger drizzle or storm recordings.
+  Dry wind can select dry squall without requiring rain or low visibility.
+- Sequential layers ignore missing recording slots. There is currently no
+  rain_heavy asset; maximum rain retains the strongest available moderate loop
+  instead of crossfading into an empty slot. No new sound assets were invented.
+- tests/rain_presentation_review.tscn -- --shipyard-playtest --audio-only checks
+  actual player gains in eight weather states; the ordinary rendered run also
+  keeps these checks alongside the seven sky/rain views. This verifies activation
+  and continuity of the existing recordings, not a newly mastered sound library.

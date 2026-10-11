@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "hull": "hull_88x14",
+  "units": "metres",
+  "assets": {
+    "support": "feeder_shaft_support",
+    "propeller": "propeller_2600",
+    "rudder": "rudder_3000"
+  },
+  "support": [
+    0,
+    2,
+    41.35
+  ],
+  "propeller": [
+    0,
+    2,
+    42.42
+  ],
+  "rudder": [
+    0,
+    3.786,
+    43.779
+  ],
+  "max_rudder_degrees": 28,
+  "visual_max_rpm": 160
+}

@@ -180,8 +180,11 @@ static func fit_port_shoreline(
 		site_seed: int,
 		_half_extent_m: float = 0.0,
 		profile_override: String = "",
+		minimum_shore_m: float = 0.0,
 ) -> Dictionary:
 	var length_options := harbour_length_options(size, site_seed, profile_override)
+	if minimum_shore_m > 0.0:
+		length_options["min_shore_m"] = minimum_shore_m
 	var traced := orient_alongshore(traced_coast)
 	var coast_dots := select_harbour_span(traced, size, site_seed, length_options)
 	coast_dots = orient_alongshore(coast_dots)

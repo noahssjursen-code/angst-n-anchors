@@ -26,9 +26,10 @@ var _landed_mass_kg := 0.0
 var _landed_value_marks := 0.0
 var _landed_lots := 0
 var _hose_root: Node3D
-var _hose_segments: Array[MeshInstance3D] = []
+var _hose_mesh: MeshInstance3D
 var _receiver_fill: MeshInstance3D
 var _connection_marker: Node3D
+var _connection_direction: Node3D
 
 
 func _ready() -> void:
@@ -206,154 +207,41 @@ func _ship_connection_world() -> Vector3:
 
 
 func _build_visual() -> void:
-	var steel := Color(0.63, 0.68, 0.69)
-	var dark_steel := Color(0.20, 0.24, 0.25)
-	var frame_color := Color(0.35, 0.40, 0.40)
-	var motor_blue := Color(0.055, 0.25, 0.34)
-	var hose_color := Color(0.035, 0.055, 0.06)
-
-	## Mobile galvanized frame: the landing plant is temporary quay equipment,
-	## not a permanent building or a cargo crane.
-	for z in [-2.05, 2.05]:
-		var rail := MeshBuilder.box(Vector3(7.6, 0.18, 0.18), frame_color, 0.58, 0.52)
-		rail.position = Vector3(-0.15, 0.65, z)
-		add_child(rail)
-	for x in [-3.75, 3.45]:
-		var crossrail := MeshBuilder.box(Vector3(0.18, 0.18, 4.3), frame_color, 0.58, 0.52)
-		crossrail.position = Vector3(x, 0.65, 0.0)
-		add_child(crossrail)
-	for x in [-3.35, 3.05]:
-		for z in [-1.78, 1.78]:
-			var tyre := MeshBuilder.cylinder(0.58, 0.34, Color(0.045, 0.05, 0.052), 0.92, 0.0)
-			tyre.rotation_degrees.x = 90.0
-			tyre.position = Vector3(x, 0.54, z)
-			add_child(tyre)
-			var hub := MeshBuilder.cylinder(0.22, 0.38, steel, 0.42, 0.72)
-			hub.rotation_degrees.x = 90.0
-			hub.position = Vector3(x, 0.54, z)
-			add_child(hub)
-
-	## Four uprights and braces carry the inclined vacuum separator drum.
-	for x in [-2.6, 2.3]:
-		for z in [-1.55, 1.55]:
-			var upright := MeshBuilder.box(Vector3(0.16, 3.45, 0.16), frame_color, 0.6, 0.48)
-			upright.position = Vector3(x, 2.22, z)
-			add_child(upright)
-	_add_pipe_run(PackedVector3Array([
-		Vector3(-2.6, 0.78, -1.55), Vector3(2.3, 3.82, -1.55)
-	]), 0.075, frame_color)
-	_add_pipe_run(PackedVector3Array([
-		Vector3(-2.6, 0.78, 1.55), Vector3(2.3, 3.82, 1.55)
-	]), 0.075, frame_color)
-
-	var separator := MeshBuilder.cylinder(1.05, 4.8, steel, 0.32, 0.78)
-	separator.name = "VacuumSeparatorDrum"
-	separator.rotation_degrees = Vector3(0.0, 0.0, 72.0)
-	separator.position = Vector3(-0.2, 3.35, 0.0)
-	add_child(separator)
-	for x in [-1.55, 1.10]:
-		var band := MeshBuilder.cylinder(1.10, 0.16, dark_steel, 0.48, 0.62)
-		band.rotation_degrees = Vector3(0.0, 0.0, 72.0)
-		band.position = Vector3(x, 3.35 + x * 0.32, 0.0)
-		add_child(band)
-	var inspection := MeshBuilder.cylinder(0.34, 0.12, dark_steel, 0.46, 0.6)
-	inspection.rotation_degrees.x = 90.0
-	inspection.position = Vector3(-1.65, 3.04, -1.08)
-	add_child(inspection)
-
-	## Positive-displacement pump and electric drive beneath the separator.
-	var motor := MeshBuilder.cylinder(0.58, 1.45, motor_blue, 0.38, 0.72)
-	motor.rotation_degrees.z = 90.0
-	motor.position = Vector3(1.75, 1.35, -0.82)
-	add_child(motor)
-	var pump := MeshBuilder.cylinder(0.72, 0.72, dark_steel, 0.38, 0.72)
-	pump.rotation_degrees.z = 90.0
-	pump.position = Vector3(2.70, 1.35, -0.82)
-	add_child(pump)
-	for x in [1.15, 2.35]:
-		var foot := MeshBuilder.box(Vector3(0.16, 0.75, 0.16), frame_color, 0.65, 0.45)
-		foot.position = Vector3(x, 0.96, -0.82)
-		add_child(foot)
-
-	## Control cabinet with a simple readable operator face.
-	var cabinet := MeshBuilder.box(Vector3(1.05, 1.75, 0.58), Color(0.80, 0.82, 0.80), 0.7, 0.18)
-	cabinet.position = Vector3(1.65, 1.78, 1.52)
-	add_child(cabinet)
-	for i in range(3):
-		var lamp_color := Color(0.16, 0.78, 0.34) if i == 0 else Color(0.92, 0.67, 0.12)
-		var lamp := MeshBuilder.sphere(0.075, lamp_color, 0.28, 0.08)
-		lamp.position = Vector3(1.36 + float(i) * 0.28, 2.18, 1.83)
-		add_child(lamp)
-	var stop_button := MeshBuilder.cylinder(0.11, 0.08, Color(0.75, 0.06, 0.04), 0.38, 0.35)
-	stop_button.rotation_degrees.x = 90.0
-	stop_button.position = Vector3(1.65, 1.78, 1.84)
-	add_child(stop_button)
-
-	## Dewatering/receiving trough. Fish visibly accumulate here as the hold drains.
-	var trough_floor := MeshBuilder.box(Vector3(2.45, 0.12, 2.65), dark_steel, 0.58, 0.45)
-	trough_floor.position = Vector3(-3.35, 1.02, 0.0)
-	add_child(trough_floor)
-	for z in [-1.32, 1.32]:
-		var side := MeshBuilder.box(Vector3(2.55, 0.78, 0.12), steel, 0.48, 0.62)
-		side.position = Vector3(-3.35, 1.40, z)
-		add_child(side)
-	var end_wall := MeshBuilder.box(Vector3(0.12, 0.78, 2.65), steel, 0.48, 0.62)
-	end_wall.position = Vector3(-4.58, 1.40, 0.0)
-	add_child(end_wall)
-	_receiver_fill = MeshBuilder.box(
-		Vector3(2.18, 0.10, 2.38), Color(0.45, 0.62, 0.64), 0.25, 0.04
-	)
-	_receiver_fill.position = Vector3(-3.28, 1.10, 0.0)
+	var models := Node3D.new()
+	models.name = "ImportedLandingPlant"
+	add_child(models)
+	for part_name in ["landing_skid", "landing_separator", "landing_pump_drive", "landing_trough"]:
+		var scene := load("res://resources/models/parts/port_kit/"+part_name+".glb") as PackedScene
+		assert(scene != null)
+		models.add_child(scene.instantiate())
+	SurfaceMaterialLibrary.apply(models)
+	_connection_marker = models.find_child("HoseConnection",true,false) as Node3D
+	_connection_direction = models.find_child("HoseDeparture",true,false) as Node3D
+	assert(_connection_marker != null, "Landing drive requires an authored suction socket")
+	assert(_connection_direction != null, "Landing drive requires an axial hose departure")
+	var fill_datum := models.find_child("FillDatum",true,false) as Node3D
+	assert(fill_datum != null)
+	# Transient fill and deforming hose remain gameplay presentation, not static fittings.
+	_receiver_fill = MeshBuilder.box(Vector3(2.18,.10,2.38),Color(.45,.62,.64),.25,.04)
 	add_child(_receiver_fill)
-
-	## Rigid pipework: separator discharge to trough and suction riser over frame.
-	_add_pipe_run(PackedVector3Array([
-		Vector3(-2.35, 3.32, 0.0), Vector3(-2.80, 2.45, 0.0),
-		Vector3(-3.30, 2.18, 0.0), Vector3(-3.30, 1.72, 0.0),
-	]), 0.24, steel)
-	_add_pipe_run(PackedVector3Array([
-		Vector3(2.70, 1.35, -0.82), Vector3(3.35, 1.35, -0.82),
-		Vector3(3.55, 2.05, -0.82), Vector3(3.55, 3.78, -0.82),
-		Vector3(2.15, 4.58, -0.52), Vector3(1.45, 4.48, -0.18),
-	]), 0.25, steel)
-	var title := Label3D.new()
-	title.text = "RSW LANDING"
-	title.font = HudStyle.font_display()
-	title.font_size = 48
-	title.pixel_size = 0.006
-	title.position = Vector3(-0.15, 3.38, -1.08)
-	title.rotation_degrees = Vector3(0.0, 180.0, -18.0)
-	title.modulate = Color(0.07, 0.28, 0.34)
-	title.outline_size = 4
-	add_child(title)
-
-	_connection_marker = Node3D.new()
-	_connection_marker.name = "HoseConnection"
-	_connection_marker.position = Vector3(3.72, 1.35, -0.82)
-	add_child(_connection_marker)
+	_receiver_fill.global_position = fill_datum.global_position
+	_receiver_fill.visible = false
 	_hose_root = Node3D.new()
 	_hose_root.name = "FlexibleSuctionHose"
 	add_child(_hose_root)
-	for i in range(14):
-		var segment := MeshBuilder.cylinder(0.16, 1.0, hose_color, 0.82, 0.04)
-		segment.name = "Hose_%02d" % i
-		_hose_root.add_child(segment)
-		_hose_segments.append(segment)
+	_hose_mesh = MeshInstance3D.new()
+	_hose_mesh.name = "ContinuousHose"
+	var material:=StandardMaterial3D.new()
+	material.albedo_color=Color(.035,.055,.06);material.roughness=.82
+	_hose_mesh.material_override=material
+	_hose_root.add_child(_hose_mesh)
 	_set_hose_visible(false)
-
-
-func _add_pipe_run(points: PackedVector3Array, radius: float, color: Color) -> void:
-	if points.size() < 2:
-		return
-	for i in range(points.size() - 1):
-		var segment := MeshBuilder.cylinder(radius, 1.0, color, 0.42, 0.68)
-		segment.name = "RigidPipe_%02d" % get_child_count()
-		add_child(segment)
-		_pose_cylinder_between(segment, to_global(points[i]), to_global(points[i + 1]))
-
 
 func _update_hose(extension: float) -> void:
 	if _connection_marker == null:
+		return
+	if extension<=.001:
+		_set_hose_visible(false)
 		return
 	_set_hose_visible(true)
 	var start := _connection_marker.global_position
@@ -366,30 +254,44 @@ func _update_hose(extension: float) -> void:
 	var horizontal := end - start
 	horizontal.y = 0.0
 	var forward := horizontal.normalized() if horizontal.length_squared() > 0.001 else Vector3.RIGHT
-	var control_a := start + Vector3.UP * lift + forward * minf(span * 0.20, 2.5)
+	var departure:=(_connection_direction.global_position-start).normalized()
+	var bend:=start+departure*.8+Vector3.UP*.8
+	var control_a := bend + Vector3.UP * lift + forward * minf(span * 0.20, 2.5)
 	var control_b := end + Vector3.UP * (lift + 0.8) - forward * minf(span * 0.08, 1.2)
 	var points: Array[Vector3] = []
-	for i in range(_hose_segments.size() + 1):
-		var t := float(i) / float(_hose_segments.size())
-		var point := start.bezier_interpolate(control_a, control_b, end, t)
-		points.append(point)
-	for i in range(_hose_segments.size()):
-		_pose_cylinder_between(_hose_segments[i], points[i], points[i + 1])
+	for i in range(9):
+		points.append(start.bezier_interpolate(start+departure*.5,bend-Vector3.UP*.4,bend,float(i)/8))
+	for i in range(1,33):
+		points.append(bend.bezier_interpolate(control_a,control_b,end,float(i)/32))
+	_build_hose_surface(points)
 
 
-func _pose_cylinder_between(segment: MeshInstance3D, a: Vector3, b: Vector3) -> void:
-	var delta := b - a
-	var length := maxf(delta.length(), 0.001)
-	var direction := delta / length
-	var x_axis := direction.cross(Vector3.FORWARD)
-	if x_axis.length_squared() < 0.001:
-		x_axis = direction.cross(Vector3.RIGHT)
-	x_axis = x_axis.normalized()
-	var z_axis := x_axis.cross(direction).normalized()
-	segment.global_transform = Transform3D(Basis(x_axis, direction, z_axis), (a + b) * 0.5)
-	var mesh := segment.mesh as CylinderMesh
-	if mesh != null:
-		mesh.height = length * 1.03
+func _build_hose_surface(points: Array[Vector3]) -> void:
+	const SIDES := 16
+	var vertices:=PackedVector3Array();var normals:=PackedVector3Array();var indices:=PackedInt32Array()
+	var local_from_world:=_hose_mesh.global_transform.affine_inverse()
+	var previous_axis:=Vector3.ZERO
+	for i in points.size():
+		var tangent:Vector3=(points[mini(i+1,points.size()-1)]-points[maxi(i-1,0)]).normalized()
+		# Parallel-transport the ring frame to avoid flips at vertical bends.
+		var u:=previous_axis-tangent*previous_axis.dot(tangent)
+		if u.length_squared()<.001:
+			u=tangent.cross(Vector3.UP)
+			if u.length_squared()<.001:u=tangent.cross(Vector3.RIGHT)
+		u=u.normalized();previous_axis=u
+		var v:=tangent.cross(u).normalized()
+		for j in SIDES:
+			var angle:=TAU*float(j)/SIDES
+			var normal:=u*cos(angle)+v*sin(angle)
+			vertices.append(local_from_world*(points[i]+normal*.16))
+			normals.append((local_from_world.basis*normal).normalized())
+			if i<points.size()-1:
+				var a:=i*SIDES+j;var b:=i*SIDES+(j+1)%SIDES
+				indices.append_array(PackedInt32Array([a,a+SIDES,b,b,a+SIDES,b+SIDES]))
+	var arrays:=[];arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX]=vertices;arrays[Mesh.ARRAY_NORMAL]=normals;arrays[Mesh.ARRAY_INDEX]=indices
+	var mesh:=ArrayMesh.new();mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	_hose_mesh.mesh=mesh
 
 
 func _set_hose_visible(value: bool) -> void:

@@ -19,13 +19,12 @@ const LAYER_WORLD := 1
 @export var look_distance: float = 4.0
 @export var interact_range: float = 2.8
 @export var prompt_text: String = "Press F to helm"
+@export var exit_height_offset: float = 0.15
 @export var exit_deck_offset: Vector2 = Vector2(0.0, 1.2)
 @export var interaction_volume_size: Vector3 = Vector3(1.0, 1.4, 1.0)
 
 var _occupied: bool = false
 var _player: CharacterBody3D = null
-var _prompt_layer: CanvasLayer
-var _prompt_label: Label
 var _boat_cam: Camera3D = null
 var _boat_controller: BoatController = null
 var _boat_rigid_cached: RigidBody3D = null
@@ -35,11 +34,6 @@ var _interact_area: Area3D
 func _ready() -> void:
 	_cache_boat_nodes()
 	_ensure_interact_area()
-	_ensure_prompt_ui()
-
-
-func _process(_delta: float) -> void:
-	_update_prompt()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -59,7 +53,7 @@ func _boarding_player() -> CharacterBody3D:
 		return null
 	for node: Node in get_tree().get_nodes_in_group("player"):
 		var body := node as CharacterBody3D
-		if body == null:
+		if body == null or bool(body.get_meta("vehicle_occupied", false)):
 			continue
 		if HullLadderBoard.blocks_helm_for(body):
 			continue
@@ -107,8 +101,6 @@ func _board() -> void:
 	if _player == null:
 		return
 	_occupied = true
-	if _prompt_label != null:
-		_prompt_label.visible = false
 	_player.set_physics_process(false)
 	_player.set_process_unhandled_input(false)
 	_player.velocity = Vector3.ZERO
@@ -120,15 +112,20 @@ func _board() -> void:
 			(_boat_cam as BoatCamera).begin_helm(self)
 	if _boat_controller != null:
 		_boat_controller.activate()
+	WorldSound.play("res://resources/audio/world/helm/seat_sit_1.wav", global_position, -12.0)
 	player_boarded.emit()
 
 
 func _exit() -> void:
+	if is_instance_valid(_player) and _player.has_method("try_leave_station"):
+		if not _player.call("try_leave_station", self, Vector3(exit_deck_offset.x, exit_height_offset, exit_deck_offset.y)):
+			return
 	_occupied = false
 	if _boat_cam is BoatCamera:
 		(_boat_cam as BoatCamera).end_helm()
 	if _player != null:
-		_place_player_on_deck(_player)
+		if not _player.has_method("try_leave_station"):
+			_place_player_on_deck(_player)
 		if _player.has_method("set_vehicle_occupied"):
 			_player.call("set_vehicle_occupied", false)
 		_player.set_physics_process(true)
@@ -139,12 +136,13 @@ func _exit() -> void:
 		_player = null
 	if _boat_controller != null:
 		_boat_controller.deactivate()
+	WorldSound.play("res://resources/audio/world/helm/seat_stand_1.wav", global_position, -12.0)
 	player_exited.emit()
 
 
 func _place_player_on_deck(body: CharacterBody3D) -> void:
 	## Step back from the wheel in station-local +Z (behind the helm).
-	var local_exit := Vector3(exit_deck_offset.x, 0.15, exit_deck_offset.y)
+	var local_exit := Vector3(exit_deck_offset.x, exit_height_offset, exit_deck_offset.y)
 	body.global_position = to_global(local_exit)
 	body.velocity = Vector3.ZERO
 
@@ -190,33 +188,6 @@ func _ensure_interact_area() -> void:
 		box = BoxShape3D.new()
 		col.shape = box
 	box.size = interaction_volume_size
-
-
-func _ensure_prompt_ui() -> void:
-	if _prompt_layer != null:
-		return
-	_prompt_layer = CanvasLayer.new()
-	_prompt_layer.name = "BoardPromptLayer"
-	add_child(_prompt_layer)
-	_prompt_label = Label.new()
-	_prompt_label.name = "BoardPrompt"
-	_prompt_label.text = prompt_text
-	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_prompt_label.visible = false
-	_prompt_label.add_theme_font_size_override("font_size", 22)
-	_prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt_label.offset_left = -180.0
-	_prompt_label.offset_right = 180.0
-	_prompt_label.offset_top = -92.0
-	_prompt_label.offset_bottom = -48.0
-	_prompt_layer.add_child(_prompt_label)
-
-
-func _update_prompt() -> void:
-	if _prompt_label == null:
-		return
-	_prompt_label.visible = not _occupied and _boarding_player() != null
 
 
 func is_occupied() -> bool:

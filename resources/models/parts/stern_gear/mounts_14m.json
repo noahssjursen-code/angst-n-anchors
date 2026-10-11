@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hull": "trawler_hull_14m",
+  "units": "metres",
+  "support": [
+    0,
+    0.9,
+    7.0
+  ],
+  "propeller": [
+    0,
+    0.9,
+    7.48
+  ],
+  "rudder": [
+    0,
+    1.55,
+    8.03
+  ],
+  "max_rudder_degrees": 28,
+  "visual_max_rpm": 240,
+  "note": "Prototype external transom installation; does not relocate physics force points."
+}

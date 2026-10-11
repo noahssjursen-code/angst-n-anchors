@@ -43,6 +43,8 @@ var is_multiplayer_mode: bool = false
 
 
 func _ready() -> void:
+	if ShipyardPlaytestMode.active():
+		return
 	load_from_disk()
 
 
@@ -71,6 +73,8 @@ func use_custom(u_host: String, u_port: int, h_host: String, h_port: int, h_sche
 
 
 func save_to_disk() -> void:
+	if ShipyardPlaytestMode.active():
+		return
 	var cfg := ConfigFile.new()
 	cfg.set_value("server", "preset", preset)
 	cfg.set_value("server", "udp_host", udp_host)

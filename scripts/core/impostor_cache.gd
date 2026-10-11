@@ -19,6 +19,10 @@ static func has_key(key: String) -> bool:
 	return _entries.has(key)
 
 
+static func has_geometry(key: String) -> bool:
+	return _entries.has(key) and _entries[key].has("mesh")
+
+
 static func entry_count() -> int:
 	return _entries.size()
 
@@ -50,6 +54,8 @@ static func bake_from_node(
 	vp.transparent_bg = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	vp.disable_3d = false
+	# Bake albedo only; the runtime proxy receives current sun/ambient light.
+	vp.debug_draw = Viewport.DEBUG_DRAW_UNSHADED
 	vp.size = Vector2i(resolution, resolution)
 	host.add_child(vp)
 
@@ -115,7 +121,7 @@ static func bake_from_node(
 		if img == null:
 			continue
 		img.convert(Image.FORMAT_RGBA8)
-		img.flip_x()
+		img.generate_mipmaps()
 		textures[str(face["key"])] = ImageTexture.create_from_image(img)
 
 	vp.queue_free()
@@ -126,6 +132,12 @@ static func bake_from_node(
 	}
 
 
+## Store an already cheap visual mesh without baking six image panels.
+static func register_geometry(key: String, mesh: ArrayMesh) -> void:
+	if key.is_empty() or mesh==null: return
+	_entries[key]={"mesh":mesh}
+
+
 ## Stamp the footprint box: quads on each AABB face, same local pose as source.
 static func instance(key: String, show_ghost: bool = false) -> Node3D:
 	var root = IMPOSTOR_INSTANCE.new()
@@ -133,6 +145,15 @@ static func instance(key: String, show_ghost: bool = false) -> Node3D:
 	if not _entries.has(key):
 		return root as Node3D
 	var entry: Dictionary = _entries[key]
+	if entry.has("mesh"):
+		var visual:=MeshInstance3D.new()
+		visual.mesh=entry.mesh
+		visual.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(visual)
+		if show_ghost:
+			var bounds: AABB = visual.mesh.get_aabb()
+			root._add_footprint_ghost(bounds.size,bounds.get_center())
+		return root
 	root.setup(
 		entry.get("size", Vector3.ONE) as Vector3,
 		entry.get("center", Vector3.ZERO) as Vector3,

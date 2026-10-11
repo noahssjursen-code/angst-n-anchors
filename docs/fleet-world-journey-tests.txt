@@ -1,0 +1,127 @@
+FLEET WORLD JOURNEYS
+
+Run the whole stock fleet:
+  python tools/test_fleet_journeys.py --godot <path-to-Godot-console.exe>
+
+Useful options:
+  --vessel 28_10_m       Repeat this option to select several catalog IDs.
+  --cycles 2            Consecutive movements per vessel; default two.
+  --seed 424242         Generate another actual world and port layout.
+  --speed 8            Default 8x simulation; use 1 for real-time reproduction.
+  --headless            Same gameplay checks without photos or live camera.
+  --timeout 1200        Wall-clock limit per vessel, including boot/streaming.
+
+Watch one ship directly:
+  Godot --path . tests/fleet_world_journey.tscn -- --shipyard-playtest --vessel=28_10_m --cycles=2
+
+The rendered test shows the current vessel, stage, elapsed stage time, operator
+progress, recent PASS/FAIL checks and an action-facing overview camera. Every
+capture and report is archived below Pictures/machinescreenshots with unique
+run names. The Python suite also saves per-vessel engine logs and summary.json.
+
+Adding ships:
+Add a non-draft vessel to resources/data/vessels/prebuilt through the existing
+ship catalog pipeline. No second vessel list needs maintaining. Invalid stock
+or a ship with no supported journey fails visibly; it is not silently skipped.
+Ship equipment determines container/bulk/fishing behaviour. A new cargo family
+needs an explicit journey adapter, rather than being treated as container cargo.
+
+Coverage:
+- Boot scenes/world.tscn with real seeded ports, streaming, NPCs and equipment.
+- Give the isolated captain the catalog vessel, request deployment through the
+  actual harbourmaster callback and WorldGateway local authority.
+- Verify identity, single active ship, berth assignment, water-side clearance,
+  along-quay heading, both ropes and authoritative berth projection.
+- Book a real eligible generated offer through CargoAgentNpc.
+- Press the generated operator panel's load/unload buttons. Wait for actual
+  equipment completion, with readiness and job timeouts.
+- Verify manifest progress and physical container count/identity; cast off;
+  teleport the voyage; discover the destination's generated berth and bollards;
+  attach ropes through their normal MooringComponent action/authority path.
+- Verify destination occupancy, unloading, empty cargo mass, exact payment and
+  rejection of duplicate delivery. Repeat from the destination.
+- Fishing supplies a named 500 kg catch fixture, then tests destination mooring,
+  the real landing operator/pump, empty hold and payment. Catching fish at sea
+  itself is not covered by this fixture.
+
+Boundaries:
+This is local-authority integration, not a two-client network test. NPC handlers
+and panel buttons are exercised; walking/raycasting F onto each NPC is not.
+Voyages are teleported and vessels are frozen for cargo measurements; sailing,
+buoyancy under load, pathfinding and hull collision sweeps need separate tests.
+Cargo/crane/pump simulation runs normally, with no manual manifest completion,
+fake payment, replacement quays, shortened offers or manufactured destinations.
+Time scale and physics tick frequency increase together, retaining the ordinary
+1/60-second simulated physics step. Wall-clock timeouts remain bounded.
+Failed prerequisites stop that ship's remaining journey; its report identifies
+the stage, and the next vessel runs in a fresh isolated process.
+
+Safety and result rules:
+--shipyard-playtest is mandatory. No captain save is loaded or written. Each
+vessel gets its own process/authority session. Report files are flushed after
+each assertion, so interrupted runs retain evidence. The suite fails on missing
+reports, nonzero exits, timeouts or engine/script errors, even if gameplay checks
+printed PASS. A passing result means the listed checks only, not all gameplay.
+
+Bulk journeys return empty to their supplier between cycles: an ore receiver
+does not necessarily export ore. The voyage is still teleported; mooring and
+equipment use the ordinary gameplay paths. Bulk timeouts scale with the number
+of required grab cycles. Acceleration does not shorten the physical movement.
+
+2026-10-07 investigation:
+The first four-vessel run passed Harbour Cargo and Coastal Trawler, and failed
+both bulk vessels. Coastal Bulk had no fitting offer. Coastal Freighter loaded
+120 tonnes physically while its manifest remained at zero. Continuing the test
+then uncovered unsuitable crane selection, insufficient hoist travel, a reach
+calculation dependent on the current cab heading, and coarse accelerated IK.
+The test itself also needed a quantity-based deadline for six-grab jobs.
+
+Changes:
+- Separate 20-tonne bulk offers alongside full-size consignments.
+- Preserve consignment identity through hold acceptance, partial withdrawal,
+  overflow and serialization; reject mixing different consignments in one hold.
+- Reserve booked tonnes before each scoop and update loaded/delivered quantity
+  only through physical hold/receiving-stockpile transfers. Validate shipment,
+  assigned ship and origin/destination. Completed jobs pay through FreightService.
+- Select a crane that reaches the actual loaded hold and a matching stockpile;
+  account for the offset rotating boom hinge, sufficient cable travel, and use
+  small integration steps so accelerated/low-FPS alignment remains stable.
+- Imported hull berth eligibility uses physical length rather than legacy class
+  rejection; existing actual berth length and service-family checks remain.
+- Grain/LNG removed from seeded trade themes. General provisions and mandatory
+  fish landing no longer displace a port's first specialist trade unlock.
+- All port exports are registered before detailed port models stream in.
+
+Port availability audit, seed 424242 / 35 ports:
+Before: two ore exporters, zero active ore receivers.
+After: five ore exporters, two receivers, seven built ore docks, no grain/LNG.
+The assets/commodity definitions remain available for later development.
+
+Additional checks:
+- freight_offer_generator_test: PASS, including hold identity/conservation.
+- bulk_crane_operation_test --compact --rotated: PASS, physical load/unload.
+- harbour_service_routing_test: gameplay assertions PASS; shutdown reports an
+  ObjectDB leak and four resources still in use. Not a clean engine-log pass.
+- Older port_trade_profile_test fails its apron service-prop count assertion.
+- Older port_fishing_service_test fails its dedicated-quay assertion; the world
+  journey exercises actual asphalt fish landings. These older failures are not
+  claimed resolved by this work.
+
+Remaining limits: local authority only, no two-client verification, no manual
+crane-control freight booking test, and no recovery test for lost/spilled booked
+bulk cargo. Visual captures are test-stage evidence, not terrain art acceptance.
+
+Final rendered verification (two cycles each, seed 424242, speed 8):
+All four cases PASS, zero engine/script errors, no timeouts.
+Harbour Cargo: 63.494 s; Coastal Bulk: 34.670 s;
+Coastal Freighter: 78.920 s; Coastal Trawler: 20.357 s.
+Bulk shipped 20 tonnes per small-vessel delivery and 120 tonnes per freighter
+delivery. Both verified shipment serialization, exact physical tonnes, wrong-
+port rejection, destination unloading, exact payment and duplicate rejection.
+Summary + per-vessel logs:
+C:/Users/noahs/Pictures/machinescreenshots/fleet-suite-20261007-204336-993076/summary.json
+Reports + archived stage captures:
+C:/Users/noahs/Pictures/machinescreenshots/fleet-journeys-1791398620-076/
+C:/Users/noahs/Pictures/machinescreenshots/fleet-journeys-1791398687-263/
+C:/Users/noahs/Pictures/machinescreenshots/fleet-journeys-1791398725-896/
+C:/Users/noahs/Pictures/machinescreenshots/fleet-journeys-1791398808-613/

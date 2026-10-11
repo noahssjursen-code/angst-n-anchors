@@ -40,6 +40,13 @@ var fog_density: float:
 		return clampf(1.0 - visibility, 0.0, 1.0)
 
 
+## Rain needs a supporting cloud bank; overcast can still be entirely dry.
+## Apply after spatial/time/front blending too, so a fading rain cell cannot
+## outlive its cloud. A cap is idempotent (unlike multiplying at every stage).
+static func supported_precipitation(rain: float, cloud: float) -> float:
+	return minf(clampf(rain, 0.0, 1.0), clampf((cloud - 0.40) / 0.50, 0.0, 1.0))
+
+
 ## Down-convert to the legacy WeatherState (for code paths not yet migrated).
 func to_weather_state() -> WeatherState:
 	var s := WeatherState.new()

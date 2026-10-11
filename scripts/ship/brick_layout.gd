@@ -155,7 +155,9 @@ func place_footprint(
 	grid: DeckGrid,
 	props: Dictionary = {},
 ) -> bool:
-	var fp := BrickCatalog.footprint_of(brick_id)
+	var fp := grid.part_footprint(brick_id)
+	if not grid.fits_size(origin, BrickCatalog.size_m(brick_id), yaw):
+		return false
 	var step := BrickCatalog.yaw_step_of(brick_id)
 	var yaw_n := norm_yaw_step(yaw, step)
 	## Footprint occupancy still uses 90° cardinals (grid cells don't rotate at 45°).

@@ -172,7 +172,9 @@ static func build(
 	if basin.is_empty():
 		basin = measure_basin(layout, definition, foundation)
 	## Place every unlocked pad. Destiny is already trimmed to ≤3 quay groups.
-	quay_list = _cap_quay_families(quay_list, n)
+	var development := definition != null and definition.development_facilities
+	if not development:
+		quay_list = _cap_quay_families(quay_list, n)
 	asphalt_slots = _merge_asphalt_slots(asphalt_slots)
 
 	var dock_face := _polyline_from_array(foundation.get("dock_face_polyline", []) as Array)
@@ -180,6 +182,18 @@ static func build(
 		dock_face = _polyline_from_array(foundation.get("spine", []) as Array)
 
 	var seaward := _consensus_seaward(dock_face)
+	var reserved_min := NAN
+	var reserved_max := NAN
+	if development:
+		var along := Vector2(-seaward.y, seaward.x)
+		if along.x < 0: along = -along
+		reserved_min = INF
+		reserved_max = -INF
+		for point in dock_face:
+			reserved_min = minf(reserved_min, point.dot(along))
+			reserved_max = maxf(reserved_max, point.dot(along))
+		# Preserve an unobstructed passenger terminal and reverse-out pocket.
+		reserved_min += DevelopmentHarbour.PASSENGER_FRONTAGE_M
 	## Quays take the full comb first; apron berths pack into free face arcs after.
 	var quay_stations := _place_quays(
 		quay_list,
@@ -189,6 +203,8 @@ static func build(
 		basin,
 		layout,
 		definition,
+		reserved_min,
+		reserved_max,
 	)
 	var asphalt_stations := _place_asphalt_on_face(
 		asphalt_slots,
@@ -242,7 +258,7 @@ static func _collect_slot(
 ) -> void:
 	for raw in slots:
 		var commodity_id := str(raw)
-		if commodity_id.is_empty():
+		if not CommodityCatalog.generates_port_facility(commodity_id):
 			continue
 		if uses_asphalt_dock(commodity_id):
 			asphalt_slots.append({
@@ -429,7 +445,62 @@ static func _place_quays(
 			"lanes": ["dock", "crane", "cargo", "road"],
 			"seaward_clear_m": local_clear,
 		})
+	_resolve_loading_faces(out, size)
+	if definition != null and definition.development_facilities and layout != null:
+		# A long development waterfront may bend around a headland. Keep the
+		# actual working side in deep water as well as clear of the next quay.
+		for station: Dictionary in out:
+			for side in [float(station.berth_side), -float(station.berth_side)]:
+				if _loading_face_gap(station, out, side) >= PortSizing.design_hull_beam_m(size) + 5.0 \
+						and _loading_face_water_clear(station, side, layout, definition):
+					station["berth_side"] = side
+					break
 	return out
+
+
+static func _loading_face_water_clear(station: Dictionary, side: float,
+		layout: WorldLayout, definition: PortDefinition) -> bool:
+	var origin := Vector2(station.origin[0], station.origin[1])
+	var sea := Vector2(station.direction[0], station.direction[1])
+	var across := Vector2(sea.y, -sea.x) * side
+	var frame := Transform3D(Basis(Vector3.UP, definition.rotation_y), definition.world_position)
+	for depth in [40.0, 90.0, float(station.length_m) + ARM_WATER_TAIL_M]:
+		var at: Vector2 = origin + sea * depth + across * (float(station.width_m) * .5 + 15.0)
+		var point := frame * Vector3(at.x, 0, at.y)
+		if layout.sample_height(Vector2(point.x, point.z)) > WaveSurface.WATER_LEVEL - 2.5:
+			return false
+	return true
+
+
+## A curved/short waterfront can compress snapped roots below their requested
+## comb spacing. Keep the existing piers and IDs, but put loading on the clear
+## side when the alternating side would place a ship inside its neighbour.
+static func _resolve_loading_faces(stations: Array, size: int) -> void:
+	var required_gap := PortSizing.design_hull_beam_m(size) + 5.0
+	for station: Dictionary in stations:
+		var preferred := float(station.get("berth_side", 1.0))
+		if _loading_face_gap(station, stations, preferred) >= required_gap:
+			continue
+		if _loading_face_gap(station, stations, -preferred) >= required_gap:
+			station["berth_side"] = -preferred
+
+
+static func _loading_face_gap(station: Dictionary, stations: Array, side: float) -> float:
+	var raw: Array = station.direction
+	var forward := Vector2(float(raw[0]),float(raw[1])).normalized()
+	# Same local +X as the visualizer's yaw atan2(direction.x, direction.y).
+	var across := Vector2(forward.y,-forward.x) * side
+	var root := Vector2(float(station.origin[0]),float(station.origin[1]))
+	var gap := INF
+	for neighbour: Dictionary in stations:
+		if str(neighbour.id) == str(station.id): continue
+		var delta := Vector2(float(neighbour.origin[0]),float(neighbour.origin[1])) - root
+		var lateral := delta.dot(across)
+		if lateral <= 0.0: continue
+		var start := delta.dot(forward)
+		if start >= float(station.length_m) or start + float(neighbour.length_m) <= 0.0: continue
+		gap = minf(gap, lateral - (float(station.width_m)+float(neighbour.width_m))*.5)
+	return gap
 
 
 static func _quay_list_contains_family(quay_list: Array, family: String) -> bool:

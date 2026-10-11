@@ -33,6 +33,11 @@ extends Node3D
 ## Froude number above which wave-making drag rises sharply (the hull speed knee).
 ## Displacement hulls hit a wall around Fn = 0.4; sleeker hulls push to 0.45+.
 @export_range(0.2, 0.6, 0.01) var hull_speed_fn: float = 0.40
+## Deliberate harbour handling tune: water-relative longitudinal damping below
+## 5 m/s, fading smoothly to zero so established ahead cruise drag is unchanged.
+## Independent of throttle: STOP is not a hidden brake or velocity reset.
+@export var harbour_drag_rate: float = 0.0
+@export var astern_drag_multiplier: float = 1.0
 
 @export_group("Lateral / yaw")
 ## Cross-flow drag coefficient. Ships are flat plates edge-on — values 1.5–3.0 typical.
@@ -133,6 +138,9 @@ func _physics_process(_delta: float) -> void:
 		var Cf: float = frictional_coeff * form_factor
 		var Cw: float = _wave_making_coefficient(v_fwd_mag)
 		var F_fwd: float = q * _wetted_area_m2 * (Cf + Cw)
+		if v_fwd > 0.0:
+			F_fwd *= astern_drag_multiplier
+		F_fwd += _body.mass * harbour_drag_rate * v_fwd_mag * (1.0 - smoothstep(2.0, 5.0, v_fwd_mag))
 		forward_drag_n = F_fwd
 		# Sign: opposes motion along the forward axis.
 		var f_local := Vector3(0.0, 0.0, -signf(v_fwd) * F_fwd)

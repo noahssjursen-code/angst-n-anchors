@@ -48,6 +48,7 @@ layout(rgba32f, set = 0, binding = 3) uniform image2DArray displacement_textures
 layout(rg32f,   set = 0, binding = 4) uniform image2DArray slope_textures;
 layout(r32f,    set = 0, binding = 5) uniform image2DArray buoyancy_data;
 layout(rgba32f, set = 0, binding = 6) uniform image2DArray fourier_target;
+layout(rgba32f, set = 0, binding = 7) uniform image2DArray target_spectrum_textures;
 
 // Math helpers
 vec2 complex_mult(vec2 a, vec2 b) {
@@ -161,10 +162,17 @@ void main() {
 				spectrum += jonswap(omega, spectrums.data[i * 2u + 1u]) * direction_spectrum(kAngle, omega, spectrums.data[i * 2u + 1u]) * short_waves_fade(kLength, spectrums.data[i * 2u + 1u]);
 			}
 			
+			// The macro patch carries swell; waves shorter than the next patch
+			// belong to its denser field. This also keeps the 128-square CPU
+			// query from aliasing short ripples when the swell domain is large.
+			if (i == 0u) {
+				float boundary = 2.0 * PI / lengthScales[1];
+				spectrum *= 1.0 - smoothstep(boundary * 0.75, boundary, kLength);
+			}
 			vec2 h0 = vec2(gauss2.x, gauss1.y) * sqrt(2.0 * spectrum * abs(dOmegadk) / max(kLength, 0.0001) * deltaK * deltaK);
-			imageStore(initial_spectrum_textures, ivec3(id.xy, i), vec4(h0, 0.0, 0.0));
+			imageStore(target_spectrum_textures, ivec3(id.xy, i), vec4(h0, 0.0, 0.0));
 		} else {
-			imageStore(initial_spectrum_textures, ivec3(id.xy, i), vec4(0.0));
+			imageStore(target_spectrum_textures, ivec3(id.xy, i), vec4(0.0));
 		}
 	}
 }
@@ -175,11 +183,11 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 void main() {
 	uvec3 id = gl_GlobalInvocationID;
 	for (uint i = 0u; i < 4u; ++i) {
-		vec2 h0 = imageLoad(initial_spectrum_textures, ivec3(id.xy, i)).rg;
+		vec2 h0 = imageLoad(target_spectrum_textures, ivec3(id.xy, i)).rg;
 		uvec2 conj_id = uvec2((params.N - id.x) % params.N, (params.N - id.y) % params.N);
-		vec2 h0conj = imageLoad(initial_spectrum_textures, ivec3(conj_id, i)).rg;
+		vec2 h0conj = imageLoad(target_spectrum_textures, ivec3(conj_id, i)).rg;
 
-		imageStore(initial_spectrum_textures, ivec3(id.xy, i), vec4(h0, h0conj.x, -h0conj.y));
+		imageStore(target_spectrum_textures, ivec3(id.xy, i), vec4(h0, h0conj.x, -h0conj.y));
 	}
 }
 #endif
@@ -191,7 +199,14 @@ void main() {
 	float lengthScales[4] = float[](float(params.length_scale_0), float(params.length_scale_1), float(params.length_scale_2), float(params.length_scale_3));
 
 	for (uint i = 0u; i < 4u; ++i) {
-		vec4 initialSignal = imageLoad(initial_spectrum_textures, ivec3(id.xy, i));
+		vec4 targetSignal = imageLoad(target_spectrum_textures, ivec3(id.xy, i));
+		// Preserve deterministic phase and conjugate symmetry while the envelope
+		// changes. Retargeting continues from the current sea, never restarts it.
+		vec4 initialSignal = targetSignal;
+		if (params.pad < 1.0) {
+			initialSignal = mix(imageLoad(initial_spectrum_textures, ivec3(id.xy, i)), targetSignal, params.pad);
+		}
+		imageStore(initial_spectrum_textures, ivec3(id.xy, i), initialSignal);
 		vec2 h0 = initialSignal.xy;
 		vec2 h0conj = initialSignal.zw;
 
@@ -329,13 +344,19 @@ void main() {
 
 		// Read old foam, decay, and add new foam based on jacobian
 		float foam = imageLoad(displacement_textures, ivec3(id.xy, i)).a;
-		foam *= exp(-params.foam_decay_rate);
-		foam = clamp(foam, 0.0, 1.0);
+		// Preserve the authored 60 Hz recurrence at any actual update interval.
+		// Integrate constant injection/decay exactly, including zero decay.
+		float ticks = max(params.delta_time, 0.0) * 60.0;
+		float decay = max(params.foam_decay_rate, 0.0);
+		float retention = exp(-decay * ticks);
+		float source_scale = decay > 0.0001
+			? (1.0 - retention) / (1.0 - exp(-decay)) : ticks;
+		foam = clamp(foam * retention, 0.0, 1.0);
 
 		float biasedJacobian = max(0.0, -(jacobian - params.foam_bias));
 
 		if (biasedJacobian > params.foam_threshold) {
-			foam += min(params.foam_add * biasedJacobian * 0.12, 0.25);
+			foam += min(params.foam_add * biasedJacobian * 0.12, 0.25) * source_scale;
 		}
 
 		imageStore(displacement_textures, ivec3(id.xy, i), vec4(displacement, clamp(foam, 0.0, 1.0)));

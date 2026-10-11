@@ -3,7 +3,7 @@ class_name PortShowcase
 extends Node3D
 
 ## F6 gallery for terrain-traced ports (foundation + berth_plan) on seeded coast.
-## Each F6 run rolls a fresh world seed so ports don't always look identical.
+## Reproducible daylight review; - / = explicitly rolls a different world.
 
 const REGION_LABELS: Array[String] = ["mainland", "fjord", "archipelago"]
 const SIZE_LABELS: Array[String] = [
@@ -103,7 +103,7 @@ const GIZMO_PACKS: Array[Dictionary] = [
 		if is_inside_tree() and not _configuring:
 			_request_rebuild()
 
-## Active world seed. Rolled on each F6 start; - / = rolls a new one in-session.
+## Reuse this seed on F6; - / = explicitly rolls a new one in-session.
 @export var world_seed := 424242:
 	set(value):
 		world_seed = value if value != 0 else 1
@@ -156,15 +156,47 @@ var _meta_sizing: Label
 var _meta_foundation: Label
 var _meta_graph: Label
 var _meta_panel: PanelContainer
+var _review_player: CharacterBody3D
+var _clock_was_processing := true
 
 
 func _ready() -> void:
+	if not Engine.is_editor_hint():
+		_clock_was_processing = WorldClock.is_processing()
+		WorldClock.snap_time_of_day(.5)
+		WorldClock.set_process(false)
+		WeatherLighting.time_of_day = .5
 	_ensure_world()
 	_ensure_hud()
-	## F6 / play: fresh world every run. Editor preview keeps the exported seed.
-	if not Engine.is_editor_hint():
-		_roll_world_seed(false)
+	## Preserve the exported seed for repeatable before/after comparisons.
 	_rebuild()
+
+
+func _toggle_walk_review() -> void:
+	if is_instance_valid(_review_player):
+		_camera.global_position = _review_player.global_position + Vector3.UP*1.7
+		_review_player.free()
+		_review_player = null
+		_camera.make_current()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if is_instance_valid(_terrain): _terrain.collision_radius_m = 0.0
+		return
+	var visual := get_node_or_null("GeneratedPort/PortPlot/PortLayoutGraph")
+	if visual == null: return
+	for node in visual.find_children("*", "Node3D", true, false):
+		if not node.has_meta("review_walk_spawn"): continue
+		_review_player = preload("res://scenes/shared/player.tscn").instantiate() as CharacterBody3D
+		add_child(_review_player)
+		_review_player.global_position = node.to_global(node.get_meta("review_walk_spawn"))
+		_review_player.rotation.y = node.global_rotation.y
+		if is_instance_valid(_terrain): _terrain.collision_radius_m = 180.0
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		return
+
+
+func _exit_tree() -> void:
+	if not Engine.is_editor_hint() and is_instance_valid(WorldClock):
+		WorldClock.set_process(_clock_was_processing)
 
 
 func _roll_world_seed(rebuild_now: bool = true) -> void:
@@ -198,6 +230,7 @@ func _process(delta: float) -> void:
 		_ensure_ocean_renderer()
 	if not _showcase_playing() or _camera == null:
 		return
+	if is_instance_valid(_review_player): return
 	var wish := Vector3.ZERO
 	if Input.is_key_pressed(KEY_W):
 		wish.z -= 1.0
@@ -291,6 +324,15 @@ func _port_camera_span_m() -> float:
 func _unhandled_input(event: InputEvent) -> void:
 	if not _showcase_playing():
 		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_T:
+			_toggle_walk_review()
+			get_viewport().set_input_as_handled()
+			return
+		if event.keycode == KEY_H:
+			_meta_panel.visible = not _meta_panel.visible
+			return
+	if is_instance_valid(_review_player): return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_RIGHT:
@@ -443,6 +485,7 @@ func _apply_gizmo_pack() -> void:
 
 
 func _rebuild() -> void:
+	if is_instance_valid(_review_player): _toggle_walk_review()
 	## Tear down port only. Terrain is reused across rebuilds when the
 	## world seed is unchanged — recreating the streamer every tweak was the hitch.
 	var old_plot := get_node_or_null("GeneratedPort/PortPlot")
@@ -681,6 +724,7 @@ func _ensure_hud() -> void:
 	box.add_child(_controls)
 
 	_ensure_meta_panel(layer)
+	_meta_panel.hide()
 
 
 func _hud_panel_style() -> StyleBoxFlat:
@@ -799,7 +843,7 @@ func _refresh_hud() -> void:
 	else:
 		_gizmo_line.text = "Gizmos  %s   ·  %s" % [pack_label, pack_hint]
 
-	_controls.text = "←→ size  ↑↓ region  , . length  - = roll seed\nWASD move  RMB look  Home frame  R rebuild  G gizmos"
+	_controls.text = "T walk / fly · H details · G gizmos\n←→ size  ↑↓ region  , . length  - = new seed\nWASD move  RMB look  Home frame  R rebuild"
 	_refresh_meta()
 
 

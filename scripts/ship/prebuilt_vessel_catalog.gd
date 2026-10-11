@@ -44,6 +44,8 @@ static func _load_entry(path: String) -> Dictionary:
 		push_warning("PrebuiltVesselCatalog: invalid JSON: %s" % path)
 		return {}
 	var preset := parsed as Dictionary
+	if int(preset.get("format_version", 0)) == 3:
+		return _load_imported_entry(preset, path)
 	if int(preset.get("format_version", 0)) != FORMAT_VERSION:
 		push_warning("PrebuiltVesselCatalog: unsupported format: %s" % path)
 		return {}
@@ -111,4 +113,24 @@ static func _load_entry(path: String) -> Dictionary:
 		)),
 		1.0
 	)
+	return entry
+
+
+static func _load_imported_entry(preset: Dictionary, path: String) -> Dictionary:
+	var hull_id := str(preset.get("hull_id", ""))
+	var layout: Variant = preset.get("brick_layout")
+	if str(preset.get("id", "")).is_empty() or not layout is Dictionary: return {}
+	if not ImportedVesselLayout.valid(layout, hull_id, true):
+		push_warning("PrebuiltVesselCatalog: invalid imported vessel: " + path)
+		return {}
+	var entry := HullRegistry.get_by_id(hull_id)
+	entry.merge({
+		"hull_display": entry.display, "display": preset.get("name", entry.display),
+		"hull_id": hull_id, "is_prebuilt": true, "prebuilt_id": preset.id,
+		"prebuilt_name": preset.get("name", entry.display), "prebuilt_layout": layout.duplicate(true),
+		"registration_id": "", "registration_display": "", "prebuilt_path": path,
+		"compliance_ok": true, "compliance_errors": PackedStringArray(), "is_draft": bool(preset.get("draft", false)),
+		"shaft_power_kw": float(MarineEngineCatalog.resolve(hull_id,str(layout.get("engine_preset",""))).power_kw),
+	}, true)
+	if preset.has("price_marks"): entry["price_marks"] = maxi(int(preset.price_marks), 0)
 	return entry

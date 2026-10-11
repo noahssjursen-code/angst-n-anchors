@@ -72,11 +72,14 @@ Conventions:
 - Name it `<feature>_showcase.tscn` or `<feature>_visual_demo.tscn`
 
 Current demos:
+- `scenes/showcases/material_library_showcase.tscn` — sourced finishes on ships, port assets, cargo and animated clothing; before/after and archived captures
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
-- `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
-- `scenes/showcases/vessel_skin_showcase.tscn` — legacy per-brick vs `VesselSkinBaker` merged-skin rendering, side by side on real prebuilts with live mesh/node counts
+- `scenes/showcases/starter_fleet_showcase.tscn` — current imported starter vessels
+- `scenes/showcases/character_customization_showcase.tscn` — imported character and wardrobe
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
 - `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
+- `scenes/showcases/audio_library_showcase.tscn` — plays the sound library with a label and explanation per clip; new wavs under resources/audio appear on their own
+- `scenes/showcases/spatial_audio_showcase.tscn` — production spatial machinery, four camera views, moving sources and a toggleable obstruction wall; isolated from captain saves
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
 
 ---
@@ -153,100 +156,57 @@ issue/revise consignments and validate delivered cargo.
 
 ---
 
-## Vessel System — Deck-grid bricks + outfit budget
+## Vessel System — Imported models and owned vessels
 
-Hulls are reusable geometry components, not ships. A finished store ship (prebuilt)
-combines one `hull_id` with a name, price, `shaft_power_kw`, and **1×1×1 m brick
-grid**. Many differently powered and outfitted ships may share the same hull.
+Current starter stock is four reusable Blender-model arrangements in
+`resources/data/vessels/prebuilt/` (format_version 3). The existing owned-record
+`brick_layout` field carries the `imported_models` envelope: hull, individual
+placements, paints, floor view and `engine_preset`. `ImportedVesselLayout` validates
+it; `ImportedDraftVessel` assembles editor playtests, owned vessels and replicas.
+Do not strip it to legacy cells, flatten into one boat mesh, or overwrite custom
+captain saves when updating stock. `VesselSpawn.instantiate_from_record` is the
+shared deployment entry point. Legal ship registration was removed for imported
+ships at Noah's request; do not restore it. Legacy v2 records retain their existing
+compatibility path through DeckFitout / VesselCompliance.
 
-A vessel is a **fair, registered data model** (same hard rules for official store ships and UGC):
+The Drafts menu opens editable starter copies, never writable stock blueprints.
+New captain grants and shipwright previews consume that same canonical stock.
+ImportedHullCatalog owns metre geometry; ShipClass remains a physical category.
+Gameplay discovers installed equipment through BoatBody APIs (`get_cargo_pads`,
+`get_bulk_holds`, `get_fishing_systems`, `get_bridge_stations`). It must not infer
+real capacity merely from a model name. Runtime mounting validation remains in
+ImportedDraftVessel; cargo and fishing inventory stay in existing components.
 
-1. **Hull** — geometry platform (L×B), physical `ShipClass`, and outfit ceiling
-2. **Registration** — declared before building; legal requirements and stricter limits
-3. **Brick layout** — visuals + which slots are filled (surplus functional gear fails validate)
-4. **Live components** — `DeckFitout` mounts only compliance-accepted slots
-5. **Discovery** — gameplay asks `BoatBody` (`get_fishing_systems()`, `get_cargo_pads()`,
- `get_bridge_stations()`), never hunts brick names
+MarineEngineCatalog is the single power source for imported vessels. Choose a
+compatible preset in the builder; arbitrary record shaft_power_kw must not override
+it. Propulsion, fuel, mass and propeller presentation consume that package and
+the existing controller state. Generic linear damping must not double the explicit
+water resistance. Model/packing/preset details and acceptance results are in
+`resources/models/README.md` under Starter fleet, engines and containers.
 
-| Slot (v1) | Budget rule |
-|---|---|
-| `fishing` | max 1 |
-| `helm` | max 1 |
-| `cargo_cells` | container pads + bulk holds (deck metres; y = 0 pads only) |
-| `crane` / `tow` | 0 until those systems exist |
+20/40-foot cargo uses real dimensions. ContainerUnit owns type/identity/contents;
+CargoSlotPadComponent converts physical clearance to its own cell resolution.
+Preserve legacy cargo records and reject containers that do not fit. Harbour Cargo
+carries two 20-foot containers on its supported MAIN DECK, not down in the hold.
+The separate cargo deck and securing beds remain editable Blender parts.
 
-`VesselCompliance.validate` is the final authority. It intersects the hull budget from
-`VesselOutfit` with the declared rules in
-`resources/data/vessels/registrations/catalog.json`. `BrickRules` is its editor wrapper.
-Illegal or unregistered ships hard-fail save, commission, and deployment; spawn still
-mounts only accepted slots so network/save cheats cannot activate surplus gear.
+### Berth and freight compatibility
 
-`ShipClass` means physical berth/length category. `registration_id` means legal
-operating type (`general_vessel`, `fishing_vessel`, `cargo_vessel`,
-`passenger_vessel`). Never infer registration from installed bricks.
+`HarbourDeploy.terminal_families_for_record` derives imported vessel service
+preferences from its authored equipment. Do not use the removed legal
+registration, display name, or starter ID to classify imported ships. Legacy
+records retain their registration policy. Cargo beds prefer general cargo then
+container quays; fishing equipment prefers fish landing; bulk holds prefer bulk
+quays. General quays may provide fallback mooring. Never assign a non-tanker to
+an LNG jetty merely because that berth is shorter. Authority still owns occupancy.
 
-Run `scenes/apps/vessel_registration_audit.tscn` to edit the source-controlled legal
-code and batch-audit every official prebuilt. Registration reports are derived, never
-stored as a stale “passed” flag.
-
-Official prebuilts are authored in `ShipyardBrickEditor` and sold from
-`resources/data/vessels/prebuilt/`. The owned-vessel ledger persists the hull,
-power, and `brick_layout`; spawn rebuilds via `VesselSpawn` + `DeckFitout`.
-
-```gdscript
-var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)
-get_tree().current_scene.add_child(boat)
-boat.place_at_waterline(water_y)
-```
-
-| Always on BoatBody (core) | Brick fit-out (player) |
-|---|---|
-| Hull visual + collision | Wall / window / door / ledge / railing bricks |
-| Strip buoyancy + hydro | Container pads + bulk holds (within cargo_cells) |
-| Propulsion, rudder, thruster | Fishing trommel → one FishingSystem when accepted |
-| BoatController / Camera / Audio | Enclosed cabin + door → helm boarding |
-| MooringComponent + auto cleats/lights | |
-| WalkDeck | |
-
-Operating role comes from declared registration plus a passing checklist, not kit ids. Do **not**
-revive `WheelhouseVisual`, hull JSON `bridge` slots, `ShipBuilder`, `VesselKits`,
-`VesselLoadout`, or the attachment socket stack.
-
-New hull platforms belong in `resources/data/vessels/hulls/catalog.json` and use
-dimension-based ids such as `hull_90x24`. Do not name hulls after cargo, tanker,
-fishing, passenger, or other ship roles. Do not add new hand-authored vessel
-scenes for store stock; the trawler and catamaran scenes are frozen exceptions.
-
-### Parametric construction (the current era)
-
-Structure is DRAWN, not stacked. `StructurePlan` (`scripts/construction/`) is the
-shared document for vessels AND land buildings: wall runs, deck plates, rooms,
-stairs, and openings — each one part regardless of size. `StructureBaker` turns
-a plan into merged visuals and collision boxes from the same panel decomposition
-(door/stairwell openings are genuinely passable). Stairs are solid stepped runs
-whose step boxes ARE the collision — walkable exactly as rendered, top tread
-flush on `start.y + height`. Rooms take `open_faces` (faces with no wall):
-a corridor is a room with both end faces open, and the studio's Corridor tool
-draws exactly that. `DeckFitout.apply_any`
-routes vessel records: `structure_plan_v1` dicts take the parametric path,
-legacy `cells` dicts still take the voxel path. Author plans in
-**Structure Studio** (`scenes/apps/structure_studio.tscn` — the single unified
-builder; the old shipyard/building brick editor scenes are retired) or write
-JSON directly in `resources/data/structures/`
-(see `demo_workboat.json`). Legacy compliance/budgets do not yet apply to
-plans — that rework lands with the new vocabulary.
-
-`BrickCatalog` is the legacy voxel construction kit (vessel decks + land
-buildings). Its definitions are currently WIPED pending the rebuild; the
-tag-driven mounting machinery stays and revives per definition added.
-
-Static bricks render through `VesselSkinBaker` (`DeckFitout.skin_enabled`, default on):
-full-cell cuboids become culled voxel faces with baked corner AO plus applied
-edge trim (deck/roof strips, base skirts, corner posts); every other static
-brick is exact-merged into per-material surfaces. Interactive bricks (doors,
-helm, lights, fishing gear, ladders, moorings, signs) stay live nodes. The
-baker is a pure function of (layout, grid) with no gameplay dependencies —
-reusable by headless services (e.g. future build moderation renders).
+These routing hints do not grant cargo capacity: runtime mounted pads/holds remain
+the source of usable storage. Freight offers must fit the actual issued container
+footprint at the pad's cell size, reserve unfilled contract capacity, and belong to
+the booking port. Keep draft, live component, berth and freight records distinct;
+never manufacture inventory from a vessel label. Run
+`tests/harbour_service_routing_test.tscn -- --shipyard-playtest` for routing and
+booking regressions through actual harbourmaster deployment.
 
 ### Vessel orientation
 
@@ -278,15 +238,62 @@ exclusive manoeuvre-lane leases. Player passage autopilot carries a three-minute
 
 ---
 
-## Visual Rules — No Imported Assets
+## Visual Rules — Procedural and Imported Assets
 
-**No `.gltf` / `.glb` / `.fbx` / `.obj`. No imported texture files for in-world objects.**
+### Materials are part of every physical asset
 
-Everything comes from:
+- Every new physical item MUST reuse a suitable approved material or introduce a
+  suitable new material. This applies to ships, fittings, interiors, cargo, port
+  buildings/equipment, scenery and characters, including procedural geometry.
+  Flat placeholder colours are not finished artwork.
+- Choose the actual surface: painted metal, exposed steel, rubber, timber,
+  fabric, glass, concrete, etc. Use appropriate colour, normal and roughness
+  textures and metallic/occlusion maps where they add useful information. Glass,
+  light lenses and displays need deliberate optical/emissive materials; do not
+  cover them with an unrelated texture merely to satisfy a map count.
+- Search the project's material library first. If it does not fit, find a new
+  source (ambientCG is approved) or author one. Record asset URL, license and
+  usage. Keep texture scale believable in metres and preserve named paint regions,
+  per-instance colour controls and independently animated parts.
+- Current shared implementation: `SurfaceMaterialLibrary` and
+  `resources/textures/marine/README.md`. Reuse its source manifest, profiles,
+  assignments and F6 review scene. Keep detail/LOD/MultiMesh finishes consistent,
+  modular rest-space texture joins continuous and halfwalls double-sided.
+- Inspect new materials close up AND on the assembled object in Godot lighting.
+  Check tiling, seams, normal direction, highlights and distant mip behaviour.
+  Share texture resources, use mipmaps and VRAM compression, and budget texture
+  resolution for the size/frequency of the object on screen. Follow the detailed
+  material contract in `resources/models/README.md`.
+
+### Mandatory rules for new ship models
+
+- Author individual reusable assets in Blender. Do not revive deleted procedural brick meshes or substitute a complete boat for construction parts. The current model contract and acceptance checks are documented in `resources/models/README.md` under "Ship model authoring contract".
+- Metres, applied scale, Blender +Y bow/+Z up; exported Godot -Z bow/+Y up. Placement origins and named end sockets are part of the asset contract.
+- The current trawler has a 14 × 5 m deck, 3.5 m bow, straight sides, and exact 2:1 and 1:1 bow slopes. Deck corners use 0.5 m increments. Preserve these coordinates; do not replace straight construction edges with interpolated curves.
+- Half-walls must join seamlessly as separate models: matching mitered end profiles, no bevel on mating faces, no visible joint posts, and continuous top caps. Open railing uses shared posts instead.
+- Structural wheelhouse models use the dimensions and junction contract in `resources/models/README.md`. Expose Wall, Door and Window families with two-click, 0.5 m lattice placement and automatic authored angles. Preserve the movable 1.80 m player reference; no decorative work in this structural kit.
+- Present construction families, not manufacturing variants: Railing / Solid half-wall plus Rising bow. Choose exact edge lengths, angles, side, heights and miter assets automatically from the hovered hull segment; posts are automatic. Verify all segments in both profiles.
+- Floor/Roof use individual Blender assets from `surface_tiles` and closed-outline placement via `ShipSurfaceKit`. Preserve the lattice, slab datum, miter and paint rules in `resources/models/README.md`; do not expose the 109 manufacturing variants as palette items. Verify the runnable surface_tiles showcase.
+- Interior controls remain separate fixed/moving Blender components with named pivots. Use `ShipPartState` requests and revisioned snapshots for presentation; authority validates interaction separately. See the interior contract in `resources/models/README.md`. Never wire keyboard polling into model assets.
+- Expose named paint regions. Half-wall panels can change colour independently of fixed caps; hull upper, lower and deck are independent. Duplicate material overrides per instance; never mutate a shared imported material.
+- Verify imported geometry, sockets, joint heights, colour isolation and draft round-trips in Godot. Show actual renders. A generated file or a passing source-level check alone does not prove the editor integration works.
+- Imported-model shipyard drafts are an authoring format, not commissioned gameplay vessels. Do not claim gameplay/save/network migration is complete until those paths are explicitly integrated and tested.
+
+Imported 3D models are approved for experimentation alongside the existing procedural pipeline.
+Store game-ready models (prefer `.glb`) under `resources/models/`, with associated
+textures beside each asset. Keep Blender source files in `resources/models/_source/`
+(excluded from Godot import via `.gdignore`). See `resources/models/README.md`.
+The trawler hull and railing kit have shipyard palette, placement, paint and draft
+integration. Commissioning into gameplay vessels remains pending.
+
+Existing procedural assets come from:
 1. **Godot primitives** (`BoxMesh`, `CylinderMesh`, etc.) composed in GDScript.
 2. **JSON meshes** under `resources/data/meshes/`, loaded by `MeshTransformer`.
 
-Materials are always `StandardMaterial3D` built at runtime. Shaders live in `resources/shaders/`.
+Procedural materials are `StandardMaterial3D` built at runtime. Imported assets may
+use imported materials and textures. Shaders live in `resources/shaders/`.
+Keep imported visuals separate from BoatBody physics, collision, equipment,
+registration, and saved vessel identity; a model alone does not define those systems.
 
 ### MeshTransformer (single part)
 
@@ -416,5 +423,61 @@ Actions registered in `project.godot` that gameplay code reads via `Input.is_act
 | `boat_horn_press` | E | Foghorn |
 | `boat_docking_thrusters` | T | Bow thruster mode |
 | `boat_autopilot_toggle` | P | Engage/disengage active freight route autopilot |
+| `boat_engine_toggle` | I | Start/stop machinery at the helm; leaving the helm keeps the engine running |
 
 Add new actions to `project.godot` directly; there is no separate input-map JSON.
+
+
+## Character model teardown (2026-10-05)
+
+The JSON/cuboid character body, wardrobe, hats, texture library, generators,
+procedural rig posing and their old visual demos were intentionally deleted.
+Do not resurrect them or add primitive fallback people. CharacterVisual now loads
+the Blender mariner, and CharacterCatalog lists only the new imported wardrobe.
+The character studio uses the same rig as gameplay. New work must use Blender-authored
+models in resources/models/characters and source .blend files under
+resources/models/_source/characters. Player movement, NPC behavior/interaction,
+identity creation, appearance serialization and network contracts remain usable.
+Old saved appearance identifiers are inert migration data, not asset definitions.
+Follow resources/models/characters/README.md for the angular reference style,
+shared skeleton, independent morphs, material colours and clothing coverage.
+Noah rejected downloaded character and clothing replacements on 7 October.
+Use the original in-house Blender mariner. All old animation clips were replaced;
+keep arms on fixed-length rotations, with no keyed wrist/elbow translations or
+limb scale. On 8 October Noah requested repair of the new runtime IK and sealegs:
+CharacterLegIK owns the local player's locomotion and balance. Do not replace it
+with the discarded clips or the rejected downloaded models. Planted contacts live
+in their support frame; gait follows actual deck-relative travel. Use deck-normal
+ground contact and physics-tick acceleration; zero-time skeleton updates must not
+advance gait or snap smoothing. Uphill/downhill/cross-deck pace follows the actual
+slope, recovering as it levels. Keep the clear plane in tests/player_gait_test.tscn
+for visual motion review (Noah explicitly prefers it to obstructed ship views).
+Archive captures without blocking the main thread on bulk PNG writes.
+Verify animated poses and maximum morphs in Godot.
+Run tests/blender_character_test.tscn to verify the imported character; use the existing
+--shipyard-playtest isolation flag when running these scenes to avoid live saves.
+
+## Gameplay UI rebuild (2026-10-09)
+
+After the game UI teardown, Noah approved rebuilding the first-voyage flow.
+Preserve the marine chart/minimap and all authoring editors. Runtime UI lives
+in VoyagePanel, VoyageHud and GameMenu. Noah rejected this gameplay UI visual pass;
+it is unfinished, not a shipping design. He explicitly requested the established
+main menu back: preserve MainMenu, its ocean/vessel backdrop, local captain
+selection/deletion, character/company creation and multiplayer server/account flow.
+Do not replace or remove those entry features as part of gameplay HUD changes.
+Per-player reads go through LocalPlayerView and commands through existing authority.
+Noah rejected a space-game/general-dashboard visual direction. Aim for practical
+marine instruments, ordinary company software on a tablet and NPC conversations
+that leave the person and workplace visible. The current look is under review.
+
+UI-only previews are agent-run review/capture scenes, using the production
+components and inert sample data: gameplay_ui_showcase, company_tablet_ui_showcase,
+helm_ui_showcase and title_ui_showcase under scenes/showcases. They must never
+open or change captain saves. Do not add preview banners, selectors or other
+controls over the UI, or move production widgets to accommodate test controls.
+Run and inspect the captures yourself; do not hand this work to Noah.
+Run tests/voyage_ui_test.tscn with --shipyard-playtest.
+The earlier game_ui_removal_test described the teardown checkpoint and is not
+acceptance for the now-authorized rebuild. See docs/gameplay-ui-rebuild.txt for
+verified work and unfinished integration checks.

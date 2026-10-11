@@ -1,0 +1,39 @@
+{
+  "units": "metres",
+  "assets": [
+    {
+      "id": "container_bed_20ft",
+      "kind": "furniture",
+      "style": "cargo_pad",
+      "model": "res://resources/models/cargo/container_bed_20ft.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        2.5,
+        6.5
+      ],
+      "height_start_m": 0.16,
+      "height_end_m": 0.16,
+      "paintable": true
+    },
+    {
+      "id": "cargo_deck_5x8",
+      "kind": "furniture",
+      "style": "cargo_deck",
+      "model": "res://resources/models/cargo/cargo_deck_5x8.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        5.06,
+        8.06
+      ],
+      "height_start_m": 0.0,
+      "height_end_m": 0.0,
+      "paintable": true
+    }
+  ]
+}

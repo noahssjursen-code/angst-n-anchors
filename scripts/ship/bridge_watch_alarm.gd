@@ -1,5 +1,5 @@
 class_name BridgeWatchAlarm
-extends Node
+extends Node3D
 
 ## Player watchkeeping monitor (BNWAS-inspired). While passage autopilot steers,
 ## detected movement near a helm resets the timer. NPC captains do not use this
@@ -129,29 +129,18 @@ func _build_audio() -> void:
 	_audio.unit_size = 18.0
 	_audio.max_distance = 80.0
 	_audio.stream = _alarm_stream()
+	_audio.bus = AudioLibrary.bus("res://resources/audio/world/helm/watch_alarm_1.wav")
+	_audio.volume_db = -10.0
 	add_child(_audio)
 
 
 func _play_alarm() -> void:
 	if _audio != null:
+		var stations := _body.find_children("*", "BridgeInteractable", true, false) if _body != null else []
+		if not stations.is_empty():
+			_audio.global_position = (stations[0] as Node3D).global_position
 		_audio.play()
 
 
 static func _alarm_stream() -> AudioStreamWAV:
-	const SAMPLE_RATE := 22050
-	const DURATION_S := 0.72
-	var frame_count := int(SAMPLE_RATE * DURATION_S)
-	var data := PackedByteArray()
-	data.resize(frame_count * 2)
-	for i in range(frame_count):
-		var t := float(i) / float(SAMPLE_RATE)
-		var pulse := 1.0 if fmod(t, 0.24) < 0.14 else 0.0
-		var envelope := minf(t / 0.012, 1.0) * minf((DURATION_S - t) / 0.025, 1.0)
-		var sample := int(sin(TAU * 880.0 * t) * pulse * envelope * 12000.0)
-		data.encode_s16(i * 2, sample)
-	var stream := AudioStreamWAV.new()
-	stream.format = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate = SAMPLE_RATE
-	stream.stereo = false
-	stream.data = data
-	return stream
+	return AudioLibrary.stream("res://resources/audio/world/helm/watch_alarm_1.wav", false) as AudioStreamWAV

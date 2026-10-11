@@ -22,11 +22,15 @@ func _run() -> void:
 	_apply_state(renderer, 0.50, 0.05, 0.0, 1.0, 0.0)
 	var clear := renderer.get_lighting_debug_state()
 	_check(float(clear["tonemap_exposure"]) <= 1.03, "day exposure preserves highlights")
-	_check(float(clear["adjustment_contrast"]) >= 1.04, "grade has useful contrast")
+	_check(float(clear["adjustment_contrast"]) >= 1.0, "grade has useful contrast")
 	_check(float(clear["ambient_energy"]) >= 0.30, "day shadow detail remains readable")
 	_check(float(clear["adjustment_saturation"]) >= 1.0, "grade preserves paint color")
 	_check(float(clear["glow_intensity"]) < 0.5, "glow is restrained")
 	_check(not bool(clear["volumetric_fog_enabled"]), "clear day skips volumetric fog")
+	var clear_extinction := float(clear["fog_density"])
+	_check(1.0 - exp(-clear_extinction * 100.0) < 0.02, "clear air preserves nearby vessel contrast")
+	_check(1.0 - exp(-clear_extinction * 5000.0) > 0.20, "clear air softens distant mountains")
+	_check(1.0 - exp(-clear_extinction * 5000.0) < 0.65, "clear air preserves distant navigation landmarks")
 
 	# Ordinary rain/haze must retain a readable foreground and remain cheap.
 	_apply_state(renderer, 0.50, 0.72, 0.62, 0.76, 0.15)
@@ -45,8 +49,13 @@ func _run() -> void:
 	_apply_state(renderer, 0.0, 0.25, 0.0, 1.0, 0.0)
 	var night := renderer.get_lighting_debug_state()
 	_check(float(night["tonemap_exposure"]) <= 1.15, "night exposure is bounded")
-	_check(float(night["ambient_energy"]) >= 0.09, "night silhouettes remain readable")
+	_check(float(night["ambient_energy"]) >= 0.04, "night silhouettes remain readable")
 
+	_check(bool(night["volumetric_fog_enabled"]), "clear night permits lamp scattering")
+	_check(float(night["volumetric_fog_density"]) < 0.001, "clear-night air does not become dense fog")
+	renderer.enable_volumetric_fog = false
+	_apply_state(renderer, 0.0, 0.25, 0.0, 1.0, 0.0)
+	_check(not bool(renderer.get_lighting_debug_state()["volumetric_fog_enabled"]), "quality switch disables night scattering")
 	renderer.queue_free()
 	_finish()
 

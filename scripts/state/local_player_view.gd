@@ -7,12 +7,97 @@ signal marks_changed(balance: int)
 signal company_changed(summary: Dictionary)
 signal helm_changed(boat: Node) # null when not helming
 signal contracts_changed(contracts: Array) # kept empty until trade rewrite
+signal voyage_changed(snapshot: Dictionary)
 
 
 var _session: Node = null
 var _catalog: Node = null
 var _state: Node = null
 var _helmed: Node = null
+var _presentation_tick := 0.0
+
+
+func _process(delta: float) -> void:
+	if get_tree().get_first_node_in_group("player") == null: return
+	_presentation_tick -= delta
+	if _presentation_tick > 0.0: return
+	_presentation_tick = 0.1
+	voyage_changed.emit(get_voyage_snapshot())
+
+
+func service_snapshot(npc: NpcInteractable) -> Dictionary:
+	return PortServiceDesk.describe(npc)
+
+
+func get_voyage_snapshot() -> Dictionary:
+	var ship := get_active_ship() as BoatBody
+	var result := {"helming": is_helming(), "ship": false, "name": "", "objective": "Speak to the shipwright to buy your first vessel."}
+	if ship == null:
+		if _session != null and not _session.data.owned_vessels.is_empty():
+			result.objective = "Ask the harbourmaster to deploy your vessel at a suitable quay."
+		return result
+	result.ship = true
+	result.name = VesselSpawn.vessel_name_of(get_active_vessel_record())
+	var local_velocity := ship.global_basis.inverse() * ship.linear_velocity
+	result["speed_kn"] = Vector2(ship.linear_velocity.x,ship.linear_velocity.z).length()*1.943844
+	result["ahead_kn"] = -local_velocity.z*1.943844
+	result["side_kn"] = local_velocity.x*1.943844
+	result["heading"] = fposmod(rad_to_deg(atan2(-ship.global_basis.z.x,-ship.global_basis.z.z)),360.0)
+	result["fuel"] = ship.get_fuel_fraction()
+	result["port"] = get_port_display_name(ship.get_harbour_port_id())
+	var berth := ship.get_moored_berth() as QuayBerthSlot
+	result["berth"] = PortServiceDesk.friendly_berth(berth) if berth != null else "Underway"
+	var mooring := ship.get_node_or_null("MooringComponent") as MooringComponent
+	result["bow"] = mooring.bow_line_tied if mooring != null else false
+	result["stern"] = mooring.stern_line_tied if mooring != null else false
+	result["mooring_reason"] = mooring.last_mooring_reject if mooring != null else ""
+	var gangways := ship.find_children("*", "ShipGangway", true, false)
+	result["gangway"] = str(gangways[0].status) if not gangways.is_empty() else "No gangway fitted"
+	var controller := ship.get_node_or_null("BoatController") as BoatController
+	var propulsion := ship.get_node_or_null("PropulsionComponent") as PropulsionComponent
+	result["engine_running"] = propulsion != null and propulsion.engine_running
+	if controller != null:
+		var labels := ["ASTERN", "NEUTRAL", "DEAD SLOW", "HALF AHEAD", "FULL AHEAD"]
+		result["order"] = labels[clampi(controller.get_throttle_stage_idx(),0,4)]
+		result["thruster"] = ["Off","Bow","Crab"][clampi(controller.get_thruster_mode(),0,2)]
+		var rudder := ship.get_node_or_null("RudderComponent") as RudderComponent
+		result["rudder"] = rudder.rudder_input*rudder.max_rudder_angle_deg if rudder != null else 0.0
+		result["autopilot"] = controller.get_autopilot() != null and controller.get_autopilot().is_engaged()
+	var contracts := get_active_contracts()
+	result.objective = "Speak to the cargo agent for compatible work, or prepare your fishing gear."
+	for job in contracts:
+		if str(job.get("vessel_uid","")) != str(get_active_vessel_record().get("uid","")): continue
+		var quantity := float(job.get("quantity",0))
+		var loaded := float(job.get("loaded_quantity",0))
+		var delivered := float(job.get("delivered_quantity",0))
+		var destination := get_port_display_name(str(job.get("destination_port_id","")))
+		if loaded < quantity: result.objective = "Ask the quay operator to load your booked cargo."
+		elif ship.get_harbour_port_id() == str(job.get("destination_port_id","")):
+			result.objective = "Ask the receiving operator to unload. %.0f / %.0f delivered." % [delivered,quantity]
+		else: result.objective = "Deliver cargo to %s. Open the chart to plan your passage." % destination
+		break
+	var passengers := get_passenger_voyage_snapshot()
+	if not passengers.is_empty(): result.objective = passengers.objective
+	return result
+
+
+func get_interaction_hint() -> String:
+	if is_helming(): return "F  Leave helm"
+	var player := get_tree().get_first_node_in_group("player") as CharacterBody3D
+	if player == null: return ""
+	for npc: Node in get_tree().get_nodes_in_group("port_service_npc"):
+		if npc is NpcInteractable and npc._can_interact(): return npc.prompt_text.replace("Press ","")
+	var camera := player.get_node_or_null("Camera3D") as Camera3D
+	if camera == null: return ""
+	var query := PhysicsRayQueryParameters3D.create(camera.global_position,camera.global_position-camera.global_basis.z*3.0)
+	query.exclude = [player.get_rid()]
+	query.collide_with_areas = true
+	var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
+	var node: Node = hit.get("collider")
+	while is_instance_valid(node):
+		if node is BridgeInteractable or node is CaptainsChair: return "F  Take the helm"
+		node = node.get_parent()
+	return ""
 
 
 func _ready() -> void:
@@ -128,10 +213,15 @@ func get_autopilot_snapshot() -> Dictionary:
 	var ship := get_active_ship()
 	if ship == null:
 		return {}
+	var snapshot := {}
+	if ship.has_method("get_fuel_fraction"):
+		snapshot["fuel_fraction"] = float(ship.call("get_fuel_fraction"))
 	var autopilot := ship.get_node_or_null("VesselAutopilot") as VesselAutopilot
 	if autopilot == null:
-		return {}
-	var snapshot := autopilot.voyage_snapshot()
+		return snapshot
+	snapshot = autopilot.voyage_snapshot()
+	if ship.has_method("get_fuel_fraction"):
+		snapshot["fuel_fraction"] = float(ship.call("get_fuel_fraction"))
 	snapshot["remaining_distance_m"] = autopilot.remaining_distance_m()
 	if autopilot.route != null:
 		snapshot["destination_port_id"] = autopilot.route.destination_port_id
@@ -144,6 +234,10 @@ func get_autopilot_snapshot() -> Dictionary:
 func get_active_contracts() -> Array:
 	var freight := get_node_or_null("/root/FreightService")
 	return freight.active_contracts() if freight != null else []
+
+
+func get_contract_cancellation(contract_id: String) -> Dictionary:
+	return FreightService.cancellation_status(contract_id)
 
 
 func get_port_display_name(port_id: String) -> String:
@@ -241,3 +335,12 @@ func _current_world_context() -> Dictionary:
 	if world != null and world.has_method("get_world_context"):
 		return world.call("get_world_context") as Dictionary
 	return {}
+
+
+func passenger_terminal_snapshot(agent: PassengerAgentNpc) -> Dictionary:
+	return agent.snapshot()
+
+
+func get_passenger_voyage_snapshot() -> Dictionary:
+	var operations := PassengerOperations.current(get_tree())
+	return operations.voyage_snapshot(get_active_ship() as BoatBody) if operations != null else {}

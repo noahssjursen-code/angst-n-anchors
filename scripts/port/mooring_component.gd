@@ -17,12 +17,16 @@ signal mooring_state_changed(
 ## Ship cleats: any `Node3D` in group `SHIP_MOORING_CLEAT_GROUP` under this vessel's
 ## `RigidBody3D` root. Distance is from cleat anchor to **this dock post's** anchor.
 const SHIP_MOORING_CLEAT_GROUP := "ship_mooring_cleat"
-## Dock bollards (`MooringPost`); any eligible for tie / prompts when this ship mooring registers.
+## Dock bollards (`MooringPost`). Lines are ordered from the helm, not from the quay.
 const DOCK_MOORING_GROUP := "dock_mooring_bollard"
 ## Group that MooringComponent joins at runtime so new bollards can auto-register.
 const SHIP_MOORING_COMPONENT_GROUP := "ship_mooring_component"
 
 const _MAX_SEGMENT_POOL_PER_ROPE: int = 32
+
+var _stern_line_audio: AudioStreamPlayer3D
+var _line_audio: AudioStreamPlayer3D
+var _fender_audio: AudioStreamPlayer3D
 
 @export var rope_radius: float = 0.045
 @export var rope_color: Color = Color(0.55, 0.42, 0.25)
@@ -81,6 +85,7 @@ var _rope_root: Node3D
 ## Rest distances (world-space chord at tie-time) maintained under tension while moored.
 var _rest_distance_bow: float = -1.0
 var _rest_distance_stern: float = -1.0
+var _bow_berth_capture := false
 
 ## Hull-space cleat anchor points baked from the berth tree (cheap during integrate).
 var _bow_cleat_body_local: Vector3 = Vector3.ZERO
@@ -449,7 +454,10 @@ func _line_distance_excess_from_transform(
 func _rope_max_distance_from_rest(rest_distance: float) -> float:
 	if rest_distance <= 0.0:
 		return 0.0
-	var target := maxf(rest_distance - tie_capture_retract_m, 0.6)
+	# Bow boarding is already on its landing datum. Hauling both side lines in
+	# by 2.2 m would drag the demihull into the support pier and miss that datum.
+	var retract := 0.0 if _bow_berth_capture else tie_capture_retract_m
+	var target := maxf(rest_distance - retract, 0.6)
 	var max_distance := target + rope_tension_slack_m
 	if max_tied_rope_length_m > 0.0:
 		max_distance = minf(max_distance, max_tied_rope_length_m)
@@ -457,6 +465,20 @@ func _rope_max_distance_from_rest(rest_distance: float) -> float:
 
 
 func _physics_process(_delta: float) -> void:
+	if _line_audio == null:
+		_line_audio = WorldSound.loop_on(self, "res://resources/audio/world/mooring/line_creak_1.wav", "LineCreak")
+		_stern_line_audio = WorldSound.loop_on(self, "res://resources/audio/world/mooring/line_creak_1.wav", "SternLineCreak")
+		_fender_audio = WorldSound.loop_on(self, "res://resources/audio/world/mooring/fender_rub_1.wav", "FenderRub")
+	var working := 0.0
+	if is_moored and _body != null:
+		working = clampf(_body.linear_velocity.length() / 0.6, 0.0, 1.0)
+	if is_instance_valid(_bow_point): _line_audio.global_position = _bow_point.global_position
+	if is_instance_valid(_stern_point): _stern_line_audio.global_position = _stern_point.global_position
+	if is_instance_valid(_bow_point) and is_instance_valid(_stern_point):
+		_fender_audio.global_position = (_bow_point.global_position + _stern_point.global_position) * 0.5
+	WorldSound.drive(_line_audio, working if bow_line_tied else 0.0, -17.0)
+	WorldSound.drive(_stern_line_audio, working if stern_line_tied else 0.0, -17.0)
+	WorldSound.drive(_fender_audio, working, -16.0)
 	if not is_moored:
 		return
 	_update_rope_visuals()
@@ -478,9 +500,107 @@ func moor_to_posts(front_post: Node, rear_post: Node) -> void:
 	_sync_berth_with_dock()
 	_remember_authority_identity()
 	_emit_mooring_state()
+	_play_line(true, front_post)
+	_play_line(true, rear_post)
+
+
+## Captain's order from the wheel. Both lines go on or come off together, so one
+## person never has to walk the quay. The boarding gangway stays down while
+## both lines are fast and stows only on this cast-off.
+const HELM_ALONGSIDE_REACH_M := 12.0
+const HELM_MAKE_FAST_SPEED_M_S := 1.2
+
+func order_lines_from_helm() -> String:
+	last_mooring_reject = ""
+	if _body == null:
+		_body = _resolve_boat_rigid_body()
+	if is_moored:
+		release_mooring()
+		if is_moored: return last_mooring_reject
+		return "Lines let go. The gangway is stowed."
+	var ship := _resolve_boat_body()
+	if ship != null and Vector2(ship.linear_velocity.x, ship.linear_velocity.z).length() > HELM_MAKE_FAST_SPEED_M_S:
+		last_mooring_reject = "Slow down before making fast"
+		mooring_rejected.emit(last_mooring_reject)
+		return last_mooring_reject
+	var slot := _alongside_berth()
+	if slot == null:
+		last_mooring_reject = "Come alongside a free berth before making fast"
+		mooring_rejected.emit(last_mooring_reject)
+		return last_mooring_reject
+	moor_to_nearest_of(slot.bollards())
+	if not bow_line_tied or not stern_line_tied:
+		last_mooring_reject = "Could not get both lines fast"
+		mooring_rejected.emit(last_mooring_reject)
+		return last_mooring_reject
+	return "Both lines fast. Leave the helm and use the gangway."
+
+
+func _alongside_berth() -> QuayBerthSlot:
+	var ship := _resolve_boat_body()
+	if ship == null:
+		return null
+	var assigned := ship.get_moored_berth() as QuayBerthSlot
+	if assigned != null and _berth_line_reach(assigned) <= HELM_ALONGSIDE_REACH_M:
+		return assigned
+	var best: QuayBerthSlot = null
+	var best_reach := HELM_ALONGSIDE_REACH_M
+	for port_id in HarbourRegistry.all_port_ids():
+		var harbour := HarbourRegistry.controller(port_id)
+		if harbour == null:
+			continue
+		for raw in harbour.berths():
+			var slot := raw as QuayBerthSlot
+			if slot == null:
+				continue
+			var occupant := harbour.moored_ship(slot.berth_id)
+			if occupant != null and occupant != ship:
+				continue
+			var reach := _berth_line_reach(slot)
+			if reach <= best_reach:
+				best_reach = reach
+				best = slot
+	return best
+
+
+func _berth_line_reach(slot: QuayBerthSlot) -> float:
+	if slot == null:
+		return INF
+	var posts := slot.bollards()
+	if posts.size() < 2:
+		return INF
+	var cleats := _ship_cleat_nodes()
+	if cleats.is_empty():
+		return INF
+	var bow_pos := _mean_cleat_position(cleats, "bow")
+	var stern_pos := _mean_cleat_position(cleats, "stern")
+	var front := _closest_post_to(bow_pos, posts, null)
+	var rear := _closest_post_to(stern_pos, posts, front)
+	if front == null or rear == null:
+		return INF
+	return maxf(
+		bow_pos.distance_to(dock_post_anchor_world(front)),
+		stern_pos.distance_to(dock_post_anchor_world(rear)),
+	)
+
+
+func _departure_rejected() -> bool:
+	# Confirmed state hydration is not a fresh captain order.
+	if _suppress_state_signal: return false
+	var ship := _resolve_boat_body()
+	if ship == null: return false
+	last_mooring_reject = ship.prepare_departure()
+	if last_mooring_reject.is_empty(): return false
+	mooring_rejected.emit(last_mooring_reject)
+	return true
 
 
 func release_mooring() -> void:
+	if _departure_rejected(): return
+	if bow_line_tied:
+		_play_line(false, _front_post)
+	if stern_line_tied:
+		_play_line(false, _rear_post)
 	_remember_authority_identity()
 	is_moored = false
 	bow_line_tied = false
@@ -495,6 +615,17 @@ func release_mooring() -> void:
 	_stern_point = null
 	_hide_all_rope_segments()
 	_emit_mooring_state()
+
+
+func _play_line(tied_on: bool, post: Node) -> void:
+	if _suppress_state_signal:
+		return
+	var at := global_position
+	if post is Node3D:
+		at = (post as Node3D).global_position
+	WorldSound.play(
+		"res://resources/audio/world/mooring/line_%s_1.wav" % ("on" if tied_on else "off"),
+		at, -6.0)
 
 
 func is_mooring_line_tied_from_post(post: Node) -> bool:
@@ -556,10 +687,17 @@ func toggle_line_from_post(post: Node) -> bool:
 			_stern_point = pick
 
 	set_line_tied(forward_slot, next_tied)
-	return next_tied
+	var at := global_position
+	if post is Node3D:
+		at = (post as Node3D).global_position
+	WorldSound.play(
+		"res://resources/audio/world/mooring/line_%s_1.wav" % ("on" if next_tied else "off"),
+		at, -6.0)
+	return is_slot_tied(forward_slot)
 
 
 func set_line_tied(forward_slot: bool, tied: bool) -> void:
+	if not tied and _departure_rejected(): return
 	_remember_authority_identity()
 	if forward_slot:
 		bow_line_tied = tied
@@ -577,6 +715,14 @@ func set_line_tied(forward_slot: bool, tied: bool) -> void:
 	else:
 		_capture_rest_distances()
 	_sync_berth_with_dock()
+	# Keep the old dock available until its berth is released, then discard
+	# detached endpoints. They must not reject a later arrival at another port.
+	if not bow_line_tied:
+		_front_post = null
+		_bow_point = null
+	if not stern_line_tied:
+		_rear_post = null
+		_stern_point = null
 	_emit_mooring_state()
 
 
@@ -656,13 +802,19 @@ func _state_signature() -> String:
 func _emit_mooring_state() -> void:
 	if _suppress_state_signal:
 		return
-	_remember_authority_identity()
+	# Final cast-off retains the destination remembered before endpoints clear.
+	# The ship may still be parented beneath its original spawning port.
+	if is_moored or _known_port_id.is_empty() or _known_berth_id.is_empty():
+		_remember_authority_identity()
 	if _known_port_id.is_empty() or _known_berth_id.is_empty():
 		return
 	var signature := _state_signature()
 	if signature == _last_emitted_state:
 		return
 	_last_emitted_state = signature
+	var harbour := _resolve_harbour_controller()
+	if harbour != null:
+		harbour.observe_arriving_mooring(_resolve_boat_body())
 	mooring_state_changed.emit(
 		_known_port_id,
 		_known_berth_id,
@@ -678,6 +830,9 @@ func is_slot_tied(forward_slot: bool) -> bool:
 func _capture_rest_distances() -> void:
 	if _body == null:
 		_body = _resolve_boat_rigid_body()
+	var harbour := _resolve_harbour_controller()
+	var slot := _resolve_berth_slot(harbour) if harbour != null else null
+	_bow_berth_capture = slot != null and slot.bow_in
 
 	if bow_line_tied and _bow_point != null and _front_post != null:
 		_rest_distance_bow = _cleat_anchor(_bow_point).distance_to(_post_anchor(_front_post))
@@ -777,6 +932,13 @@ func _find_port_dock() -> Node:
 		var stern_dock := _dock_from_node(_rear_post)
 		if stern_dock != null:
 			return stern_dock
+	# The final line was just switched off, but berth release still needs its
+	# destination. set_line_tied clears these references after synchronisation.
+	for post in [_front_post, _rear_post]:
+		if is_instance_valid(post):
+			var last_dock := _dock_from_node(post)
+			if last_dock != null:
+				return last_dock
 	var n: Node = get_parent()
 	while n != null:
 		if n is PortPlot:
@@ -813,6 +975,12 @@ func _resolve_boat_body() -> BoatBody:
 
 
 func _resolve_harbour_controller() -> HarbourController:
+	# Standalone passenger terminals still belong to an existing harbour. Resolve
+	# the actual tied posts, including arrival after leaving the spawning port.
+	for post in [_front_post,_rear_post]:
+		if not is_instance_valid(post): continue
+		var owner := HarbourRegistry.controller(str(post.get_meta("harbour_port_id","")))
+		if owner != null and owner.berth_for_bollard(post) != null: return owner
 	var plot := _find_port_dock() as PortPlot
 	if plot != null:
 		var hc := plot.harbour_controller()
@@ -849,6 +1017,8 @@ func _berth_index_for_post(dock: Node, post: Node) -> int:
 
 
 func _would_split_berths(new_post: Node) -> bool:
+	if not bow_line_tied and not stern_line_tied:
+		return false
 	var harbour := _resolve_harbour_controller()
 	if harbour != null:
 		var new_slot := harbour.berth_for_bollard(new_post)
@@ -1000,6 +1170,8 @@ func _ensure_segment_holder_pool(
 		mesh.height = 0.05
 		cyl.mesh = mesh
 		cyl.material_override = MeshBuilder.make_material(rope_color, 0.92, 0.0)
+		if SurfaceMaterialLibrary.enabled:
+			cyl.material_override = SurfaceMaterialLibrary.material("rope_fibre",rope_color)
 		parent.add_child(cyl)
 		pool.append(cyl)
 
@@ -1029,14 +1201,14 @@ func _update_rope_visuals() -> void:
 	if bow_line_tied and _bow_point != null and _front_post != null:
 		var a := _cleat_anchor(_bow_point)
 		var b := _post_anchor(_front_post)
-		_draw_curve_on_holder(_bow_rope_holder, _bow_rope_segments, a, b)
+		_draw_curve_on_holder(_bow_rope_holder, _bow_rope_segments, a, b, _bow_point)
 	elif _bow_rope_holder != null:
 		_hide_rope_segments(_bow_rope_segments)
 
 	if stern_line_tied and _stern_point != null and _rear_post != null:
 		var a2 := _cleat_anchor(_stern_point)
 		var b2 := _post_anchor(_rear_post)
-		_draw_curve_on_holder(_stern_rope_holder, _stern_rope_segments, a2, b2)
+		_draw_curve_on_holder(_stern_rope_holder, _stern_rope_segments, a2, b2, _stern_point)
 	elif _stern_rope_holder != null:
 		_hide_rope_segments(_stern_rope_segments)
 
@@ -1046,8 +1218,15 @@ func _draw_curve_on_holder(
 	pool: Array[MeshInstance3D],
 	start: Vector3,
 	end_: Vector3,
+	cleat: Node3D = null,
 ) -> void:
 	var pts := _rope_sample_points(start, end_)
+	if cleat is MooringPoint and is_instance_valid((cleat as MooringPoint).rope_lead):
+		# Fixed inboard run terminates at the same guide used by the constraint.
+		# Keep the existing bounded pool even at the maximum sampling setting.
+		if pts.size() >= _MAX_SEGMENT_POOL_PER_ROPE + 1:
+			pts.remove_at(1)
+		pts.insert(0,(cleat as MooringPoint).get_inboard_anchor_global_position())
 	var segment_count := maxi(pts.size() - 1, 1)
 	if segment_count > _MAX_SEGMENT_POOL_PER_ROPE:
 		push_warning(

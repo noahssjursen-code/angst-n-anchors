@@ -17,15 +17,18 @@ static func validate(layout: BuildingLayout) -> Dictionary:
 
 	var grid := layout.grid()
 	var door_count := 0
+	var invalid_bricks: Dictionary = {}
 	for item in layout.iter_primary_cells():
 		var cell := item["cell"] as Vector3i
 		var brick_id := str(item.get("brick_id", ""))
 		var yaw := int(item.get("yaw", 0))
 		if not BrickCatalog.has(brick_id):
-			errors.append("Unknown brick '%s'." % brick_id)
+			var reason := "Unknown brick '%s'" % brick_id
+			invalid_bricks[reason] = int(invalid_bricks.get(reason, 0)) + 1
 			continue
 		if BrickCatalog.has_tag(brick_id, "ship_only"):
-			errors.append("Ship-only brick '%s' cannot be used in buildings." % brick_id)
+			var reason := "Ship-only brick '%s' cannot be used in buildings" % brick_id
+			invalid_bricks[reason] = int(invalid_bricks.get(reason, 0)) + 1
 		var fp := BrickCatalog.footprint_of(brick_id)
 		var yaw_steps := int(round(float(yaw) / 90.0)) % 4
 		for occupied in grid.footprint_cells(cell, fp, yaw_steps):
@@ -38,6 +41,12 @@ static func validate(layout: BuildingLayout) -> Dictionary:
 				break
 		if BrickCatalog.has_tag(brick_id, "door"):
 			door_count += 1
+	# Thousands of cells can reference the same missing asset. Keep validation
+	# strict, but report each problem once with its affected placement count.
+	var reasons := invalid_bricks.keys()
+	reasons.sort()
+	for reason in reasons:
+		errors.append("%s (%d placements)." % [reason, invalid_bricks[reason]])
 	if layout.role != "decorative" and door_count == 0:
 		warnings.append("Service building has no door brick.")
 	return _result(errors, warnings)

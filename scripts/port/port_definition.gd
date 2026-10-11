@@ -6,7 +6,7 @@ extends RefCounted
 
 enum RegionKind { LEGACY_ISLAND, MAINLAND, FJORD, ARCHIPELAGO }
 enum GroundMode { LOCAL_ISLAND, WORLD_TERRAIN }
-const CURRENT_PORT_GENERATION_VERSION := 46
+const CURRENT_PORT_GENERATION_VERSION := 48
 
 var port_id: String = ""
 var display_name: String = ""
@@ -21,6 +21,8 @@ var site_quay_half_m: float = -1.0
 var port_generation_version: int = CURRENT_PORT_GENERATION_VERSION
 var has_lighthouse: bool = false
 var has_fog_horn: bool = false
+## Opt-in development home only; ordinary seeded ports keep their trade budget.
+var development_facilities: bool = false
 ## Coast placement owns yaw when true. Local -Z must face navigable water.
 var rotation_y: float = 0.0
 var has_explicit_rotation: bool = false
@@ -29,7 +31,7 @@ var ground_mode: GroundMode = GroundMode.LOCAL_ISLAND
 
 
 func to_dict() -> Dictionary:
-	return {
+	var out := {
 		"port_id": port_id,
 		"display_name": display_name,
 		"world_position": { "x": world_position.x, "y": world_position.y, "z": world_position.z },
@@ -46,6 +48,9 @@ func to_dict() -> Dictionary:
 		"region_kind": int(region_kind),
 		"ground_mode": int(ground_mode),
 	}
+	if development_facilities:
+		out["development_facilities"] = true
+	return out
 
 
 static func from_dict(d: Dictionary) -> PortDefinition:
@@ -73,6 +78,7 @@ static func from_dict(d: Dictionary) -> PortDefinition:
 	))
 	p.has_lighthouse = bool(d.get("has_lighthouse", false))
 	p.has_fog_horn = bool(d.get("has_fog_horn", false))
+	p.development_facilities = bool(d.get("development_facilities", false))
 	p.rotation_y = float(d.get("rotation_y", 0.0))
 	p.has_explicit_rotation = bool(d.get("has_explicit_rotation", d.has("rotation_y")))
 	p.region_kind = clampi(

@@ -132,6 +132,17 @@ func classify_region(world_xz: Vector2) -> Region:
 ## either wide polished svaberg shelves or steep rock faces dropping to water.
 ## No separate rock props — the mesh/shader are the shore.
 func sample_height(world_xz: Vector2) -> float:
+	return _sample_height(world_xz, true)
+
+
+## Existing harbour identities depend on the historical backshore acceptance
+## test. Keep that selection surface frozen while fixing the physical terrain.
+## This is only for seeded site selection, never render/collision/tree roots.
+func sample_port_site_height(world_xz: Vector2) -> float:
+	return _sample_height(world_xz, false)
+
+
+func _sample_height(world_xz: Vector2, continuous_backshore: bool) -> float:
 	var distance := sample_signed_distance(world_xz)
 	if distance >= 0.0:
 		# Shallow continuation of the rock shelf under water. The streamer may
@@ -183,7 +194,17 @@ func sample_height(world_xz: Vector2) -> float:
 				+ lerpf(8.0, 26.0, coast_var) \
 				+ past_shelf * lerpf(0.04, 0.10, coast_var)
 		var blend := smoothstep(0.0, 1.0, past_shelf / 300.0)
-		return maxf(0.04, lerpf(gentle_cap, full_height, blend) + slab_roll * 0.35 + micro * 0.5)
+		var detail := slab_roll * 0.35 + micro * 0.5
+		if not continuous_backshore:
+			return maxf(0.04, lerpf(gentle_cap, full_height, blend) + detail)
+		# The former branch started at gentle_cap (shelf + 8..26m), creating
+		# a vertical step around every island. Start at the exact shelf endpoint
+		# and join the existing upland profile over 180m. Fade the residual detail
+		# at the far endpoint too. Sea level, SDF and upland mountains are intact.
+		var shore_height := maxf(0.04, shelf + slab_roll + micro)
+		var backshore := lerpf(gentle_cap, full_height, blend) \
+			+ detail * (1.0 - smoothstep(280.0, 360.0, past_shelf))
+		return maxf(0.04, lerpf(shore_height, backshore, smoothstep(0.0, 180.0, past_shelf)))
 	return full_height
 
 

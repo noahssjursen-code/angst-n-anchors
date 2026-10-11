@@ -6,7 +6,6 @@ extends RefCounted
 ## Output: GameSettings hydrated and ready for world.tscn.
 
 const WORLD_SCENE := "res://scenes/world.tscn"
-const MAIN_MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 const PORT_OVERHAUL_PREVIOUS_GENERATION := 5
 const TERRAIN_COAST_PREVIOUS_GENERATION := 6
 const FJORD_WIDTH_PREVIOUS_GENERATION := 7
@@ -93,8 +92,12 @@ static func apply_player_world_context(player: PlayerData) -> void:
 		weather_version = CURRENT_WEATHER_VERSION
 		ctx["weather_generation_version"] = weather_version
 		player.world_context = ctx
-	var world_size_m := float(ctx.get("world_size_m", -1.0))
 	var preset_id := str(ctx.get("world_preset", ctx.get("map_world_preset", "")))
+	# Loading an older captain after previewing a compact world must not inherit
+	# the preview's dimensions. Historical captains without dimensions used 40 km.
+	if preset_id.is_empty():
+		preset_id = "standard"
+	var world_size_m := float(ctx.get("world_size_m", WorldConfig.preset_size_m(preset_id)))
 	apply_seed(
 		seed_val,
 		int(ctx.get("generation_version", 0)),
@@ -146,34 +149,4 @@ static func enter_world(
 	var menu := tree.root.get_node_or_null("GameMenu")
 	if menu != null and menu.has_method("set_gameplay_hud_visible"):
 		menu.set_gameplay_hud_visible(true)
-	_go_via_loading_gate(tree, WORLD_SCENE, "Preparing voyage…")
-
-
-static func return_to_title(tree: SceneTree) -> void:
-	var session := tree.root.get_node_or_null("PlayerSession")
-	if session != null and session.has_method("save_now"):
-		session.call("save_now")
-	# The title has no active persistence target. A roster selection remains
-	# UI-only until Sail explicitly loads that captain.
-	LocalCaptainStore.clear_active()
-	var network := tree.root.get_node_or_null("NetworkManager")
-	if network != null and network.has_method("end_multiplayer_session"):
-		network.call("end_multiplayer_session", true)
-	var gateway := tree.root.get_node_or_null("WorldGateway")
-	if gateway != null and gateway.has_method("stop_session"):
-		gateway.call("stop_session")
-	var config := tree.root.get_node_or_null("ServerConfig")
-	if config != null:
-		config.set("is_multiplayer_mode", false)
-	var menu := tree.root.get_node_or_null("GameMenu")
-	if menu != null and menu.has_method("set_gameplay_hud_visible"):
-		menu.set_gameplay_hud_visible(false)
-	_go_via_loading_gate(tree, MAIN_MENU_SCENE, "Returning to harbour…")
-
-
-static func _go_via_loading_gate(tree: SceneTree, scene_path: String, status: String) -> void:
-	var gate := tree.root.get_node_or_null("LoadingGate")
-	if gate != null and gate.has_method("begin"):
-		gate.call("begin", scene_path, status)
-	else:
-		tree.change_scene_to_file(scene_path)
+	tree.change_scene_to_file(WORLD_SCENE)

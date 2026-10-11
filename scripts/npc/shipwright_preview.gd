@@ -31,6 +31,15 @@ func show_entry(entry: Dictionary, brick_layout: Dictionary = {}) -> HullStation
 		add_child(_pivot)
 	_pivot.rotation.y = _display_yaw
 
+	if ImportedHullCatalog.has(hull_id):
+		var imported := VesselSpawn.instantiate(hull_id, brick_layout)
+		if imported != null:
+			imported.name = "PreviewBoat"
+			imported.freeze = true
+			imported.process_mode = Node.PROCESS_MODE_DISABLED
+			_pivot.add_child(imported)
+		return stations
+
 	var boat := HullRegistry.build_hull(hull_id)
 	boat.name = "PreviewBoat"
 	boat.freeze = true

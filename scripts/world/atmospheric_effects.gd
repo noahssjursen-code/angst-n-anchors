@@ -1,6 +1,6 @@
 class_name AtmosphericEffects
 extends Node3D
-signal lightning_strike(intensity: float, distance_m: float)
+signal lightning_strike(intensity: float, distance_m: float, world_position: Vector3)
 
 
 ## Runtime-only atmospheric layer: rain particles, lightning, weather audio, and debug HUD.
@@ -122,9 +122,15 @@ func _update_lightning(delta: float) -> void:
 			)
 		_lightning_phase = 1
 		_lightning_phase_t = 0.0
+		var bearing := deg_to_rad(float(event.get("bearing_degrees", 0.0)))
+		var distance := float(event.get("distance_m", 1000.0))
+		var camera := get_viewport().get_camera_3d()
+		var origin := camera.global_position if camera != null else Vector3.ZERO
+		var strike_at := origin + Vector3(sin(bearing), 0.0, -cos(bearing)) * distance
 		lightning_strike.emit(
 			_active_bolt,
-			float(event.get("distance_m", 1000.0)),
+			distance,
+			strike_at,
 		)
 		return
 

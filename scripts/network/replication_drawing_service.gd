@@ -507,16 +507,6 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		body.trousers_color = Color(0.18, 0.18, 0.22)
 		root.add_child(body)
 		
-		var label := Label3D.new()
-		label.name = "PlayerNameLabel"
-		label.text = "Captain"
-		label.font_size = 48
-		label.pixel_size = 0.01
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.no_depth_test = true
-		label.modulate = Color(0.96, 0.92, 0.78, 0.95)
-		label.position = Vector3(0.0, 2.2, 0.0)
-		root.add_child(label)
 		return root
 		
 	# B. Remote cargo packing removed — ignore legacy type until containers land.
@@ -537,16 +527,6 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 			ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 			_disable_physics_in_subtree(ship)
 
-			var label := Label3D.new()
-			label.name = "ShipNameLabel"
-			label.text = "%s (%s)" % [id.split("_")[0], hull_id.capitalize()]
-			label.font_size = 64
-			label.pixel_size = 0.015
-			label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			label.no_depth_test = true
-			label.modulate = Color(0.96, 0.92, 0.78, 0.95)
-			label.position = Vector3(0.0, 5.0, 0.0)
-			ship.add_child(label)
 			return ship
 		push_warning(
 			"ReplicationDrawingService: failed to spawn remote ship hull_id=%s"
@@ -833,9 +813,6 @@ func _apply_captain_profile(node: Node3D, profile: Dictionary) -> void:
 	var body := node.get_node_or_null("BodyMesh") as NpcBase
 	if body != null and appearance != null:
 		body.apply_appearance(appearance)
-	var label := node.get_node_or_null("PlayerNameLabel") as Label3D
-	if label != null:
-		label.text = str(profile.get("display_name", "Captain"))
 
 
 func _drive_player_walk_cycle(state: Dictionary, node: Node3D, _delta: float) -> void:

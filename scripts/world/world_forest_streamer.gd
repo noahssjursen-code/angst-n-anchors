@@ -1,30 +1,31 @@
 class_name WorldForestStreamer
 extends Node3D
 
-## Streams decorative forest Multimeshes keyed to the same 1 km chunk grid as
-## terrain. Geometry stops at WorldPropLod ranges; far canopy is shader-only.
+## Streams decorative forest Multimeshes keyed to the independent 256 m patches over
+## terrain. DistantForest retains whole-world silhouettes beyond these patches.
 
 const WorldReferenceScript := preload("res://scripts/world/world_reference.gd")
 const PROP_LOD := preload("res://scripts/world/world_prop_lod.gd")
 const TREE_MESH := preload("res://scripts/world/forest_tree_mesh.gd")
 const STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
 
-const CHUNK_SIZE_M := 1000.0
-const NEAR_STEP_M := 22.0
-const MID_STEP_M := 34.0
-const MAX_NEAR_PER_CHUNK := 160
-const MAX_MID_PER_CHUNK := 90
+const CHUNK_SIZE_M := 256.0
+const NEAR_STEP_M := 6.5
+const MID_STEP_M := 6.5
+const MAX_NEAR_PER_CHUNK := 1521
+const MAX_MID_PER_CHUNK := 1521
 const DENSITY_GATE := 0.10
-const LOD_HYSTERESIS_M := 220.0
-## Decorative overscale so spruce massing reads from boat / freecam altitude.
-const TREE_SCALE_MIN := 1.92
-const TREE_SCALE_MAX := 3.36
+const LOD_HYSTERESIS_M := 60.0
+## Authored metre-scale trees; no oversized silhouettes along the coastline.
+const TREE_SCALE_MIN := 0.72
+const TREE_SCALE_MAX := 1.45
 const REQUEST_MOVE_THRESHOLD_M := 50.0
 
 @export_range(0.25, 8.0, 0.25) var build_budget_ms := 2.0
 @export_range(1, 4, 1) var max_jobs_per_frame := 1
 @export_range(1, 16, 1) var queue_refresh_frames := 5
 
+var _distant: Node3D
 var _layout: Object
 var _flatten_zones: Array = []
 var _chunks: Dictionary = {}
@@ -32,6 +33,8 @@ var _jobs: Array[Dictionary] = []
 var _queued: Dictionary = {}
 var _frame_index := 0
 var _last_request_xz := Vector2(INF, INF)
+var _last_build_ms := 0.0
+var _peak_build_ms := 0.0
 
 
 func configure(layout: Object, flatten_zones: Array = []) -> void:
@@ -42,6 +45,11 @@ func configure(layout: Object, flatten_zones: Array = []) -> void:
 	_last_request_xz = Vector2(INF, INF)
 	set_process(_layout != null)
 	if _layout != null:
+		TREE_MESH.request_assets()
+		if is_instance_valid(_distant): _distant.free()
+		_distant = load("res://scripts/world/distant_forest.gd").new()
+		add_child(_distant)
+		_distant.configure(layout)
 		_refresh_requests(WorldReferenceScript.visual_position(get_viewport()))
 
 
@@ -53,6 +61,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	TREE_MESH.finish_pending_requests()
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null and telemetry.has_method("unregister_provider"):
 		telemetry.unregister_provider(&"world.forest", self)
@@ -75,9 +84,17 @@ func get_debug_stats() -> Dictionary:
 	for value in _chunks.values():
 		instances += int((value as Dictionary).get("instances", 0))
 	return {
+		"world_canopy_pending": _distant.pending() if is_instance_valid(_distant) else 0,
+		"world_canopy_cache_hit": _distant.cache_hit if is_instance_valid(_distant) else false,
+		"world_canopy_prepare_ms": _distant.prepare_ms if is_instance_valid(_distant) else 0,
+		"world_canopy_ready_ms": _distant.ready_ms if is_instance_valid(_distant) else 0,
+		"world_canopy_trees": _distant.trees if is_instance_valid(_distant) else 0,
+		"world_canopy_peak_ms": _distant.peak_ms if is_instance_valid(_distant) else 0,
 		"loaded": _chunks.size(),
 		"pending": _jobs.size(),
 		"instances": instances,
+		"last_build_ms": _last_build_ms,
+		"peak_build_ms": _peak_build_ms,
 	}
 
 
@@ -126,6 +143,14 @@ func _refresh_requests(stream_position: Vector3) -> void:
 		if (loaded.is_empty() or int(loaded.get("tier", -1)) != int(request["tier"])) \
 				and not _queued.has(key):
 			_enqueue(request)
+	# A moving boat can otherwise leave newly nearby patches behind all of the
+	# old far requests. Keep partial work, but always service the closest land.
+	_jobs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_min := Vector2(a.coord) * CHUNK_SIZE_M
+		var b_min := Vector2(b.coord) * CHUNK_SIZE_M
+		return stream_xz.distance_squared_to(stream_xz.clamp(a_min, a_min + Vector2.ONE * CHUNK_SIZE_M)) \
+			< stream_xz.distance_squared_to(stream_xz.clamp(b_min, b_min + Vector2.ONE * CHUNK_SIZE_M))
+	)
 
 
 func _should_refresh_requests(stream_xz: Vector2) -> bool:
@@ -145,55 +170,118 @@ func _enqueue(request: Dictionary) -> void:
 
 
 func _process_jobs() -> void:
+	if not TREE_MESH.assets_ready(): return
 	var frame_started := Time.get_ticks_usec()
 	var completed := 0
 	while not _jobs.is_empty() and completed < maxi(max_jobs_per_frame, 1):
-		if completed > 0 and float(Time.get_ticks_usec() - frame_started) / 1000.0 >= build_budget_ms:
+		if float(Time.get_ticks_usec() - frame_started) / 1000.0 >= build_budget_ms:
 			break
-		var job := _jobs.pop_front() as Dictionary
+		var job := _jobs[0] as Dictionary
 		var coord: Vector2i = job["coord"]
-		_queued.erase(STREAMER.chunk_key(coord))
-		_build_chunk(coord, int(job["tier"]))
+		var key := STREAMER.chunk_key(coord)
+		var started := Time.get_ticks_usec()
+		var cached := _chunks.get(key, {}) as Dictionary
+		if not cached.has("transforms"):
+			if not job.has("placement"):
+				job["placement"] = create_placement_job(coord, NEAR_STEP_M, MAX_NEAR_PER_CHUNK)
+			var placement: Dictionary = job["placement"]
+			# Bound the expensive terrain/coverage queries, not just the number
+			# of entire patches. Keep incomplete work at the front of the queue.
+			advance_placement_job(_layout, placement, _flatten_zones, 16, true)
+			_last_build_ms = float(Time.get_ticks_usec() - started) / 1000.0
+			_peak_build_ms = maxf(_peak_build_ms, _last_build_ms)
+			if not placement.done:
+				continue
+			_build_chunk(coord, int(job["tier"]), placement)
+		else:
+			_build_chunk(coord, int(job["tier"]))
+		_jobs.pop_front()
+		_queued.erase(key)
+		_last_build_ms = float(Time.get_ticks_usec() - started) / 1000.0
+		_peak_build_ms = maxf(_peak_build_ms, _last_build_ms)
 		completed += 1
 
 
-func _build_chunk(coord: Vector2i, tier: int) -> void:
+func _build_chunk(coord: Vector2i, tier: int, prepared: Dictionary = {}) -> void:
 	var key := STREAMER.chunk_key(coord)
+	var previous := _chunks.get(key, {}) as Dictionary
 	_unload_chunk(key)
-	if tier == PROP_LOD.Tier.CULLED or tier == PROP_LOD.Tier.BILLBOARD_OR_SKIP:
+	if tier == PROP_LOD.Tier.CULLED:
 		return
 	var near := tier == PROP_LOD.Tier.FULL
-	var transforms := build_chunk_transforms(
-		_layout,
-		coord,
-		NEAR_STEP_M if near else MID_STEP_M,
-		MAX_NEAR_PER_CHUNK if near else MAX_MID_PER_CHUNK,
-		_flatten_zones,
-	)
+	var transforms: Array[Transform3D] = []
+	if prepared.has("transforms"):
+		transforms.assign(prepared["transforms"])
+	elif previous.has("transforms"):
+		transforms.assign(previous["transforms"])
+	else:
+		transforms = build_chunk_transforms(
+			_layout,
+			coord,
+			NEAR_STEP_M,
+			MAX_NEAR_PER_CHUNK if near else MAX_MID_PER_CHUNK,
+			_flatten_zones,
+		)
 	if transforms.is_empty():
+		# Remember empty sea/cleared patches too, rather than resampling all
+		# their candidates every time the observer moves.
+		_chunks[key] = {"node": null, "tier": tier, "instances": 0, "transforms": transforms}
 		return
 
 	var root := Node3D.new()
 	root.name = "Forest_%d_%d_T%d" % [coord.x, coord.y, tier]
 	add_child(root)
 
-	var mmi := MultiMeshInstance3D.new()
-	mmi.name = "Trees"
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = TREE_MESH.near_mesh() if near else TREE_MESH.mid_mesh()
-	mm.instance_count = transforms.size()
-	for i in range(transforms.size()):
-		mm.set_instance_transform(i, transforms[i])
-	mmi.multimesh = mm
-	mmi.material_override = TREE_MESH.near_material() if near else TREE_MESH.mid_material()
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(mmi)
+	var groups: Array = prepared.get("groups", previous.get("groups", []))
+	if groups.is_empty():
+		groups = [[], [], [], []]
+		for xf in transforms:
+			groups[coastal_species(_layout, Vector2(xf.origin.x,xf.origin.z))].append(xf)
+	for species in 4:
+		var selected: Array = groups[species]
+		if selected.is_empty(): continue
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = TREE_MESH.SPECIES[species]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = TREE_MESH.species_mesh(species, near)
+		mm.instance_count = selected.size()
+		for i in selected.size(): mm.set_instance_transform(i, selected[i])
+		mmi.multimesh = mm
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(mmi)
+		mmi.set_instance_shader_parameter("forest_lod_enabled", 1.0)
+		if near:
+			# The near patch contains both representations. Their shared shader
+			# hands over per tree at140-200m, before CPU patch LOD can unload it.
+			var far := MultiMeshInstance3D.new()
+			var far_mm := MultiMesh.new()
+			far_mm.transform_format = MultiMesh.TRANSFORM_3D
+			far_mm.mesh = TREE_MESH.species_mesh(species, false)
+			far_mm.instance_count = selected.size()
+			for i in selected.size(): far_mm.set_instance_transform(i, selected[i])
+			far.multimesh = far_mm
+			far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(far)
+			far.set_instance_shader_parameter("forest_lod_enabled", 1.0)
+			# Shadow the dense canopy with the matching two-triangle silhouette,
+			# rather than rendering every twig into every sun cascade.
+			var shadow := MultiMeshInstance3D.new()
+			var shadow_mm := MultiMesh.new()
+			shadow_mm.transform_format = MultiMesh.TRANSFORM_3D
+			shadow_mm.mesh = TREE_MESH.species_mesh(species, false)
+			shadow_mm.instance_count = selected.size()
+			for i in selected.size(): shadow_mm.set_instance_transform(i, selected[i])
+			shadow.multimesh = shadow_mm
+			shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+			root.add_child(shadow)
 
 	_chunks[key] = {
 		"node": root,
 		"tier": tier,
 		"instances": transforms.size(),
+		"transforms": transforms,
+		"groups": groups,
 	}
 
 
@@ -208,6 +296,8 @@ func _unload_chunk(key: Variant) -> void:
 
 
 func _clear_chunks() -> void:
+	if is_instance_valid(_distant): _distant.queue_free()
+	_distant = null
 	for key in _chunks.keys():
 		_unload_chunk(key)
 	_chunks.clear()
@@ -223,12 +313,13 @@ static func select_chunk_requests(
 	var requests: Array[Dictionary] = []
 	var minimum := int(floor(-half_extent_m / CHUNK_SIZE_M))
 	var maximum := int(ceil(half_extent_m / CHUNK_SIZE_M)) - 1
-	var center := STREAMER.world_to_chunk(stream_xz)
+	var center := Vector2i(floori(stream_xz.x / CHUNK_SIZE_M), floori(stream_xz.y / CHUNK_SIZE_M))
 	var chunk_radius := int(ceil(visual_radius / CHUNK_SIZE_M)) + 1
 	for z in range(maxi(minimum, center.y - chunk_radius), mini(maximum, center.y + chunk_radius) + 1):
 		for x in range(maxi(minimum, center.x - chunk_radius), mini(maximum, center.x + chunk_radius) + 1):
 			var coord := Vector2i(x, z)
-			var distance := STREAMER.distance_to_chunk(coord, stream_xz)
+			var nearest := stream_xz.clamp(Vector2(coord) * CHUNK_SIZE_M, Vector2(coord + Vector2i.ONE) * CHUNK_SIZE_M)
+			var distance := stream_xz.distance_to(nearest)
 			if distance > visual_radius:
 				continue
 			var tier := int(PROP_LOD.tier_for_distance(distance))
@@ -263,36 +354,118 @@ static func build_chunk_transforms(
 		max_instances: int,
 		flatten_zones: Array = [],
 ) -> Array[Transform3D]:
-	var origin := STREAMER.chunk_origin(coord)
-	var transforms: Array[Transform3D] = []
+	var job := create_placement_job(coord, step_m, max_instances)
+	advance_placement_job(layout, job, flatten_zones, 2147483647)
+	var result: Array[Transform3D] = []
+	result.assign(job.transforms)
+	return result
+
+
+static func create_placement_job(coord: Vector2i, step_m: float, max_instances: int) -> Dictionary:
 	var cells := int(floor(CHUNK_SIZE_M / step_m))
-	for z in range(cells):
-		for x in range(cells):
-			if transforms.size() >= max_instances:
-				return transforms
-			var cell := Vector2(
-				origin.x + (float(x) + 0.5) * step_m,
-				origin.y + (float(z) + 0.5) * step_m,
-			)
-			var h := _hash01(coord.x, coord.y, x, z)
-			var jitter := Vector2((h - 0.5) * step_m * 0.7, (_hash01(coord.y, coord.x, z, x) - 0.5) * step_m * 0.7)
-			var world_xz := cell + jitter
-			var density := ForestField.sample(world_xz)
-			if density < DENSITY_GATE:
-				continue
-			if h > density:
-				continue
-			# Flatten pads already zero ForestField; keep a hard reject for safety.
-			if _in_flatten(world_xz, flatten_zones):
-				continue
-			var height := STREAMER.sample_terrain_height(layout, world_xz, flatten_zones)
-			if height < 1.2:
-				continue
-			var yaw := h * TAU
-			var scale := lerpf(TREE_SCALE_MIN, TREE_SCALE_MAX, _hash01(x, z, coord.x, coord.y))
-			var basis := Basis.from_euler(Vector3(0.0, yaw, 0.0)).scaled(Vector3(scale, scale, scale))
-			transforms.append(Transform3D(basis, Vector3(world_xz.x, height, world_xz.y)))
-	return transforms
+	# Visit a deterministic permutation, not southern rows first. The cap must
+	# bound cost without concentrating every tree in one strip of the chunk.
+	var order: Array[int] = []
+	for i in cells*cells: order.append(i)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(_hash01(coord.x,coord.y,73,19)*2147483647)
+	for i in range(order.size()-1,0,-1):
+		var j := rng.randi_range(0,i)
+		var value := order[i]; order[i] = order[j]; order[j] = value
+	return {"coord": coord, "step": step_m, "cap": max_instances, "cells": cells,
+		"order": order, "cursor": 0, "transforms": [], "groups": [[], [], [], []], "terrain_samples": {}, "done": false}
+
+
+static func advance_placement_job(layout: Object, job: Dictionary, flatten_zones: Array,
+		candidate_budget: int, group_species := false) -> void:
+	var coord: Vector2i = job.coord
+	if not job.has("zones"):
+		job.zones = STREAMER.zones_intersecting_chunk(flatten_zones, coord, CHUNK_SIZE_M)
+	var local_zones: Array = job.zones
+	var origin := Vector2(coord) * CHUNK_SIZE_M
+	var cells: int = job.cells
+	var step_m: float = job.step
+	var transforms: Array = job.transforms
+	var stop := mini(int(job.cursor) + candidate_budget, job.order.size())
+	while int(job.cursor) < stop and transforms.size() < int(job.cap):
+		var index: int = job.order[job.cursor]
+		job.cursor += 1
+		var z := index / cells
+		var x := index % cells
+		var cell := Vector2(
+			origin.x + (float(x) + 0.5) * step_m,
+			origin.y + (float(z) + 0.5) * step_m,
+		)
+		var h := _hash01(coord.x, coord.y, x, z)
+		var jitter := Vector2((h - 0.5) * step_m * 0.7, (_hash01(coord.y, coord.x, z, x) - 0.5) * step_m * 0.7)
+		var world_xz := cell + jitter
+		var density := ForestField.sample(world_xz)
+		if density < DENSITY_GATE:
+			continue
+		if h > density:
+			continue
+		# Flatten pads already zero ForestField; keep a hard reject for safety.
+		if _in_flatten(world_xz, local_zones):
+			continue
+		var height := sample_root_height(layout, world_xz, local_zones, job.terrain_samples)
+		if height < 1.2:
+			continue
+		var yaw := _hash01(x, z, coord.y, coord.x + 117) * TAU
+		var scale := lerpf(TREE_SCALE_MIN, TREE_SCALE_MAX, _hash01(x, z, coord.x, coord.y))
+		var basis := Basis.from_euler(Vector3(0.0, yaw, 0.0)).scaled(Vector3(scale * 1.2, scale, scale * 1.2))
+		var xf := Transform3D(basis, Vector3(world_xz.x, height, world_xz.y))
+		transforms.append(xf)
+		if group_species:
+			job.groups[coastal_species(layout, world_xz)].append(xf)
+	job.done = int(job.cursor) >= job.order.size() or transforms.size() >= int(job.cap)
+
+
+## Nearby terrain uses 25m triangles, not the continuous noise field. Sample
+## the same diagonal so trunks meet the visible/collision surface. Cache grid
+## samples per placement job; adjacent trees share most of their vertices.
+static func sample_root_height(layout:Object, point:Vector2, zones:Array, cache:Dictionary) -> float:
+	var step:float=STREAMER.DEFAULT_LOD_STEPS[0]
+	var cell:=Vector2i(floori(point.x/step),floori(point.y/step))
+	var f:=point/step-Vector2(cell)
+	var b:=root_grid_height(layout,cell+Vector2i(1,0),step,zones,cache)
+	var c:=root_grid_height(layout,cell+Vector2i(0,1),step,zones,cache)
+	if f.x+f.y<=1.0:
+		var a:=root_grid_height(layout,cell,step,zones,cache)
+		return a*(1.0-f.x-f.y)+b*f.x+c*f.y
+	var d:=root_grid_height(layout,cell+Vector2i.ONE,step,zones,cache)
+	return b*(1.0-f.y)+c*(1.0-f.x)+d*(f.x+f.y-1.0)
+
+static func root_grid_height(layout:Object, cell:Vector2i, step:float, zones:Array, cache:Dictionary) -> float:
+	if not cache.has(cell):
+		cache[cell]=STREAMER.sample_render_terrain_height(layout,Vector2(cell)*step,zones)
+	return float(cache[cell])
+
+
+static func coastal_species(layout: Object, point: Vector2) -> int:
+	var inland := -float(layout.sample_signed_distance(point))
+	var height := float(layout.sample_height(point))
+	return coastal_species_from_samples(point,inland,height)
+
+
+static func coastal_species_from_samples(point:Vector2, inland:float, height:float) -> int:
+	var cell := point / 180.0
+	var ix := floori(cell.x)
+	var iz := floori(cell.y)
+	var fx := smoothstep(0.0, 1.0, cell.x - ix)
+	var fz := smoothstep(0.0, 1.0, cell.y - iz)
+	var patch := lerpf(
+		lerpf(_hash01(ix,iz,ForestField.world_seed,83),_hash01(ix+1,iz,ForestField.world_seed,83),fx),
+		lerpf(_hash01(ix,iz+1,ForestField.world_seed,83),_hash01(ix+1,iz+1,ForestField.world_seed,83),fx),fz)
+	var individual := _hash01(int(point.x),int(point.y),19,97)
+	patch += (individual - .5) * .28
+	# Exposed coastal scrub, pine on drier coastal ground, birch on upper
+	# slopes, sheltered conifer groups inland. A visual heuristic, not a biome map.
+	if inland < 75.0 or height > 600.0: return 3 if individual < .7 else 1
+	if height > 350.0: return 1 if individual < .8 else 3
+	if inland < 220.0: return 0 if individual < .65 else 1
+	if patch < .32: return 1
+	if patch < .68: return 0
+	return 2
 
 
 static func _in_flatten(world_xz: Vector2, flatten_zones: Array) -> bool:

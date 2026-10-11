@@ -1,0 +1,10 @@
+{
+  "near": {
+    "triangles": 6992,
+    "parts": 10
+  },
+  "far": {
+    "triangles": 1794,
+    "parts": 10
+  }
+}

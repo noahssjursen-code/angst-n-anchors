@@ -1,13 +1,14 @@
 shader_type spatial;
-render_mode diffuse_burley, specular_disabled, cull_disabled;
+uniform float chop_strength : hint_range(0.0, 1.0) = 0.2;
+render_mode diffuse_burley, cull_disabled;
 
 
 // Horizon ring — cascade 0 only. Same water shading language as the inner mesh
 // so the seam doesn't turn into a plastic mirror.
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
-uniform sampler2DArray slope_map        : filter_linear, repeat_enable;
-uniform float length_scale_0 = 256.0;
+uniform sampler2DArray slope_map        : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float length_scale_0 = 1024.0;
 
 uniform float wave_time = 0.0;
 uniform float wave_intensity = 1.0;
@@ -36,6 +37,8 @@ uniform float glint_strength : hint_range(0.0, 4.0) = 0.18;
 uniform vec4 debug_tint : source_color = vec4(0.0);
 
 varying vec3 v_world_pos;
+varying vec2 v_fft_xz;
+varying float v_amplitude;
 varying vec3 v_local_pos;
 varying vec3 v_world_normal;
 varying float v_fresnel;
@@ -58,6 +61,8 @@ void vertex() {
 	}
 
 	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * wave_fade * shelter;
+	v_fft_xz = wp.xz;
+	v_amplitude = amp_scale;
 
 	vec2 uv = wp.xz / length_scale_0;
 	vec3 disp  = textureLod(displacement_map, vec3(uv, 0.0), 0.0).xyz;
@@ -79,7 +84,8 @@ void fragment() {
 	if (discard_half > 0.0 && abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
 		discard;
 	}
-	vec3 nm = normalize(v_world_normal);
+	vec2 pixel_slope = texture(slope_map, vec3(v_fft_xz / length_scale_0, 0.0)).xy;
+	vec3 nm = normalize(vec3(-pixel_slope.x * v_amplitude, 1.0, -pixel_slope.y * v_amplitude));
 	if (!FRONT_FACING) {
 		nm = -nm;
 	}
@@ -100,33 +106,13 @@ void fragment() {
 			* mix(0.45, 1.0, crest_noise);
 	crest *= mix(1.0, 0.5, clamp((wave_intensity - 0.8) * 0.4, 0.0, 1.0));
 
-	vec3 body = mix(deep_albedo, shallow_albedo, (1.0 - facing) * (0.25 + near_color_lift * 0.4));
-	body = mix(body, vec3(0.015, 0.10, 0.12), crest * 0.28);
-	body *= 1.0 - clamp(-height_rel, 0.0, 0.35) * 0.22;
-
-	vec3 ref_dir = reflect(-view_dir, nm);
-	float sky_t = pow(clamp(ref_dir.y * 0.5 + 0.5, 0.0, 1.0), 0.85);
-	vec3 sky_col = mix(sky_horizon_color, sky_top_color, sky_t);
-	float sky_w = fres * fresnel_sky_mix * mix(1.1, 0.4, facing);
-	vec3 col = mix(body, sky_col, clamp(sky_w, 0.0, 0.9));
-
-	float ndh = clamp(dot(nm, normalize(view_dir + sun_n)), 0.0, 1.0);
-	float glint = min(pow(ndh, 140.0) * 0.4, 0.35);
-	col += sun_color * glint * glint_strength * sun_up * (0.15 + fres * 0.4);
+	vec3 col = mix(deep_albedo, shallow_albedo, 0.08 + crest * 0.10);
 	col = mix(col, debug_tint.rgb, debug_tint.a);
 
 	ALBEDO = col;
-	ROUGHNESS = 0.78;
+	float normal_variance = max(length(dFdx(nm)), length(dFdy(nm)));
+	ROUGHNESS = clamp(0.14 + chop_strength * 0.30 + normal_variance * 0.35, 0.14, 0.38);
 	METALLIC = 0.0;
-	SPECULAR = 0.0;
-}
-
-void light() {
-	if (!LIGHT_IS_DIRECTIONAL) {
-		float ndl = max(dot(NORMAL, LIGHT), 0.0);
-		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndl * 0.06;
-		vec3 h = normalize(VIEW + LIGHT);
-		float ndh = max(dot(NORMAL, h), 0.0);
-		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * pow(ndh, 64.0) * v_fresnel * 0.2;
-	}
+	SPECULAR = 0.25;
+	NORMAL = normalize((VIEW_MATRIX * vec4(nm, 0.0)).xyz);
 }

@@ -6,7 +6,7 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	for starter_id in ["fishing", "general_cargo", "bulk"]:
+	for starter_id in ["fishing", "general_cargo", "bulk", "coaster"]:
 		_test_onboarding(starter_id)
 	_test_legacy_migration()
 	print("company_service_test: PASS")
@@ -35,13 +35,9 @@ func _test_onboarding(starter_id: String) -> void:
 	assert(player.total_marks_earned == 0, "opening capital is not lifetime revenue")
 	assert((player.company.get("warehouse_leases", []) as Array).size() == 1)
 	assert(bool(player.company.get("onboarding_complete", false)))
-	var registration := str((player.owned_vessels[0] as Dictionary).get("registration_id", ""))
-	var expected: String = str({
-		"fishing": "fishing_vessel",
-		"general_cargo": "cargo_vessel",
-		"bulk": "bulk_vessel",
-	}[starter_id])
-	assert(registration == expected, "%s starter has correct registration" % starter_id)
+	var vessel: Dictionary = player.owned_vessels[0]
+	assert(ImportedVesselLayout.valid(VesselSpawn.brick_layout_of(vessel), vessel.hull_id, true))
+	assert(not VesselSpawn.resolve_deployable_record(vessel).is_empty(), "starter must actually spawn")
 
 	var retried := service.create_company(command)
 	assert(bool(retried.get("ok", false)), "same onboarding request is idempotent")

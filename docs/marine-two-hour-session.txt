@@ -1,0 +1,95 @@
+MARINE MODELING SESSION — 6 October 2026
+Authorized by Noah: continue working during his birthday party for two hours.
+Start 16:24 Europe/Oslo (14:24 UTC); end 18:24 Oslo (16:24 UTC).
+This explicitly supersedes the expired overnight 08:00 stop. Existing 30-minute
+heartbeat resumed with the new deadline as continuity protection. Work actively
+through the session, not a succession of short token batches.
+Branch feature/3d-model-migration. Commit/push verified scopes; no main/reset/force.
+
+Ordered work list
+[x] 1. Crane quality: bevel/trim cabin, structural pedestal/gussets, access and
+      guards, coherent visible hoist route, richer articulated grab mechanics.
+      Preserve pivots, cutting lip, control ranges and gameplay contracts.
+[x] 2. A distinct 32 x 10 m hull: 0.5 m outline lattice, exact 2:1 / 1:1 bow
+      edges, authored underwater form, separate hatch/coaming components,
+      builder palette/grid/perimeter, provisional handling and stern hardware.
+      No stretching an existing entire boat or scaling metre-based accessories.
+[x] 3. Useful deck fittings and lights: pick next needed reusable parts after
+      hull review; route working lights through existing lighting state. Verify
+      daytime/off/night presentation. Do not bypass authority or save contracts.
+[x] 4. Visual iteration, relevant interaction/draft/playtest checks, scoped pushes,
+      remote verification and final screenshots/handoff; pause at 18:24 Oslo.
+
+Quality bar
+Use primary equipment/vessel visual references, Blender source + GLB pairs,
+separate reusable parts and material channels. Close and in-context Godot renders
+are mandatory. Correct visible intersections and unsupported components. Record
+unresolved limits explicitly. No claims of completed fleet/network migration.
+
+Progress
+16:24 Started at clean 276ab84. Read repository/model contracts and prior handoff.
+
+16:35 Crane geometry pass built/imported: fabricated edge treatment, pedestal
+radial gussets, race bolts/access plate, complete service guards/gate/ladder,
+glazing gaskets/wiper/door trim, hoist drum/windings/bearings, dynamic feed lines,
+boom-top ropes, grab power enclosure/pin bosses and two independent hydraulics.
+Actual Godot close renders corrected planar cheek thickness and shaft scaling.
+Expanded rig checks pass 5 grab poses at 3 scales, feed-wire anchors at 8/32/72deg,
+existing lip/mouth/jaw/slew/luff checks. Existing auto crane loading passes real
+lot/mass conservation. Still simplified sheave contact and missing power umbilical;
+ladder is visual rather than a new climbing interaction. Next: final rear capture,
+scoped push, then 32 x 10 hull work. No whole-session completion claim.
+
+32 m hull batch: built independent 32 x 10 x 4.5 m platform, shaped/raked stern,
+6 x 12 hold with real tank top, separate coaming and four 6 x 3 covers. All 78
+perimeter placements reuse mathematically matching existing miter variants.
+107-record draft, contextual family placement, per-platform mooring positions.
+Found/fixed hatch floor visibility hardcoded to one ID, plus equipment paint flag
+ignored by editor assembly. Material isolation and unchanged 24 m save/load pass.
+Rendered assembly/bow/hold/stern, real open-hold ray hits, and ocean interaction
+checks pass. Larger vessel steering observation scales with length; force logic
+unchanged. Handling/hardware still provisional. No bulk inventory for this hull.
+Next: useful editable lighting and vessel detail; remain active through 18:24.
+
+17:03 Lighting batch: five separate editable Blender fixtures, six placements on
+all four examples, normal L presets/independent ships/day dimming/lens-off checks.
+Visual review found excessive old fill energy and corrected imported near-field
+spill and flood energy. Actual night/close/off/coaster/day captures inspected.
+All four builder drafts save/reload; cleaning fixture shutdown before commit.
+Next refinement is the 32 m stern gear, which still uses the undersized prototype.
+Lighting validation complete: four draft checks clean. Headless thumbnail jobs now skip render waits (the source of 24 leaked environments). Night/day/close renders accepted for this pass; nav sector optics remain approximate.
+
+17:12 Dedicated 32 m stern batch: raised underwater counter; separately authored
+1.8 m screw, 2.1 m spade, shaft bearing/hanger/trunk. Fixed non-planar transom
+closure after close visual review. Local/remote state, dry fuel, reload, sampled
+hull clearance and full rotation/steering extent checks pass. Actual 32 m ocean
+playtest passes with normal HUD, helm/seats/door/walking/drive/reset. Original
+14 m stern gear regression passes. Hydrodynamic sizing remains provisional.
+Next: trawler gantry and deployed fishing gear, replacing the translucent cone.
+
+17:34 Trawler refinement: seven independent assets for gantry/blocks/sheaves,
+mirrored steel doors, real open net and stowed bundle; two-bay winch with connected
+hydraulic hoses. Supplied stern routes clear bulwarks. Transformed anchor and
+stow-collider checks pass. Real ocean G input deploys/retracts through existing
+helm control, with catch/drag/authority unchanged. Shore-transfer and draft checks
+pass. Reviewed close pulley/deck/net and in-ocean captures. Deployment remains
+instant pose switching; no seabed/rope physics claim. Next: a usable standard
+stair module and a more substantial editable superstructure for the 32 m hull.
+
+18:02 Access/accommodation batch: two independent Blender access assets and
+162-part two-level coaster, solid support attachment panels, wraparound bridge.
+Actual player climbs/descends at slow/normal speed and with +/- tilt, enters the
+upper door and approaches the helm. Fixed missing playtest rail posts plus slow
+step/nosing contact handling. Low-ceiling/tall-obstacle checks pass. Corrected
+coplanar grip mats and floor finish after close visual review. Forward+ close
+stairs/bridge/full vessel and actual ocean F-to-helm/HUD/drive/reset pass.
+Completing regression checks and pushing; then a small reusable ventilation kit
+will add useful manufactured roof/deck detail, followed by final handoff.
+
+18:13 Final fittings: two separate Blender ventilation assets, added as three
+placements on the coaster (165 total). Inspected manufacturer photographs;
+corrected hood centre/shading and wall mounting depth after close renders.
+Player test confirms portside passage; per-instance paint is isolated. Final
+library/upper-floor save-load capture and source/import checks in progress.
+
+18:22 Final audit: 24 new valid GLBs, every one with a Blender source; all model manifest paths resolve. Twelve named final evidence logs are clean. Fresh final coaster/trawler ocean verification markers passed. Seven implementation batches pushed and remote SHAs verified. Handoff saved in docs/marine-two-hour-handoff.txt; no unfinished implementation is hidden. Pausing the continuity automation at the 18:24 session boundary.

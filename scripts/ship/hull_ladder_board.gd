@@ -17,17 +17,9 @@ const GROUP := "hull_ladder_board"
 ## Ladder hangs in local −X; drop matches BrickCatalog visual.
 const DROP_M := 2.0
 
-var _prompt_layer: CanvasLayer
-var _prompt_label: Label
-
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	_ensure_prompt_ui()
-
-
-func _process(_delta: float) -> void:
-	_update_prompt()
 
 
 func _input(event: InputEvent) -> void:
@@ -61,12 +53,14 @@ static func blocks_helm_for(player: CharacterBody3D) -> bool:
 func _climb_up(player: CharacterBody3D) -> void:
 	player.global_position = deck_stand_global()
 	player.velocity = Vector3.ZERO
+	WorldSound.play_set("ladder", "ladder_step", deck_stand_global(), -8.0)
 	boarded.emit()
 
 
 func _climb_down(player: CharacterBody3D) -> void:
 	player.global_position = quay_stand_global()
 	player.velocity = Vector3.ZERO
+	WorldSound.play_set("ladder", "ladder_step", quay_stand_global(), -8.0)
 	disembarked.emit()
 
 
@@ -99,34 +93,3 @@ func deck_stand_global() -> Vector3:
 func quay_stand_global() -> Vector3:
 	## Stand at the foot plate outboard of the hull.
 	return global_transform * Vector3(-1.4, -DROP_M + 0.15, 0.0)
-
-
-func _ensure_prompt_ui() -> void:
-	_prompt_layer = CanvasLayer.new()
-	_prompt_layer.layer = 40
-	add_child(_prompt_layer)
-	_prompt_label = Label.new()
-	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt_label.anchor_left = 0.5
-	_prompt_label.anchor_right = 0.5
-	_prompt_label.anchor_top = 0.78
-	_prompt_label.anchor_bottom = 0.78
-	_prompt_label.offset_left = -220.0
-	_prompt_label.offset_right = 220.0
-	_prompt_label.offset_top = -18.0
-	_prompt_label.offset_bottom = 18.0
-	_prompt_label.add_theme_font_size_override("font_size", 18)
-	_prompt_label.add_theme_color_override("font_color", Color(0.95, 0.92, 0.8))
-	_prompt_label.visible = false
-	_prompt_layer.add_child(_prompt_label)
-
-
-func _update_prompt() -> void:
-	if _prompt_label == null:
-		return
-	var player := nearby_player()
-	if player == null:
-		_prompt_label.visible = false
-		return
-	_prompt_label.text = prompt_down if player_on_deck(player) else prompt_board
-	_prompt_label.visible = true

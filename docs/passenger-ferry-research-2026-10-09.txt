@@ -1,0 +1,198 @@
+Bergen-inspired fast passenger ferry and terminal
+Research checkpoint: 9 October 2026
+
+Noah requested a passenger pier/terminal and high-speed catamaran, with Skyss
+and Norled boats around Bergen as references. This is research and a build
+brief, not a completed vessel or tested passenger service. Multiplayer remains
+out of scope. Existing accepted ocean and player locomotion stay unchanged.
+
+Reference choice
+
+Use the Brødrene Aa / Norled Fjordbris family as the principal visual reference.
+Builder data: 36.7 x 10.8 m, 240 passengers, carbon-sandwich/vinylester structure,
+35-knot service speed and Servogear controllable-pitch propellers. [1]
+Servogear lists four 900 kW engines and 1,450 mm propellers; its table says
+38 knots while the description says 35-knot service. Treat 35 as the reference
+cruise, not a guaranteed game speed or a reason to impose a velocity cap. [2]
+The two sources differ on delivery year (2013/2014); this does not affect the
+game design. Gross tonnage on the builder page is NOT displacement mass.
+
+Useful alternatives: Fjordlys is a smaller 27 x 8.8 m, 180-passenger, 30-knot
+Norled catamaran [3]. Oma confirms that Vingtor, Njord and Frøya were built for
+Norled's Bergen/Sogn services, with 290/290/190 passengers respectively [4].
+Skyss lists both local Bergen commuter services and longer regional routes [5].
+These are distinct operational references; do not call every Norled boat a
+current Bergen commuter boat or apply one vessel's machinery to another.
+
+Visual inspection completed
+
+Actually viewed the builder's Fjordbris exterior, wheelhouse, saloon and control
+photos, plus Oma's Bergen harbour photo. Observed a long dark window band, low
+white superstructure, dark twin hulls and a raised red bridge. The saloon has
+proper seat rows, clear aisles, large windows, ceiling panels and downlights;
+the bridge uses seated controls and wraparound glazing. These are references
+for original modular artwork, not game textures or permission to redistribute
+the photographs. Source images remain outside the repository.
+
+Read and rendered the relevant Skyss/Rambøll 2021 terminal study pages [6].
+Printed p31 documents the terminal building and separate waiting shelter at
+Strandkaien. Printed pp25 and 41 describe bow boarding with side support, and
+the wide bow gangway's passenger-flow advantages. Figures 28-31 distinguish
+existing quays from proposed angled floating piers and show alongside regional
+boats as well. The floating-pier layouts are study proposals, not evidence of
+what was built. Use these as design precedents, not current construction claims.
+
+Recommended first game vessel: working title Coastal Express 240
+
+Original editable 36.5 x 11 m catamaran, rounded to the builder lattice. Target
+roughly 200-240 usable passenger places; settle the exact count after a measured
+interior layout and player clearance review. Never grant 240 merely from the
+name. Aiming for the reference's 35-knot cruise requires measured displacement,
+resistance and machinery tuning with empty and occupied loads.
+
+The silhouette should be recognizable before adding fittings: two slender
+demihulls with an open tunnel; a raised connecting deck; long glazed passenger
+saloon; an upper forward saloon/bridge mass with a restrained swept front; a
+clear bow landing platform and independently moving ramp. Include a side
+boarding door so an alongside terminal remains useful too. Avoid turning the
+existing freighter into a ferry by attaching a second hull or stretching cabins.
+
+Build in Blender as reusable components: hull assembly with separately identified
+demihulls/deck; saloon wall/window bays and end sections; roof sections; angled
+bridge glazing; bow ramp, hinges and guardrails; side door; seat rows; luggage
+rack; accessible toilet enclosure; small kiosk; ventilation and machinery covers.
+Reuse approved railings, navigation lights, bitts, liferafts, helm instruments
+and compatible stairs. Each movable part retains a real pivot and walk collision.
+Keep separate Blender sources, exported assets, paint regions and mounting data.
+
+Finish: white marine paint/composite, dark hull finish, rubber rubbing strakes,
+metal rails, deliberate glass tint, textured upholstery and nonslip flooring.
+Use the approved SurfaceMaterialLibrary wherever suitable. Keep wear around
+boarding thresholds, machinery access and waterlines; do not cover a composite
+passenger ferry in freighter-style rust. Livery remains recolourable.
+
+Recommended terminal kit
+
+First model one compact terminal with a real waiting room, desk, WC/service
+space, glazed waterfront facade, canopy, seating, information board and a clear
+pedestrian path to the gate. Initial game layout allowance: approximately
+18 x 10 m building plus its forecourt, not a surveyed Strandkaien replica.
+Make a shelter-only rural variant from the same kit later.
+
+One dedicated passenger berth with a broad bow landing, fenders, side support,
+bollards, edge protection, ladder, lifering and practical lighting. Author a
+roughly 45 x 15 m vessel clearance envelope for the proposed 36.5 x 11 m ferry;
+this is an initial game allowance to verify, not an engineering standard.
+Reserve room for backing out and turning. Boarding path and mooring lines must
+not cross. Separate the public approach from cargo machinery and truck routes.
+An alongside layout is a second variant using the same terminal and fittings.
+
+Use a named boarding interface: terminal landing pose, boarding direction,
+allowed vessel envelope and landing-height range; ship ramp/door sockets and
+their clearance. Bow and alongside berths need explicit approach poses. Do not
+pretend bow-in arrival is a 90-degree rotation of the current long-side mooring
+logic. A fixed pier with a ship-mounted moving ramp is sufficient for the first
+working slice. Floating pontoons/charging infrastructure are later options.
+
+Current project findings (read-only inspection)
+
+- scripts/ship/vessels/passenger_catamaran.gd is a legacy 45 x 16 m physical
+  hull. _build_hull_visual currently creates an empty anchor. Its 2.4 MN thrust
+  multiplied by 19.5 m/s / 0.72 implies about 65 MW. Do not use this as a tuned
+  passenger-vessel baseline. It does demonstrate separated demihull buoyancy
+  and collision slices, which can inform the current imported pipeline.
+- ImportedHullCatalog has no imported catamaran. ImportedDraftVessel.configure
+  builds one aggregate station set, invokes the monohull system assembly, and
+  wraps imported hull vertices in one convex collision. For a catamaran that
+  would fill the tunnel. Use explicit demihull stations and separate collision
+  shapes, with valid equilibrium draft, roll response and mass distribution.
+- MarineEngineCatalog has one machinery mount per hull; ShipDriveVisual has
+  one propeller/rudder pair. Extend hull-specific equipment configuration for
+  multiple drives without changing existing monohull behavior. Source confirms
+  CPP, not waterjets. Exact Fjordbris shaft/gear arrangement is not established
+  here; do not infer shaft count solely from engine count. Start an original
+  two-drive layout only with an explicit documented machinery choice.
+- ImportedDraftVessel adds SeatSocket interactions, but no passenger manifest,
+  terminal boarding flow or fare service was found in the current port/cargo/
+  company systems. Old passenger-role/registration labels are not a service.
+- HarbourDeploy.terminal_families_for_record recognizes actual fishing/cargo/
+  bulk equipment. Add a passenger capability based on usable accommodation and
+  boarding equipment, then prefer passenger berths. A helm/crew chair alone must
+  not classify today's freighters and trawlers as ferries.
+- ShipGangway currently chooses 1 m straight side halfwalls and builds a 0.90 m
+  walkway with a 0.60 maximum slope tangent. Preserve it for existing boats.
+  Passenger bow boarding needs a wider authored interface and separate, gentler
+  operating limits. An existing maximum walking slope is not an accessibility
+  design target or certification.
+- Port plans are persistent geographic/berth records. Add passenger facilities
+  deliberately at selected suitable sites; do not regenerate existing harbours,
+  move terrain or silently replace occupied berths. Start with two isolated
+  terminals, then make the generated-world integration save-compatible.
+- The current company/UI rebuild includes uncommitted and untracked dependencies.
+  Preserve those changes and do not sweep them into a ferry commit.
+
+Small complete gameplay slice
+
+Purchase and deploy the ferry through existing shipwright/harbourmaster services.
+Choose a passenger sailing at the terminal. Secure the boat; align the correct
+boarding door/ramp; open boarding; count passengers onto valid seats; close and
+stow; cast off; drive to a second passenger terminal; secure; disembark; settle
+one payment. Handle full capacity, wrong destination, obstructed/unsafe ramp,
+interrupted boarding, cancellation and scratch save/reload without duplicate
+passengers or money. Boarding is disabled while moving or unsecured.
+
+Passenger state belongs in a small persistent service record with sailing ID,
+vessel UID, origin, destination, counts/seat allocation and settlement state,
+using the existing local authority and company ledger. It is not a disguised
+ContainerUnit or an NPC-derived account balance. Each completed boarding/alighting
+transition must preserve counts; visual actors only represent that state.
+Route demand and a simple point-to-point service come first. A timetable can
+follow after travel duration is measured: copying real 13-minute departures into
+the accelerated game clock would be misleading. Do not build a scheduling empire
+before one round trip works.
+
+Performance and acceptance
+
+Seat positions/capacity are data. Batch identical static seat geometry; activate
+nearby interactions and detailed interiors when needed. Use pooled visible
+passengers at the terminal and in the cabin, with cheap seated/distant variants;
+do not run hundreds of full player IK controllers. Logical occupancy must stay
+exact even when actors are culled. Stream terminal detail with the existing port
+system and author 3D LOD meshes for its distant silhouette.
+
+Build order for the next implementation batch
+1. Measured arrangement plus imported twin-hull physics/collision support in an
+   isolated scene. Verify the tunnel is open and old vessels remain unchanged.
+2. Reusable Blender exterior/interior and two terminal layouts. Assemble/save/
+   reload through the actual shipyard. Inspect bow, broadside, stern, helm,
+   passenger aisle and terminal approach in real daytime/night Godot renders.
+3. Walk from waiting room across a moving ramp into a seat and up to the helm;
+   review alignment under wave motion. No changes to accepted character gait.
+4. Add the lean passenger service and one full two-terminal round trip; verify
+   counts, seat capacity, handling/braking, payment and scratch persistence.
+5. Integrate selected generated ports without changing saved geography, then
+   measure close-up and approaching-port frame time. Mark unfinished parts
+   honestly; a fast physics test alone is not visual or gameplay acceptance.
+
+Source register (accessed 9 October 2026)
+[1] Brødrene Aa, Fjordbris: builder specifications and photo gallery.
+https://www.braa.no/fast-ferries/ms-fjordbris
+[2] Servogear, Fjordbris: installed machinery/propeller reference.
+https://www.servogear.com/references/fjordbris
+[3] Brødrene Aa, Fjordlys: smaller passenger-catamaran comparator.
+https://www.braa.no/fast-ferries/fjordlys
+[4] Oma Baatbyggeri, History, Sognebåtene section and Bergen harbour photo.
+https://oma.no/history/
+[5] Skyss, boat routes: 390, 490, 190, 890, 2075 and 2080 context.
+https://www.skyss.no/en/travel/timetables-and-maps/rutetabellar-for-bat/
+[6] Rambøll for Skyss, Elektriske bybåter i Bergen, version 1.01, 31 January 2021.
+PDF physical pages 27-28, 33, 41-45 / printed pages 25-26, 31, 39-43 reviewed.
+https://www.skyss.no/globalassets/om-skyss/strategiar-og-fagstoff/fagrapportar-og-utgreiingar/2021/elektriske-bybater-i-bergen-v101.pdf
+
+Local evidence
+Source images and PDF: work/ferry-research-20261009 in the Codex task workspace.
+Actual PDF review renders saved under C:/Users/noahs/Pictures/machinescreenshots:
+20261009-ferry-research-strandkaien-skyss-p33.png
+20261009-ferry-research-bow-boarding-skyss-p43.png
+20261009-ferry-research-pontoon-layout-skyss-p45.png
+These are research renders, not screenshots of a new in-game ferry.

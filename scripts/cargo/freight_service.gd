@@ -41,19 +41,29 @@ func sync_from_player_data(data: Variant) -> void:
 
 
 func offers_at(port_id: String) -> Array[Dictionary]:
-	return _generated_offers(port_id, FreightOfferGenerator.OFFER_COUNT)
+	return _generated_offers(port_id, 0)
 
 
 func eligible_offers_at(port_id: String, ship: BoatBody) -> Array[Dictionary]:
 	if not is_ship_ready_at_port(ship, port_id):
 		return []
 	var eligible: Array[Dictionary] = []
-	for offer in _generated_offers(port_id, 0):
+	for template in _generated_offers(port_id, 0):
+		# The old fixed-size bulk fallback would duplicate the same full-hold job.
+		if str(template.id).ends_with(":small"):
+			continue
+		var offer := template.duplicate(true)
+		var quantity := floorf(available_cargo_quantity(ship, str(offer.commodity_id), str(offer.handling_mode)))
+		if quantity < 1.0:
+			continue
+		offer["quantity"] = quantity
+		offer["pay_marks"] = FreightOfferGenerator.payment_for(float(offer.distance_m), str(offer.handling_mode), quantity)
+		# A different capacity is a different quote. A stale panel cannot silently
+		# book a smaller load or price when another job has reserved its space.
+		offer["id"] = "%s:vessel:%s:load:%d" % [template.id, _vessel_uid(ship), int(quantity)]
 		if is_offer_compatible_with_ship(offer, ship):
 			eligible.append(offer)
-		if eligible.size() >= FreightOfferGenerator.OFFER_COUNT:
-			break
-	return eligible
+	return FreightOfferGenerator.select_offers(eligible, 0)
 
 
 func _generated_offers(port_id: String, max_offers: int) -> Array[Dictionary]:
@@ -68,6 +78,75 @@ func _generated_offers(port_id: String, max_offers: int) -> Array[Dictionary]:
 
 func active_contracts() -> Array[Dictionary]:
 	return _active.duplicate(true)
+
+
+## A booking can be released without a fee while its cargo is still ashore.
+## Never orphan cargo already aboard or suspended on a crane. UI previews and
+## the command both use this authoritative check, including stale-panel retries.
+func cancellation_status(contract_id: String) -> Dictionary:
+	if PlayerSession.is_remote_voyage():
+		return {"allowed":false,"reason":"Contract cancellation is not available on this server."}
+	var index := _contract_index(contract_id)
+	if index < 0:
+		return {"allowed":false,"reason":"This job is no longer active."}
+	var contract := _active[index]
+	var loaded := float(contract.get("loaded_quantity",0.0))
+	var delivered := float(contract.get("delivered_quantity",0.0))
+	if loaded > delivered + .001:
+		return {"allowed":false,"reason":"Cargo is already aboard. Unload it at the destination before cancelling the remaining booking."}
+	var harbour := HarbourRegistry.controller(str(contract.get("origin_port_id","")))
+	if harbour != null:
+		for equipment_id in harbour.equipment_ids_on_berth(str(contract.get("berth_id",""))):
+			var equipment := harbour.get_equipment(equipment_id)
+			if equipment != null and equipment.is_job_active():
+				return {"allowed":false,"reason":"A transfer is running at this quay. Stop it before cancelling."}
+	var waiting := _waiting_contract_containers(contract)
+	var issued := float(contract.get("issued_quantity",0.0))
+	var accounted := loaded
+	if str(contract.get("handling_mode","")) in ["general","container"]:
+		accounted += waiting.size()
+	if issued > accounted + .001:
+		return {"allowed":false,"reason":"Cargo has left the quay and is still in transit on handling equipment. Return or finish transferring it first."}
+	return {"allowed":true,"reason":"No cancellation fee. Reserved space and waiting quay cargo will be released; no delivery payment is earned."}
+
+
+func cancel_contract(contract_id: String) -> Dictionary:
+	var status := cancellation_status(contract_id)
+	if not bool(status.allowed):
+		return CompanyContracts.result_error("cannot_cancel",str(status.reason))
+	var index := _contract_index(contract_id)
+	var previous := _active.duplicate(true)
+	var waiting := _waiting_contract_containers(_active[index])
+	_active.remove_at(index)
+	PlayerSession.data.accepted_contracts = active_contracts()
+	# Commit the booking removal before deleting its physical staging. Roll back
+	# without restore_contracts(), which intentionally resets voyage counters.
+	if not PlayerSession.save_now():
+		_active.assign(previous)
+		PlayerSession.data.accepted_contracts = active_contracts()
+		return CompanyContracts.result_error("save_failed","The cancellation could not be saved. Your job and cargo are unchanged; try again.")
+	for entry in waiting:
+		var pad := entry.pad as CargoSlotPadComponent
+		var container := entry.container as ContainerNode
+		if is_instance_valid(pad) and is_instance_valid(container):
+			pad.take_container_node(container)
+			container.queue_free()
+	_publish()
+	return CompanyContracts.result_ok({"message":"Job cancelled. Reserved cargo space released. No fee charged."})
+
+
+func _waiting_contract_containers(contract: Dictionary) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	var harbour := HarbourRegistry.controller(str(contract.get("origin_port_id","")))
+	if harbour == null: return found
+	var consignment_id := str((contract.get("consignment",{}) as Dictionary).get("consignment_id",""))
+	for yard in harbour.yards_on_berth(str(contract.get("berth_id",""))):
+		if yard is not CargoSlotPadComponent: continue
+		for container in (yard as CargoSlotPadComponent).iter_container_nodes():
+			if not is_instance_valid(container) or container.unit == null: continue
+			if container.unit.freight_contract_id == str(contract.id) and container.unit.consignment_id == consignment_id:
+				found.append({"pad":yard,"container":container})
+	return found
 
 
 ## Called after the authoritative world port directory is populated. This also
@@ -104,6 +183,8 @@ func accept_offer(offer: Dictionary) -> bool:
 
 
 func accept_offer_for_ship(offer: Dictionary, ship: BoatBody, port_id: String) -> bool:
+	if str(offer.get("origin_port_id", "")) != port_id:
+		return false
 	if not is_ship_ready_at_port(ship, port_id) or not is_offer_compatible_with_ship(offer, ship):
 		return false
 	var accepted := offer.duplicate(true)
@@ -124,23 +205,69 @@ func is_offer_compatible_with_ship(offer: Dictionary, ship: BoatBody) -> bool:
 	if ship == null or not is_instance_valid(ship):
 		return false
 	var commodity_id := str(offer.get("commodity_id", ""))
+	var destination := PortCatalog.get_port_info(str(offer.get("destination_port_id", "")))
+	if destination.has("freight_berths"):
+		var fits := false
+		for slot in destination.freight_berths:
+			if (slot.get("commodities", []) as Array).has(commodity_id) and float(slot.get("length_m", 0.0)) + 0.01 >= ship.length_m + 4.0:
+				fits = true
+				break
+		if not fits: return false
+	var limit_name := str(destination.get("max_ship_class_name", ""))
+	var hull := HullRegistry.get_by_id(str(ship.get_meta("hull_id", "")))
+	for class_id in ShipClass.DISPLAY_NAME:
+		if destination.has("freight_berths"): break
+		if str(ShipClass.DISPLAY_NAME[class_id]) != limit_name: continue
+		if ImportedHullCatalog.has(str(ship.get_meta("hull_id", ""))):
+			if float(hull.get("loa_m", 0.0)) > ShipClass.max_length(class_id): return false
+		elif int(hull.get("ship_class", 0)) > int(class_id): return false
 	var berth := ship.get_moored_berth() as QuayBerthSlot
 	if berth == null or not berth.commodities.has(commodity_id):
 		return false
 	var required := float(offer.get("quantity", 0.0))
+	if not is_finite(required) or required <= 0.0:
+		return false
 	var handling := str(offer.get("handling_mode", ""))
 	if handling in ["general", "container"]:
+		if not is_equal_approx(required, roundf(required)):
+			return false
+	return available_cargo_quantity(ship, commodity_id, handling) >= required
+
+
+## Actual free equipment space minus outstanding bookings, shared by offer
+## sizing and acceptance. Vessel names and nominal hull classes grant no space.
+func available_cargo_quantity(ship: BoatBody, commodity_id: String, handling: String) -> float:
+	if ship == null or not is_instance_valid(ship):
+		return 0.0
+	if handling in ["general", "container"]:
+		# Match the units issued by make_container_units, including real ISO size
+		# and each pad's cell resolution. Legacy nominal slots can be too short.
+		var unit := ContainerFactory.make_one("", "", commodity_id)
 		var free_units := 0
 		for pad in ship.get_cargo_pads():
-			free_units += pad.get_free_slot_count()
-		return float(free_units) - _reserved_quantity(ship, false) >= required
+			free_units += pad.get_free_slot_count(unit.footprint_cells(pad.cell_size_m))
+		return maxf(0.0, float(free_units) - _reserved_quantity(ship, false))
 	if handling == "bulk":
 		var available_t := 0.0
 		for hold in ship.get_bulk_holds():
-			if hold.can_accept_commodity(commodity_id):
+			# A new consignment cannot mix into another shipment's partial hold.
+			if hold.can_accept_commodity(commodity_id) and hold.get_state().is_empty():
 				available_t += hold.get_state().available_tonnes_t()
-		return available_t - _reserved_quantity(ship, true) >= required
-	return false
+		var reserved_t := 0.0
+		for contract in _active:
+			if str(contract.get("vessel_uid", "")) != _vessel_uid(ship) or str(contract.get("handling_mode", "")) != "bulk":
+				continue
+			var remaining := maxf(0.0, float(contract.quantity) - float(contract.get("loaded_quantity", 0.0)))
+			var consignment := str(contract.get("consignment", {}).get("consignment_id", ""))
+			# Its own partly loaded holds already reserve this space. Only the
+			# remainder must be deducted from still-empty holds offered above.
+			for hold in ship.get_bulk_holds():
+				var state := hold.get_state()
+				if not state.is_empty() and state.consignment_id == consignment and hold.cargo_accessible:
+					remaining = maxf(0.0, remaining - state.available_tonnes_t())
+			reserved_t += remaining
+		return maxf(0.0, available_t - reserved_t)
+	return 0.0
 
 
 func can_accept(offer: Dictionary) -> bool:
@@ -209,8 +336,9 @@ func stage_yard(yard: Node, berth_id: String, port_id: String) -> void:
 			continue
 		if str(contract.get("handling_mode", "")) not in ["general", "container"]:
 			continue
+		var example := ContainerFactory.make_one("", "", str(contract.get("commodity_id", "provisions")))
 		var count := mini(
-			pad.get_free_slot_count(),
+			pad.get_free_slot_count(example.footprint_cells(pad.cell_size_m)),
 			maxi(
 				int(round(float(contract.get("quantity", 0.0))))
 					- int(contract.get("issued_quantity", 0)),
@@ -231,9 +359,9 @@ func stage_berth(port_id: String, berth_id: String) -> void:
 		return
 	for yard in controller.serviceable_yards_on_berth(berth_id, ship):
 		stage_yard(yard as Node, berth_id, port_id)
-		## A contract movement belongs to the one crane bay serving the ship,
-		## never every cargo pad along the same long quay.
-		break
+		## Long vessels can span several crane bays. Issue the remaining booked
+		## units into other reachable yards; the shared issued count prevents
+		## duplication. Unreachable yards still receive nothing.
 
 
 ## Uncollected freight belongs in warehouse authority, not on an empty quay.
@@ -271,6 +399,69 @@ func unstage_berth(port_id: String, berth_id: String, ship: BoatBody) -> void:
 		_active[index] = contract
 	if not removed_by_contract.is_empty():
 		_publish()
+
+
+## Distinguish booked freight from the unbooked cargo used in equipment demos.
+func has_bulk_freight(ship: BoatBody) -> bool:
+	if not is_instance_valid(ship): return false
+	for contract in _active:
+		if str(contract.get("handling_mode", "")) == "bulk" and str(contract.get("vessel_uid", "")) == _vessel_uid(ship): return true
+	return false
+
+
+func bulk_load_remaining(ship: BoatBody, commodity: String, shipment: String = "") -> float:
+	var remaining := 0.0
+	for contract in _active:
+		if str(contract.get("handling_mode", "")) != "bulk" or str(contract.get("vessel_uid", "")) != _vessel_uid(ship): continue
+		if str(contract.get("origin_port_id", "")) != ship.get_harbour_port_id() or str(contract.get("commodity_id", "")) != commodity: continue
+		if not shipment.is_empty() and str((contract.get("consignment", {}) as Dictionary).get("consignment_id", "")) != shipment: continue
+		remaining += maxf(0.0, float(contract.quantity) - float(contract.get("issued_quantity", 0.0)))
+	return remaining
+
+
+## Reserve each physical scoop before it leaves the stockpile. Parallel cranes
+## share issued_quantity, so they cannot issue the same booked tonnes twice.
+func issue_bulk_lot(ship: BoatBody, commodity: String, maximum_t: float, shipment: String = "") -> BulkCargoLot:
+	if not is_instance_valid(ship): return BulkCargoLot.empty()
+	for contract in _active:
+		if str(contract.get("handling_mode", "")) != "bulk": continue
+		if str(contract.get("vessel_uid", "")) != _vessel_uid(ship): continue
+		if str(contract.get("origin_port_id", "")) != ship.get_harbour_port_id(): continue
+		if str(contract.get("commodity_id", "")) != commodity: continue
+		var id := str((contract.get("consignment", {}) as Dictionary).get("consignment_id", ""))
+		if not shipment.is_empty() and id != shipment: continue
+		var amount := minf(maximum_t, float(contract.quantity) - float(contract.get("issued_quantity", 0.0)))
+		if amount <= BulkCargoLot.TONNES_EPS: continue
+		contract["issued_quantity"] = float(contract.get("issued_quantity", 0.0)) + amount
+		_publish()
+		return BulkCargoLot.create(commodity, amount, id)
+	return BulkCargoLot.empty()
+
+
+func bulk_contract(lot: BulkCargoLot, ship: BoatBody) -> Dictionary:
+	if lot == null or lot.is_empty() or lot.consignment_id.is_empty() or not is_instance_valid(ship): return {}
+	for contract in _active:
+		if str(contract.get("handling_mode", "")) != "bulk": continue
+		if str(contract.get("vessel_uid", "")) != _vessel_uid(ship): continue
+		if str(contract.get("commodity_id", "")) != lot.commodity_id: continue
+		if str((contract.get("consignment", {}) as Dictionary).get("consignment_id", "")) == lot.consignment_id:
+			return contract
+	return {}
+
+
+func record_bulk_loaded(lot: BulkCargoLot, ship: BoatBody) -> bool:
+	var contract := bulk_contract(lot, ship)
+	if contract.is_empty() or ship.get_harbour_port_id() != str(contract.origin_port_id): return false
+	if float(contract.get("loaded_quantity", 0.0)) + lot.tonnes_t > float(contract.get("issued_quantity", 0.0)) + 0.001: return false
+	return record_loaded(str(contract.id), lot.tonnes_t)
+
+
+func record_bulk_delivered(lot: BulkCargoLot, port_id: String, ship: BoatBody) -> bool:
+	var contract := bulk_contract(lot, ship)
+	if contract.is_empty() or port_id != str(contract.destination_port_id): return false
+	if ship.get_harbour_port_id() != port_id: return false
+	if float(contract.get("delivered_quantity", 0.0)) + lot.tonnes_t > float(contract.get("loaded_quantity", 0.0)) + 0.001: return false
+	return record_delivered(str(contract.id), port_id, lot.tonnes_t)
 
 
 func record_loaded(contract_id: String, quantity: float = 1.0) -> bool:
@@ -325,7 +516,13 @@ func can_deliver_unit(unit: ContainerUnit, port_id: String, ship: BoatBody = nul
 
 
 func record_unit_loaded(unit: ContainerUnit, port_id: String, ship: BoatBody = null) -> bool:
-	return can_load_unit(unit, port_id, ship) and record_loaded(unit.freight_contract_id, 1.0)
+	if not can_load_unit(unit, port_id, ship) or not record_loaded(unit.freight_contract_id, 1.0):
+		return false
+	# Replenish a finite quay staging area only once the previous lift has
+	# landed aboard. Issued counters keep the remaining cargo in warehouse
+	# authority until there is physical yard space for it.
+	call_deferred("_stage_contract", unit.freight_contract_id)
+	return true
 
 
 func record_unit_delivered(unit: ContainerUnit, port_id: String, ship: BoatBody = null) -> bool:

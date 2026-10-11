@@ -1,0 +1,46 @@
+SHIP / HARBOUR / FREIGHT REVIEW - 7 October 2026
+
+Fixed:
+- Imported ships have empty legal registration. HarbourDeploy treated this as
+  unrestricted berth compatibility and selected the shortest berth. Service
+  preferences now derive from authored equipment, with legacy policy preserved.
+- Cargo defaults to general then container quays; fishing to fish landing; bulk
+  to ore/grain. General fallback is mooring, not a promise of cargo service.
+- Explicit incompatible assignments are rejected, and occupied suitable berths
+  do not redirect a cargo vessel to LNG/grain.
+- Freight booking checks physical issued ISO footprint instead of nominal pad
+  slots. Rejects invalid quantities and an offer whose origin is another port.
+- Removed obsolete ship-registration checklist wording from deployment failure.
+
+Verified in isolated processes (no captain saves):
+- harbour_service_routing_test: real stock/custom records, legacy policy, stale
+  registration ignored, occupied quay fallback/rejection through local authority,
+  actual harbourmaster spawn/replacement with shorter LNG/grain decoys, both lines,
+  door authority interaction, physical container capacity and invalid offers.
+- mooring_authority_arrival_test: cast off, tie at destination, preserve pose,
+  old-port replay, both lines, occupied berth rejection and rollback. Expected
+  rejection warnings are exercised intentionally.
+- provision_dock_review: rendered loading and unloading through NPC job controls
+  on a generated quay; two containers on deck after load, zero after unload,
+  completed events, released hook and freight accounting. Both passed.
+- bulk_crane_operation_test: NPC load/unload, correct jaw phases, 30->51->30
+  tonnes and clean completion. Passed headless.
+- Static diff checks passed. An initial headless provision run passed logic but
+  lacked RenderingDevice for ocean; both directions were then verified rendered.
+
+Reviewed daylight captures:
+C:/Users/noahs/Pictures/machinescreenshots/provision-dock-1791393370-552/finished.png
+C:/Users/noahs/Pictures/machinescreenshots/provision-dock-1791393370-552/deck-close.png
+C:/Users/noahs/Pictures/machinescreenshots/provision-dock-1791393476-788/finished.png
+
+Remaining review scope / limits:
+- Tests exercise separate local legs, not one uninterrupted player voyage.
+- Real two-client network play, loaded-voyage save/reload, all seeded berth sizes
+  and sustained sailing/navigation are not certified by this batch.
+- Authored service preferences are routing hints. Imported mounting rules still
+  determine live capacity; arbitrary invalid placements cannot grant inventory.
+- Booking currently checks berth commodity and storage, but does not preflight
+  every destination's physical crane reach. Investigate before promising universal
+  end-to-end contract serviceability across procedurally generated ports.
+- Review cargo-office explanations for unavailable work, chart guidance to the
+  assigned loading operator and state after interruption as the next UX pass.

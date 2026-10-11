@@ -10,6 +10,8 @@ const MODE_UNLOAD := "unload"
 signal job_started(context: Dictionary)
 signal job_completed(context: Dictionary, report: Dictionary)
 signal job_stopped(context: Dictionary)
+## Presentation changes within a running job (phase, progress, failure reason).
+signal status_changed()
 
 var _equipment_id := ""
 var _equipment_kind := ""

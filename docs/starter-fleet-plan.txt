@@ -1,0 +1,25 @@
+STARTER FLEET — 6 October 2026
+Noah: clean shipyard drafts, finish the boats and use them as starter vessels.
+
+[x] Finish four reusable-part designs: 14 m fishing trawler, 24 m cargo ship,
+    24 m divided bulk ship, 32 m coaster. Distinct paint, furnished wheelhouses,
+    lighting, ventilation, working equipment and clear access routes.
+[x] Add actual cargo securing beds to the cargo ship's supported main deck and connect the
+    existing cargo-pad API; both bulk designs start with accessible holds.
+[x] Publish canonical versioned imported-model prebuilts. Connect starter grants,
+    owned-record persistence, spawning and remote-layout hydration to that format.
+    Do not reintroduce legal registration or replace custom saved vessels.
+[x] Make Starter vessels directly available from Drafts; copies save into the
+    user's drafts folder without overwriting canonical stock.
+[x] Archive identified generated test drafts; preserve Untitled ship and the
+    previous single-file custom draft. Put named complete boats in the drafts UI.
+[x] Verify all four grants/save/reload/spawns, equipment and renders; check
+    ordinary player access and driving. Document limitations, commit and push.
+
+Existing examples remain inspect fixtures. The new official prebuilts are the
+single source used by starter grants and the shipyard's starter-copy menu.
+
+Evening result: four canonical starter arrangements, six engine presets with
+three machinery models, real 20/40-foot containers, physical cargo deck/beds,
+editor inspection and persisted settings. See model README and session record.
+External multiplayer service deployment was not performed or verified.

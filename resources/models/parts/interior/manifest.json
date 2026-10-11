@@ -1,0 +1,979 @@
+{
+  "units": "metres",
+  "console_top_m": 0.85,
+  "assets": [
+    {
+      "id": "cabin_console_straight",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_straight.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_console_short",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_short.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -0.5
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_console_26p",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_26p.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -1
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_console_26s",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_26s.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -1
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_console_45p",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_45p.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -0.5
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_console_45s",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_45s.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -0.5
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_console_straight_left",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_straight_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_console_short_left",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_short_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -0.5
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_console_26p_left",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_26p_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -1
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_console_26s_left",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_26s_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -1
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_console_45p_left",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_45p_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -0.5
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_console_45s_left",
+      "style": "console",
+      "kind": "console",
+      "model": "res://resources/models/parts/interior/cabin_console_45s_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -0.5
+      ],
+      "height_start_m": 0.85,
+      "height_end_m": 0.85,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_50cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_50cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -0.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_straight",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_straight.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_150cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_150cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_200cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_200cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -2.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_250cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_250cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -2.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_300cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_300cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -3.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_350cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_350cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -3.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_400cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_400cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -4.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_450cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_450cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -4.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_500cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_500cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -5.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_550cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_550cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -5.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_600cm",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_600cm.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -6.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_26p",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_26p.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -1
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_26s",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_26s.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -1
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_45p",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_45p.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -0.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_45s",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_45s.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -0.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": 1
+    },
+    {
+      "id": "cabin_bench_length_50cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_50cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -0.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_straight_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_straight_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_150cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_150cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_200cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_200cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -2.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_250cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_250cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -2.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_300cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_300cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -3.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_350cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_350cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -3.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_400cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_400cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -4.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_450cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_450cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -4.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_500cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_500cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -5.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_550cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_550cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -5.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_length_600cm_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_length_600cm_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -6.0
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_26p_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_26p_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -1
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_26s_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_26s_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -1
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_45p_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_45p_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -0.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "cabin_bench_45s_left",
+      "style": "bench",
+      "kind": "bench",
+      "model": "res://resources/models/parts/interior/cabin_bench_45s_left.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -0.5
+      ],
+      "height_start_m": 1.245,
+      "height_end_m": 1.245,
+      "paintable": true,
+      "side": -1
+    },
+    {
+      "id": "helm_chair",
+      "style": "helm_chair",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/helm_chair.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 1.25,
+      "height_end_m": 1.25,
+      "paintable": true
+    },
+    {
+      "id": "passenger_seat",
+      "style": "passenger_seat",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/passenger_seat.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 1.25,
+      "height_end_m": 1.25,
+      "paintable": true
+    },
+    {
+      "id": "helm_wheel_base",
+      "style": "wheel_base",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/helm_wheel_base.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 0.4,
+      "height_end_m": 0.4,
+      "paintable": true
+    },
+    {
+      "id": "helm_wheel_rotor",
+      "style": "wheel_rotor",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/helm_wheel_rotor.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 0.42,
+      "height_end_m": 0.42,
+      "paintable": true
+    },
+    {
+      "id": "helm_wheel",
+      "style": "wheel",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/helm_wheel.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 0.48,
+      "height_end_m": 0.48,
+      "paintable": true,
+      "components": [
+        {
+          "id": "helm_wheel_base",
+          "position": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "helm_wheel_rotor",
+          "pivot": "WheelPivot"
+        }
+      ]
+    },
+    {
+      "id": "helm_throttle_base",
+      "style": "throttle_base",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/helm_throttle_base.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "helm_throttle_lever",
+      "style": "throttle_lever",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/helm_throttle_lever.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 0.2,
+      "height_end_m": 0.2,
+      "paintable": true
+    },
+    {
+      "id": "helm_throttle",
+      "style": "throttle",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/helm_throttle.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 0.3,
+      "height_end_m": 0.3,
+      "paintable": true,
+      "components": [
+        {
+          "id": "helm_throttle_base",
+          "position": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "helm_throttle_lever",
+          "pivot": "ThrottlePivot"
+        }
+      ]
+    },
+    {
+      "id": "helm_display",
+      "style": "display",
+      "kind": "furniture",
+      "model": "res://resources/models/parts/interior/helm_display.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0
+      ],
+      "height_start_m": 0.28,
+      "height_end_m": 0.28,
+      "paintable": true
+    }
+  ]
+}

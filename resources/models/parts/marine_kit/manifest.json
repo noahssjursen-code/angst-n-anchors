@@ -1,0 +1,821 @@
+{
+  "description": "Individual original Blender-authored UGC construction models. Display instances are scaled to fit tiles; sources use metres. No gameplay or collision integration yet.",
+  "snap_m": 0.5,
+  "wall_height_m": 2.2,
+  "assets": [
+    {
+      "id": "coastal_hull_14m",
+      "title": "01 / CURVED STEEL HULL",
+      "bounds_min": [
+        -2.43052077293396,
+        -6.8291239738464355,
+        -1.522529125213623
+      ],
+      "bounds_max": [
+        2.43052077293396,
+        7.227511882781982,
+        2.2824482917785645
+      ],
+      "size_m": [
+        4.86104154586792,
+        14.056635856628418,
+        3.8049774169921875
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\coastal_hull_14m\\coastal_hull_14m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\coastal_hull_14m\\coastal_hull_14m.glb",
+      "objects": 5
+    },
+    {
+      "id": "coastal_deck_14m",
+      "title": "02 / CAMBERED DECK",
+      "bounds_min": [
+        -2.272916555404663,
+        -6.801567077636719,
+        1.264716386795044
+      ],
+      "bounds_max": [
+        2.272916555404663,
+        7.200342655181885,
+        2.2049999237060547
+      ],
+      "size_m": [
+        4.545833110809326,
+        14.001909255981445,
+        0.9402835369110107
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\coastal_deck_14m\\coastal_deck_14m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\coastal_deck_14m\\coastal_deck_14m.glb",
+      "objects": 1
+    },
+    {
+      "id": "wall_panel_1m",
+      "title": "03 / WALL PANEL 1m",
+      "bounds_min": [
+        -0.5,
+        -0.044999998062849045,
+        0.0
+      ],
+      "bounds_max": [
+        0.5,
+        0.032499998807907104,
+        2.200000047683716
+      ],
+      "size_m": [
+        1.0,
+        0.07750000059604645,
+        2.200000047683716
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\wall_panel_1m\\wall_panel_1m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\wall_panel_1m\\wall_panel_1m.glb",
+      "objects": 2
+    },
+    {
+      "id": "wall_panel_2m",
+      "title": "04 / WALL PANEL 2m",
+      "bounds_min": [
+        -1.0,
+        -0.044999998062849045,
+        0.0
+      ],
+      "bounds_max": [
+        1.0,
+        0.032499998807907104,
+        2.200000047683716
+      ],
+      "size_m": [
+        2.0,
+        0.07750000059604645,
+        2.200000047683716
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\wall_panel_2m\\wall_panel_2m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\wall_panel_2m\\wall_panel_2m.glb",
+      "objects": 2
+    },
+    {
+      "id": "marine_window",
+      "title": "05 / FRAMED GLAZING",
+      "bounds_min": [
+        -0.460022896528244,
+        -0.031000003218650818,
+        -0.029482755810022354
+      ],
+      "bounds_max": [
+        0.45122939348220825,
+        0.12089913338422775,
+        0.9816697239875793
+      ],
+      "size_m": [
+        0.9112522602081299,
+        0.15189912915229797,
+        1.0111525058746338
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\marine_window\\marine_window.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\marine_window\\marine_window.glb",
+      "objects": 4
+    },
+    {
+      "id": "watertight_door",
+      "title": "06 / WATERTIGHT DOOR",
+      "bounds_min": [
+        -0.4399999976158142,
+        -0.11900000274181366,
+        -0.019999980926513672
+      ],
+      "bounds_max": [
+        0.4399999976158142,
+        0.05999999865889549,
+        2.065000057220459
+      ],
+      "size_m": [
+        0.8799999952316284,
+        0.17900000512599945,
+        2.0850000381469727
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\watertight_door\\watertight_door.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\watertight_door\\watertight_door.glb",
+      "objects": 13
+    },
+    {
+      "id": "rail_section_1200",
+      "title": "07 / TUBULAR RAIL",
+      "bounds_min": [
+        -0.6525000333786011,
+        -0.05249999836087227,
+        0.0
+      ],
+      "bounds_max": [
+        0.6525000333786011,
+        0.05249999836087227,
+        1.0220000743865967
+      ],
+      "size_m": [
+        1.3050000667572021,
+        0.10499999672174454,
+        1.0220000743865967
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\rail_section_1200\\rail_section_1200.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\rail_section_1200\\rail_section_1200.glb",
+      "objects": 6
+    },
+    {
+      "id": "double_bollard",
+      "title": "08 / MOORING BOLLARD",
+      "bounds_min": [
+        -0.20999999344348907,
+        -0.23499999940395355,
+        0.0
+      ],
+      "bounds_max": [
+        0.20999999344348907,
+        0.23499999940395355,
+        0.3199999928474426
+      ],
+      "size_m": [
+        0.41999998688697815,
+        0.4699999988079071,
+        0.3199999928474426
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\double_bollard\\double_bollard.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\double_bollard\\double_bollard.glb",
+      "objects": 9
+    },
+    {
+      "id": "boarding_ladder",
+      "title": "09 / BOARDING LADDER",
+      "bounds_min": [
+        -0.2849999964237213,
+        -0.02377641201019287,
+        0.0
+      ],
+      "bounds_max": [
+        0.2849999964237213,
+        0.23999999463558197,
+        1.863776445388794
+      ],
+      "size_m": [
+        0.5699999928474426,
+        0.26377642154693604,
+        1.863776445388794
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\boarding_ladder\\boarding_ladder.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\boarding_ladder\\boarding_ladder.glb",
+      "objects": 7
+    },
+    {
+      "id": "tyre_fender",
+      "title": "10 / TYRE FENDER",
+      "bounds_min": [
+        -0.3269999921321869,
+        -0.09200002253055573,
+        0.022999994456768036
+      ],
+      "bounds_max": [
+        0.3269999921321869,
+        0.09200002253055573,
+        0.8977455496788025
+      ],
+      "size_m": [
+        0.6539999842643738,
+        0.18400004506111145,
+        0.8747455477714539
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\tyre_fender\\tyre_fender.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\tyre_fender\\tyre_fender.glb",
+      "objects": 2
+    },
+    {
+      "id": "deck_hatch",
+      "title": "11 / HATCH & COAMING",
+      "bounds_min": [
+        -0.824999988079071,
+        -1.0750000476837158,
+        0.0
+      ],
+      "bounds_max": [
+        0.824999988079071,
+        1.0750000476837158,
+        0.24700000882148743
+      ],
+      "size_m": [
+        1.649999976158142,
+        2.1500000953674316,
+        0.24700000882148743
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\deck_hatch\\deck_hatch.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\deck_hatch\\deck_hatch.glb",
+      "objects": 6
+    },
+    {
+      "id": "hydraulic_winch",
+      "title": "12 / HYDRAULIC WINCH",
+      "bounds_min": [
+        -0.824999988079071,
+        -0.41499999165534973,
+        4.470348358154297e-08
+      ],
+      "bounds_max": [
+        0.9676820039749146,
+        0.41499999165534973,
+        0.9850000143051147
+      ],
+      "size_m": [
+        1.7926819324493408,
+        0.8299999833106995,
+        0.98499995470047
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\hydraulic_winch\\hydraulic_winch.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\hydraulic_winch\\hydraulic_winch.glb",
+      "objects": 43
+    },
+    {
+      "id": "exhaust_stack",
+      "title": "13 / EXHAUST STACK",
+      "bounds_min": [
+        -0.12000001221895218,
+        -0.12000001221895218,
+        0.0
+      ],
+      "bounds_max": [
+        0.12000001221895218,
+        0.12000001221895218,
+        2.1599998474121094
+      ],
+      "size_m": [
+        0.24000002443790436,
+        0.24000002443790436,
+        2.1599998474121094
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\exhaust_stack\\exhaust_stack.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\exhaust_stack\\exhaust_stack.glb",
+      "objects": 4
+    },
+    {
+      "id": "liferaft_canister",
+      "title": "14 / LIFERAFT CANISTER",
+      "bounds_min": [
+        -0.32499998807907104,
+        -0.5249999761581421,
+        0.0
+      ],
+      "bounds_max": [
+        0.32499998807907104,
+        0.5249999761581421,
+        0.5450000166893005
+      ],
+      "size_m": [
+        0.6499999761581421,
+        1.0499999523162842,
+        0.5450000166893005
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\liferaft_canister\\liferaft_canister.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\liferaft_canister\\liferaft_canister.glb",
+      "objects": 4
+    },
+    {
+      "id": "helm_console",
+      "title": "15 / HELM & INSTRUMENTS",
+      "bounds_min": [
+        -0.625,
+        -0.34499993920326233,
+        0.0
+      ],
+      "bounds_max": [
+        0.625,
+        0.304999977350235,
+        1.2013388872146606
+      ],
+      "size_m": [
+        1.25,
+        0.6499999165534973,
+        1.2013388872146606
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\helm_console\\helm_console.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\helm_console\\helm_console.glb",
+      "objects": 10
+    },
+    {
+      "id": "captain_chair",
+      "title": "16 / HELM CHAIR",
+      "bounds_min": [
+        -0.29399996995925903,
+        -0.2550000548362732,
+        0.0
+      ],
+      "bounds_max": [
+        0.29399996995925903,
+        0.24500000476837158,
+        1.0549999475479126
+      ],
+      "size_m": [
+        0.5879999399185181,
+        0.5000000596046448,
+        1.0549999475479126
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\captain_chair\\captain_chair.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\captain_chair\\captain_chair.glb",
+      "objects": 5
+    },
+    {
+      "id": "storage_locker",
+      "title": "17 / STORAGE LOCKER",
+      "bounds_min": [
+        -0.25999999046325684,
+        -0.32199999690055847,
+        0.0
+      ],
+      "bounds_max": [
+        0.25999999046325684,
+        0.2750000059604645,
+        0.8999999761581421
+      ],
+      "size_m": [
+        0.5199999809265137,
+        0.597000002861023,
+        0.8999999761581421
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\storage_locker\\storage_locker.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\storage_locker\\storage_locker.glb",
+      "objects": 3
+    },
+    {
+      "id": "crew_bench",
+      "title": "18 / CREW BENCH",
+      "bounds_min": [
+        -0.2849999964237213,
+        -0.5049999952316284,
+        0.0
+      ],
+      "bounds_max": [
+        0.2849999964237213,
+        0.5049999952316284,
+        0.6200000047683716
+      ],
+      "size_m": [
+        0.5699999928474426,
+        1.0099999904632568,
+        0.6200000047683716
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\crew_bench\\crew_bench.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\crew_bench\\crew_bench.glb",
+      "objects": 2
+    },
+    {
+      "id": "navigation_light_port",
+      "title": "19 / PORT LIGHT",
+      "bounds_min": [
+        -0.07999999821186066,
+        -0.10999999940395355,
+        0.0
+      ],
+      "bounds_max": [
+        0.07999999821186066,
+        0.10999999940395355,
+        0.21250000596046448
+      ],
+      "size_m": [
+        0.1599999964237213,
+        0.2199999988079071,
+        0.21250000596046448
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\navigation_light_port\\navigation_light_port.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\navigation_light_port\\navigation_light_port.glb",
+      "objects": 3
+    },
+    {
+      "id": "navigation_light_starboard",
+      "title": "20 / STARBOARD LIGHT",
+      "bounds_min": [
+        -0.07999999821186066,
+        -0.10999999940395355,
+        0.0
+      ],
+      "bounds_max": [
+        0.07999999821186066,
+        0.10999999940395355,
+        0.21250000596046448
+      ],
+      "size_m": [
+        0.1599999964237213,
+        0.2199999988079071,
+        0.21250000596046448
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\navigation_light_starboard\\navigation_light_starboard.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\navigation_light_starboard\\navigation_light_starboard.glb",
+      "objects": 3
+    },
+    {
+      "id": "led_worklight",
+      "title": "21 / LED WORKLIGHT",
+      "bounds_min": [
+        -0.13249999284744263,
+        -0.0650000050663948,
+        0.0
+      ],
+      "bounds_max": [
+        0.13249999284744263,
+        0.05999999865889549,
+        0.3199999928474426
+      ],
+      "size_m": [
+        0.26499998569488525,
+        0.125,
+        0.3199999928474426
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\led_worklight\\led_worklight.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\led_worklight\\led_worklight.glb",
+      "objects": 11
+    },
+    {
+      "id": "signal_mast",
+      "title": "22 / SIGNAL MAST",
+      "bounds_min": [
+        -0.6000000238418579,
+        -0.24967283010482788,
+        0.0
+      ],
+      "bounds_max": [
+        0.6000000238418579,
+        0.17499999701976776,
+        1.825709581375122
+      ],
+      "size_m": [
+        1.2000000476837158,
+        0.42467284202575684,
+        1.825709581375122
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\signal_mast\\signal_mast.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\signal_mast\\signal_mast.glb",
+      "objects": 3
+    },
+    {
+      "id": "radar_radome",
+      "title": "23 / RADAR RADOME",
+      "bounds_min": [
+        -0.38999998569488525,
+        -0.13500000536441803,
+        0.0
+      ],
+      "bounds_max": [
+        0.38999998569488525,
+        0.13500000536441803,
+        0.28999999165534973
+      ],
+      "size_m": [
+        0.7799999713897705,
+        0.27000001072883606,
+        0.28999999165534973
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\radar_radome\\radar_radome.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\radar_radome\\radar_radome.glb",
+      "objects": 2
+    },
+    {
+      "id": "vhf_aerial",
+      "title": "24 / VHF AERIAL",
+      "bounds_min": [
+        -0.030000003054738045,
+        -0.030000003054738045,
+        0.0
+      ],
+      "bounds_max": [
+        0.030000003054738045,
+        0.030000003054738045,
+        1.399999976158142
+      ],
+      "size_m": [
+        0.06000000610947609,
+        0.06000000610947609,
+        1.399999976158142
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\vhf_aerial\\vhf_aerial.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\vhf_aerial\\vhf_aerial.glb",
+      "objects": 2
+    },
+    {
+      "id": "lifebuoy",
+      "title": "25 / LIFEBUOY",
+      "bounds_min": [
+        -0.35499998927116394,
+        -0.0650000274181366,
+        0.005000019911676645
+      ],
+      "bounds_max": [
+        0.35499998927116394,
+        0.0650000274181366,
+        0.7150000333786011
+      ],
+      "size_m": [
+        0.7099999785423279,
+        0.1300000548362732,
+        0.7100000381469727
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\lifebuoy\\lifebuoy.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\lifebuoy\\lifebuoy.glb",
+      "objects": 1
+    },
+    {
+      "id": "bronze_propeller",
+      "title": "26 / BRONZE PROPELLER",
+      "bounds_min": [
+        -0.3776324987411499,
+        -0.13000012934207916,
+        -0.3776324391365051
+      ],
+      "bounds_max": [
+        0.3776324987411499,
+        0.13000012934207916,
+        0.3776324391365051
+      ],
+      "size_m": [
+        0.7552649974822998,
+        0.2600002586841583,
+        0.7552648782730103
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\bronze_propeller\\bronze_propeller.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\bronze_propeller\\bronze_propeller.glb",
+      "objects": 5
+    },
+    {
+      "id": "rudder",
+      "title": "27 / RUDDER & STOCK",
+      "bounds_min": [
+        -0.040000006556510925,
+        -0.20999999344348907,
+        0.0
+      ],
+      "bounds_max": [
+        0.040000006556510925,
+        0.20999999344348907,
+        1.350000023841858
+      ],
+      "size_m": [
+        0.08000001311302185,
+        0.41999998688697815,
+        1.350000023841858
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\rudder\\rudder.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\rudder\\rudder.glb",
+      "objects": 2
+    },
+    {
+      "id": "window_wall_1m",
+      "title": "28 / WINDOW WALL 1m",
+      "bounds_min": [
+        -0.5,
+        -0.032499998807907104,
+        0.0
+      ],
+      "bounds_max": [
+        0.5,
+        0.032499998807907104,
+        2.1999998092651367
+      ],
+      "size_m": [
+        1.0,
+        0.06499999761581421,
+        2.1999998092651367
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\window_wall_1m\\window_wall_1m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\window_wall_1m\\window_wall_1m.glb",
+      "objects": 7
+    },
+    {
+      "id": "windshield_wall_1m",
+      "title": "29 / RAKED WINDOW WALL",
+      "bounds_min": [
+        -0.5,
+        -0.051899202167987823,
+        0.0
+      ],
+      "bounds_max": [
+        0.5,
+        0.1875,
+        2.200000047683716
+      ],
+      "size_m": [
+        1.0,
+        0.23939919471740723,
+        2.200000047683716
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\windshield_wall_1m\\windshield_wall_1m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\windshield_wall_1m\\windshield_wall_1m.glb",
+      "objects": 5
+    },
+    {
+      "id": "door_wall_1m",
+      "title": "30 / DOOR WALL 1m",
+      "bounds_min": [
+        -0.5,
+        -0.11900000274181366,
+        -0.019999980926513672
+      ],
+      "bounds_max": [
+        0.5,
+        0.05999999865889549,
+        2.200000047683716
+      ],
+      "size_m": [
+        1.0,
+        0.17900000512599945,
+        2.2200000286102295
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\door_wall_1m\\door_wall_1m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\door_wall_1m\\door_wall_1m.glb",
+      "objects": 16
+    },
+    {
+      "id": "curved_corner_wall",
+      "title": "31 / CURVED CORNER",
+      "bounds_min": [
+        -0.023000003769993782,
+        -0.023000003769993782,
+        0.0
+      ],
+      "bounds_max": [
+        0.27300000190734863,
+        0.27300000190734863,
+        2.200000047683716
+      ],
+      "size_m": [
+        0.29600000381469727,
+        0.29600000381469727,
+        2.200000047683716
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\curved_corner_wall\\curved_corner_wall.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\curved_corner_wall\\curved_corner_wall.glb",
+      "objects": 5
+    },
+    {
+      "id": "deck_plate_1m",
+      "title": "32 / DECK PLATE 1m",
+      "bounds_min": [
+        -0.5,
+        -0.5,
+        -0.07999999821186066
+      ],
+      "bounds_max": [
+        0.5,
+        0.5,
+        0.0010000001639127731
+      ],
+      "size_m": [
+        1.0,
+        1.0,
+        0.08100000023841858
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\deck_plate_1m\\deck_plate_1m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\deck_plate_1m\\deck_plate_1m.glb",
+      "objects": 5
+    },
+    {
+      "id": "deck_plate_2m",
+      "title": "33 / DECK PLATE 2m",
+      "bounds_min": [
+        -1.0,
+        -1.0,
+        -0.07999999821186066
+      ],
+      "bounds_max": [
+        1.0,
+        1.0,
+        0.0010000001639127731
+      ],
+      "size_m": [
+        2.0,
+        2.0,
+        0.08100000023841858
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\deck_plate_2m\\deck_plate_2m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\deck_plate_2m\\deck_plate_2m.glb",
+      "objects": 5
+    },
+    {
+      "id": "roof_panel_1m",
+      "title": "34 / ROOF PANEL 1m",
+      "bounds_min": [
+        -0.5,
+        -0.5,
+        0.0
+      ],
+      "bounds_max": [
+        0.5,
+        0.5,
+        0.10000000149011612
+      ],
+      "size_m": [
+        1.0,
+        1.0,
+        0.10000000149011612
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\roof_panel_1m\\roof_panel_1m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\roof_panel_1m\\roof_panel_1m.glb",
+      "objects": 1
+    },
+    {
+      "id": "roof_panel_2m",
+      "title": "35 / ROOF PANEL 2m",
+      "bounds_min": [
+        -1.0,
+        -1.0,
+        0.0
+      ],
+      "bounds_max": [
+        1.0,
+        1.0,
+        0.10000000149011612
+      ],
+      "size_m": [
+        2.0,
+        2.0,
+        0.10000000149011612
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\roof_panel_2m\\roof_panel_2m.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\roof_panel_2m\\roof_panel_2m.glb",
+      "objects": 1
+    },
+    {
+      "id": "marine_stair",
+      "title": "36 / MARINE STAIR",
+      "bounds_min": [
+        -0.46799999475479126,
+        -0.14977234601974487,
+        0.06974831223487854
+      ],
+      "bounds_max": [
+        0.46799999475479126,
+        1.4197722673416138,
+        2.0399999618530273
+      ],
+      "size_m": [
+        0.9359999895095825,
+        1.5695445537567139,
+        1.9702516794204712
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\marine_stair\\marine_stair.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\marine_stair\\marine_stair.glb",
+      "objects": 14
+    },
+    {
+      "id": "corner_rail",
+      "title": "37 / CORNER RAIL",
+      "bounds_min": [
+        -0.02200000360608101,
+        -0.02200000360608101,
+        0.0
+      ],
+      "bounds_max": [
+        1.0219999551773071,
+        1.0219999551773071,
+        1.0209232568740845
+      ],
+      "size_m": [
+        1.0439999103546143,
+        1.0439999103546143,
+        1.0209232568740845
+      ],
+      "blend": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\_source\\marine_kit\\corner_rail\\corner_rail.blend",
+      "glb": "C:\\Users\\noahs\\Documents\\angst-n-anchors\\resources\\models\\parts\\marine_kit\\corner_rail\\corner_rail.glb",
+      "objects": 5
+    }
+  ]
+}

@@ -1,0 +1,729 @@
+ANGST 'N ANCHORS — SOUND MAP AND PRODUCTION RULES
+11 October 2026
+
+Result
+------
+The rejected audio assets were removed from resources/audio. A recovery archive
+of the old directory is outside the project in this chat's work/audio-rebuild.
+108 replacement clips were generated with ElevenLabs Sound Effects v2.
+Generation receipts total 7,115 credits against the 20,000-credit cap.
+No API key is stored in the project, manifest, receipts or this report.
+
+These are candidate recordings awaiting listening approval. Technical waveform
+and Godot playback checks are distinct from subjective audio quality. This
+session cannot hear the clips. Use Approve/Deny and notes in the showcase; an
+unreviewed clip is not implicitly approved. Reviews identify the exact WAV hash,
+so replacing a file automatically makes that new version unreviewed.
+
+REVIEW WORKFLOW
+Open scenes/showcases/audio_library_showcase.tscn and run that scene (F6).
+Select a clip, listen to a few loop cycles or the complete one-shot, then choose
+Approve or Deny. Add a note about what is wrong or what should be preserved.
+Reset restores Unreviewed. Next unreviewed skips decided clips. The list marks
+each decision and the header counts approved, denied and remaining clips.
+Review decisions save automatically to user://audio_reviews/decisions.json,
+separately from captain saves. Typing notes does not activate playback shortcuts.
+Export report opens a save dialog for JSON. Its chosen path is copied after a
+successful export. Send the file or paste the path into this chat. The report
+includes every clip, verdict, notes, duration, loop flag and exact content hash.
+Decisions are feedback only: denying a clip does not delete it during playback.
+
+PRODUCTION RULES — project choices, not universal duration standards
+------------------------------------------------------------------
+1. Generate one identifiable source per clip. Keep water, wind, rain, engines,
+   impacts and voices separate. Avoid composite storm ambience that duplicates
+   those layers. No music, voices, cinematic booms or unrelated background noise
+   in an isolated effect. Do not add real-world company identity or sound marks.
+2. Continuous environmental textures: usually 12–30 seconds per take, preferably
+   20–30 for exposed long listening. This library uses 12/14-second first takes
+   and 24-second alternate weather takes. Crossfade between different takes over
+   3.5 seconds after 40–120 seconds. A longer file alone does not prevent repetition:
+   reject conspicuous rhythmic surges, calls or impacts baked into a bed.
+3. Stable machinery: usually 5–12 seconds, 8 here for idle/load engines. Hydraulic
+   and hoist motors use 5–6. Generate fixed operation at stable RPM/load; acceleration,
+   startup and shutdown belong in separate sounds. Keep the same engine character
+   across its states. Do not use idle/load pitch changes to invent physical RPM.
+4. Clicks and footsteps: around 0.5–0.8 seconds generated, trimmed to the event.
+   Door, rope and cargo actions: around 1–3 seconds. Start/stop: 2–3 seconds here;
+   extend if the physical event needs it. Thunder: 6 seconds here, with complete
+   decay. One-shot prompts request exactly one event, not a sequence or a loop.
+5. Foghorns are single blasts with a runtime interval, not 30-second recordings
+   containing silence. This harbour implementation schedules a blast every 30 s
+   while local fog remains active. A held ship horn can use a stable sustain loop;
+   that new clip is reserved until a horn input/event hook is implemented.
+6. Request loop=true for every continuous generation. Review at least three joins.
+   Reject fade-to-silence, changing timbre, baked impacts or repeated obvious events.
+   Postprocessing removes DC, crossfades the boundary by 120 ms for engine/crane
+   textures or 250 ms for other loops, and sets native forward looping in Godot.
+   There is no end-of-file callback restart and no fade-to-zero at the wrap.
+7. Keep untouched generated MP3s outside the game as source evidence. The API
+   returned MP3; converting to WAV does not recover information lost to compression.
+   Runtime assets are 44.1 kHz, 16-bit PCM WAV: mono for positioned effects and
+   stereo for broad weather/thunder. Avoid a second lossy encoding stage here.
+   Disable import normalization; it would undo the measured headroom. Longer
+   future recordings may justify compressed streaming after measured memory review.
+8. A sound effect should arrive immediately on its gameplay event, with its natural
+   tail retained. Remove only leading/trailing near-silence; keep a tiny click-free
+   edge fade on one-shots. Do not hard-cut engine starts using a guessed duration.
+9. Leave mix headroom. This pass caps loop sample peaks at -4 dBFS and one-shot
+   sample peaks at -6 dBFS; beds aim around -22 dBFS RMS and local machinery -20.
+   Those are preparation targets, not an in-game loudness approval. Mix with the
+   existing per-source gains and new Ambience/Machinery/SFX buses, all through
+   Master. Review calm and maximum combined conditions before final level approval.
+10. Frequent actions need independent takes: 3 each for steel/concrete steps,
+    2 for several other footstep/contact sets. Do not select the previous take
+    twice when another exists. Slight pitch variation can supplement, not replace,
+    distinct recordings. Do not randomly change a running engine's identity.
+11. Source position and distance must match the object. Footsteps/controls are
+    close; cranes, water and engines have different hearing ranges; horns carry.
+    Limit world one-shots to 32 active voices. Do not let an isolated preview's
+    loudness dictate the final in-game mix.
+12. Retain prompt, duration, loop intent, generation cost, SHA-256 and review state.
+    Regenerate denied takes selectively. Never automatically spend the remainder
+    of a budget. Reserve the expected cost before sending a request; stop on an
+    uncertain outcome rather than blindly retrying a potentially billable request.
+
+SYSTEM AUDIT
+------------
+Implemented in this pass:
+- Native stream loops replace weather's finished-signal restarts.
+- AudioLibrary centralizes manifest data, stream modes, buses and range profiles.
+- One-shot/loop copies no longer mutate the same cached imported stream resource.
+- Composite atmosphere stems were retired; sea/wind/rain remain independent.
+- Roof rain now rotates alternate takes, as other weather layers do.
+- Start fires on the existing inferred stopped/running transition, not every seat
+  entry; removed the fixed 2.4-second start cutoff. Empty-fuel engines go silent.
+- The close engine mix and positional engine layer use complementary gain rather
+  than a fixed overlapping duck level. Existing simulation/propulsion is unchanged.
+- Harbour foghorn uses a one-shot and timer, with existing fog hysteresis.
+- Replaced the procedural watch beep with a generated library alarm.
+- World one-shots have voice limiting, nonrepeating variants and category ranges.
+- Showcase uses explicit manifest loop types rather than guessing from filenames.
+- Per-file approval/denial, comments, persistence and portable report export.
+
+Remaining design/integration work, explicitly not claimed complete:
+- Engine running is still inferred from helm/throttle/autopilot and fuel. There
+  is no authoritative independent ignition state; add one through the existing
+  gameplay authority if true start/stop controls are desired.
+- Foot contact currently dispatches steel aboard and concrete ashore. Wood,
+  grating and gravel recordings are supplied but need real material tagging.
+- Ship horn sustain is supplied but no horn input action currently exists.
+- Fishing winch audibility currently follows trawling, rather than measured drum
+  movement. Mooring uses motion-driven loops; direct rope-tension/contact-driven
+  Foley would be more accurate when those events are exposed.
+- Roof shelter is an overhead test, not full acoustic occlusion or room acoustics.
+- Startup/shutdown retain the existing close one-shot implementation; full spatial
+  ignition, NPC machinery mixing and multiplayer sound replication need dedicated
+  ownership/event review. No multiplayer behavior was rebuilt in this pass.
+- Listening approval, subjective engine identity, final loudness balance and the
+  full-world stress mix remain review work. Waveform checks do not prove realism.
+
+FULL GAME SOUND MAP
+-------------------
+Present gameplay / supplied replacement library:
+Weather: calm/choppy/rough/storm sea, light/gale wind, drizzle/moderate/heavy rain,
+roof rain and delayed thunder. Harbour: foghorn and local quay water.
+Vessels: six engine banks x idle/load/start/stop, bow thruster, hull strain,
+bow/stern wash, wave slap, helm controls, chair, lights and watch alarm.
+Movement: steel/concrete/wood/grating/gravel steps, jump, landing, ladder/gangway
+steps, water entry and wading. Doors: opening, closing and latch.
+Mooring/boarding: line secure/release/strain, fender rubbing, gangway deploy/stow,
+ferry ramp hydraulic movement and landing.
+Cargo: crane slew/trolley/hoist/brake/grab, container lift/place, bulk pouring.
+Fishing: gear deploy/retrieve, winch and net splash.
+
+Potential additions (mapped, not fabricated as working systems or generated yet):
+- Vessel interiors: ventilation, pumps, generator, interior machinery filtering,
+  loose fitting rattle and occasional structural contact. Loop stable machinery;
+  use sparse one-shots for rattle and impacts. Avoid a permanent haunted-ship creak.
+- Vessel equipment: anchor windlass/chain/drop/contact, stern thruster variant,
+  hatch/locker/cabinet/handrail interactions, bilge pump. Only wire to real equipment.
+- Nautical alerts: autopilot disengagement, arrival, low fuel, engine fault,
+  grounding/collision and departure interlock. Distinct restrained signals with
+  priorities/cooldowns; do not continuously beep for the same acknowledged event.
+- Ports: distant working cranes, forklift engine/reverse/brake, warehouse doors,
+  loading conveyors and transfer pumps, road vehicles, crane warning bell.
+  Use actual operating objects and distance, not a generic industrial noise wall.
+- Coast and settlements: sparse gull calls, wind in rigging/trees, shoreline
+  surf specific to shore type, occasional distant vessel horns, distant town tone.
+  Wildlife calls must be events with suitable geography/time/density, not looped
+  into every weather recording. Storm rain should not contain birds.
+- Ferry service: passenger footsteps/luggage, boarding gate/door, ramp warning,
+  departure chime, terminal PA chime and sparse nonverbal crowd texture. Speech
+  and announcements require a separate voice/localization brief.
+- Company/tablet/UI: quiet tap, navigation/back, accept/cancel/error, transaction
+  confirmation, contract arrival and message notification. Event sounds need
+  rate limits; no repeated hover sounds or arcade coin bursts for ordinary work.
+- Economy/facilities: production machinery, hired crew activity, fueling and
+  repair tools, fishing catch processing and bulk conveyor flows. Implement when
+  corresponding authority/state exists, not by guessing from a scene label.
+- Authoring editors: optional placement/erase/invalid-placement/undo feedback,
+  a separate low-volume editor category; no gameplay machinery on every click.
+- Human/NPC detail: clothing, hand contacts and breathing only where useful.
+  Dialogue, languages, accessibility/subtitles and music are separate briefs.
+
+TECHNICAL SOURCES (checked 11 October 2026)
+ElevenLabs SFX endpoint: native loop=true, 0.5–30 s request range, v2 model,
+and character-cost response header:
+https://elevenlabs.io/docs/api-reference/text-to-sound-effects/convert
+ElevenLabs prompting/isolated stems and generation overview:
+https://elevenlabs.io/docs/overview/capabilities/sound-effects
+Godot formats, looping, import normalization and channel guidance:
+https://docs.godotengine.org/en/stable/tutorials/assets_pipeline/importing_audio_samples.html
+Official pricing descriptions differed from the charges returned by this account;
+the cost total above uses actual response receipts, not an assumed public rate.
+
+CLIP-BY-CLIP MANIFEST
+---------------------
+Generated lengths below are before small boundary/trim edits. Exact final lengths
+and hashes are in resources/audio/manifest.json and each exported review report.
+looped/ocean/calm_seas_1.wav
+  LOOP, 14 s requested, 13.75 s final; connected
+  Gentle open-water swell, soft water movement, no shore surf
+  Trigger: Wave intensity crossfade
+
+looped/ocean/choppy_seas_1.wav
+  LOOP, 14 s requested, 13.75 s final; connected
+  Short choppy fjord waves, water turbulence, no wind
+  Trigger: Wave intensity crossfade
+
+looped/ocean/rough_seas_1.wav
+  LOOP, 14 s requested, 13.75 s final; connected
+  Rough offshore waves breaking unevenly, water only
+  Trigger: Wave intensity crossfade
+
+looped/ocean/stormy_seas_1.wav
+  LOOP, 14 s requested, 13.75 s final; connected
+  Heavy turbulent sea and breaking crests, water only, no thunder
+  Trigger: Wave intensity crossfade
+
+looped/wind/wind_light_1.wav
+  LOOP, 14 s requested, 13.75 s final; connected
+  Soft coastal breeze, broad gentle air movement without whistling
+  Trigger: Local supported wind and shelter
+
+looped/wind/wind_gale_1.wav
+  LOOP, 14 s requested, 13.75 s final; connected
+  Strong exposed coastal wind, dense low air rush, no rain or water
+  Trigger: Local supported wind and shelter
+
+looped/rain/rain_drizzle_1.wav
+  LOOP, 12 s requested, 11.75 s final; connected
+  Fine sparse drizzle on open ground, delicate individual droplets
+  Trigger: Rain amount; roof track requires overhead shelter
+
+looped/rain/rain_moderate_1.wav
+  LOOP, 12 s requested, 11.75 s final; connected
+  Steady medium rain on open hard ground
+  Trigger: Rain amount; roof track requires overhead shelter
+
+looped/rain/rain_heavy_1.wav
+  LOOP, 12 s requested, 11.75 s final; connected
+  Dense heavy downpour on open ground, no wind or thunder
+  Trigger: Rain amount; roof track requires overhead shelter
+
+looped/rain/rain_on_roof_1.wav
+  LOOP, 12 s requested, 11.75 s final; connected
+  Rain pattering on a steel cabin roof heard from beneath, damped low resonances
+  Trigger: Rain amount; roof track requires overhead shelter
+
+normal/thunder/thunder_01.wav
+  ONE-SHOT, 6 s requested, 4.83 s final; connected
+  A distant natural thunder crack followed by rolling low rumble
+  Trigger: Delayed lightning event
+
+normal/thunder/thunder_02.wav
+  ONE-SHOT, 6 s requested, 5.62 s final; connected
+  A distant natural thunder crack followed by rolling low rumble
+  Trigger: Delayed lightning event
+
+world/horns/harbour_horn_1.wav
+  ONE-SHOT, 4 s requested, 3.92 s final; connected
+  A deep coastal foghorn, one sustained three-second blast with a short natural tail
+  Trigger: Fog-triggered harbour signal at timed intervals
+
+world/horns/ship_horn_1.wav
+  LOOP, 2 s requested, 2.00 s final; planned hook
+  Steady sustained marine air horn on a working vessel, strong fundamental and natural harmonics
+  Trigger: Held horn control
+
+ship/engines/compact_i6/engine_idle_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  compact inline-six fishing boat diesel, crisp mechanical clatter and moderate bass, running steadily at idle
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/compact_i6/engine_load_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  compact inline-six fishing boat diesel, crisp mechanical clatter and moderate bass, running at constant working load
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/compact_i6/engine_start_1.wav
+  ONE-SHOT, 3 s requested, 3.00 s final; connected
+  compact inline-six fishing boat diesel, crisp mechanical clatter and moderate bass, starter engages, diesel catches and settles briefly
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/compact_i6/engine_stop_1.wav
+  ONE-SHOT, 2 s requested, 1.08 s final; connected
+  compact inline-six fishing boat diesel, crisp mechanical clatter and moderate bass, fuel cuts, engine turns down and stops
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/coastal_i6/engine_idle_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  larger inline-six workboat diesel, heavy rhythmic mechanical thrum, running steadily at idle
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/coastal_i6/engine_load_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  larger inline-six workboat diesel, heavy rhythmic mechanical thrum, running at constant working load
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/coastal_i6/engine_start_1.wav
+  ONE-SHOT, 3 s requested, 3.00 s final; connected
+  larger inline-six workboat diesel, heavy rhythmic mechanical thrum, starter engages, diesel catches and settles briefly
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/coastal_i6/engine_stop_1.wav
+  ONE-SHOT, 2 s requested, 1.94 s final; connected
+  larger inline-six workboat diesel, heavy rhythmic mechanical thrum, fuel cuts, engine turns down and stops
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/freighter_v12/engine_idle_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  medium-speed coastal freighter V12 diesel, dense rounded rumble, running steadily at idle
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/freighter_v12/engine_load_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  medium-speed coastal freighter V12 diesel, dense rounded rumble, running at constant working load
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/freighter_v12/engine_start_1.wav
+  ONE-SHOT, 3 s requested, 3.00 s final; connected
+  medium-speed coastal freighter V12 diesel, dense rounded rumble, starter engages, diesel catches and settles briefly
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/freighter_v12/engine_stop_1.wav
+  ONE-SHOT, 2 s requested, 1.85 s final; connected
+  medium-speed coastal freighter V12 diesel, dense rounded rumble, fuel cuts, engine turns down and stops
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/catamaran_twin/engine_idle_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  two high-speed passenger ferry diesels, tight mechanical hum with gentle beating, running steadily at idle
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/catamaran_twin/engine_load_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  two high-speed passenger ferry diesels, tight mechanical hum with gentle beating, running at constant working load
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/catamaran_twin/engine_start_1.wav
+  ONE-SHOT, 3 s requested, 3.00 s final; connected
+  two high-speed passenger ferry diesels, tight mechanical hum with gentle beating, starter engages, diesel catches and settles briefly
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/catamaran_twin/engine_stop_1.wav
+  ONE-SHOT, 2 s requested, 2.00 s final; connected
+  two high-speed passenger ferry diesels, tight mechanical hum with gentle beating, fuel cuts, engine turns down and stops
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/feeder_v12/engine_idle_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  large feeder vessel medium-speed V12 diesel, deep slow heavy throb, running steadily at idle
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/feeder_v12/engine_load_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  large feeder vessel medium-speed V12 diesel, deep slow heavy throb, running at constant working load
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/feeder_v12/engine_start_1.wav
+  ONE-SHOT, 3 s requested, 2.41 s final; connected
+  large feeder vessel medium-speed V12 diesel, deep slow heavy throb, starter engages, diesel catches and settles briefly
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/feeder_v12/engine_stop_1.wav
+  ONE-SHOT, 2 s requested, 1.03 s final; connected
+  large feeder vessel medium-speed V12 diesel, deep slow heavy throb, fuel cuts, engine turns down and stops
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/feeder_high_v12/engine_idle_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  very large high-output feeder diesel, weighty low exhaust pulses and turbine hiss, running steadily at idle
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/feeder_high_v12/engine_load_1.wav
+  LOOP, 8 s requested, 7.88 s final; connected
+  very large high-output feeder diesel, weighty low exhaust pulses and turbine hiss, running at constant working load
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/feeder_high_v12/engine_start_1.wav
+  ONE-SHOT, 3 s requested, 3.00 s final; connected
+  very large high-output feeder diesel, weighty low exhaust pulses and turbine hiss, starter engages, diesel catches and settles briefly
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/engines/feeder_high_v12/engine_stop_1.wav
+  ONE-SHOT, 2 s requested, 1.98 s final; connected
+  very large high-output feeder diesel, weighty low exhaust pulses and turbine hiss, fuel cuts, engine turns down and stops
+  Trigger: Machinery running transition/load blend; installed engine bank
+
+ship/thruster/bow_thruster_1.wav
+  LOOP, 6 s requested, 5.75 s final; connected
+  Tunnel bow thruster under water, muffled electric motor and cavitation
+  Trigger: Actual lateral thrust
+
+ship/hull/hull_creak_1.wav
+  LOOP, 7 s requested, 6.75 s final; connected
+  Restrained irregular structural steel ship creaking under gentle strain, no impacts
+  Trigger: Hull angular motion and sea state
+
+ship/controls/throttle_click_1.wav
+  ONE-SHOT, 0.5 s requested, 0.29 s final; connected
+  One firm mechanical throttle lever detent click
+  Trigger: Throttle detent change
+
+ship/controls/throttle_click_2.wav
+  ONE-SHOT, 0.5 s requested, 0.30 s final; connected
+  One firm mechanical throttle lever detent click
+  Trigger: Throttle detent change
+
+world/water/quay_lap_1.wav
+  LOOP, 8 s requested, 7.75 s final; connected
+  Small sheltered waves softly lapping against a concrete quay
+  Trigger: Nearest quay / vessel speed / player in water
+
+world/water/bow_wash_1.wav
+  LOOP, 8 s requested, 7.75 s final; connected
+  Steady water rushing and foaming along a ship bow
+  Trigger: Nearest quay / vessel speed / player in water
+
+world/water/stern_wash_1.wav
+  LOOP, 8 s requested, 7.75 s final; connected
+  Steady propeller wash and bubbling wake astern
+  Trigger: Nearest quay / vessel speed / player in water
+
+world/water/wade_1.wav
+  LOOP, 8 s requested, 7.75 s final; connected
+  Continuous gentle close water swishing around a person wading
+  Trigger: Nearest quay / vessel speed / player in water
+
+world/water/hull_slap_1.wav
+  ONE-SHOT, 1.5 s requested, 1.01 s final; connected
+  One small wave slapping a steel hull, hollow soft impact and splash
+  Trigger: Sea motion event
+
+world/water/hull_slap_2.wav
+  ONE-SHOT, 1.5 s requested, 0.85 s final; connected
+  One small wave slapping a steel hull, hollow soft impact and splash
+  Trigger: Sea motion event
+
+world/water/splash_enter_1.wav
+  ONE-SHOT, 2 s requested, 1.20 s final; connected
+  One person-sized splash into deep water
+  Trigger: Player crosses water surface
+
+world/water/splash_enter_2.wav
+  ONE-SHOT, 2 s requested, 1.43 s final; connected
+  One person-sized splash into deep water
+  Trigger: Player crosses water surface
+
+world/footsteps/step_steel_1.wav
+  ONE-SHOT, 0.6 s requested, 0.29 s final; connected
+  A single work boot footstep on painted steel deck, solid muted ring
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_steel_2.wav
+  ONE-SHOT, 0.6 s requested, 0.27 s final; connected
+  A single work boot footstep on painted steel deck, solid muted ring
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_steel_3.wav
+  ONE-SHOT, 0.6 s requested, 0.38 s final; connected
+  A single work boot footstep on painted steel deck, solid muted ring
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_concrete_1.wav
+  ONE-SHOT, 0.6 s requested, 0.44 s final; connected
+  A single work boot footstep on rough concrete quay, dry granular contact
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_concrete_2.wav
+  ONE-SHOT, 0.6 s requested, 0.60 s final; connected
+  A single work boot footstep on rough concrete quay, dry granular contact
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_concrete_3.wav
+  ONE-SHOT, 0.6 s requested, 0.60 s final; connected
+  A single work boot footstep on rough concrete quay, dry granular contact
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_wood_1.wav
+  ONE-SHOT, 0.6 s requested, 0.50 s final; planned material hook
+  A single work boot footstep on thick timber pier, dull woody knock
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_wood_2.wav
+  ONE-SHOT, 0.6 s requested, 0.60 s final; planned material hook
+  A single work boot footstep on thick timber pier, dull woody knock
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_grating_1.wav
+  ONE-SHOT, 0.6 s requested, 0.60 s final; planned material hook
+  A single work boot footstep on steel grating, short light metallic rattle
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_grating_2.wav
+  ONE-SHOT, 0.6 s requested, 0.37 s final; planned material hook
+  A single work boot footstep on steel grating, short light metallic rattle
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_gravel_1.wav
+  ONE-SHOT, 0.6 s requested, 0.53 s final; planned material hook
+  A single work boot footstep on coastal gravel, crunchy small stones
+  Trigger: Distance-based grounded foot contact
+
+world/footsteps/step_gravel_2.wav
+  ONE-SHOT, 0.6 s requested, 0.60 s final; planned material hook
+  A single work boot footstep on coastal gravel, crunchy small stones
+  Trigger: Distance-based grounded foot contact
+
+world/body/jump_1.wav
+  ONE-SHOT, 0.5 s requested, 0.26 s final; connected
+  One workwear rustle and boot push-off, no vocal effort
+  Trigger: Player jump or landing
+
+world/body/land_steel_1.wav
+  ONE-SHOT, 0.7 s requested, 0.44 s final; connected
+  One two-boot landing on a steel deck
+  Trigger: Player jump or landing
+
+world/body/land_concrete_1.wav
+  ONE-SHOT, 0.7 s requested, 0.37 s final; connected
+  One two-boot landing on concrete
+  Trigger: Player jump or landing
+
+world/doors/door_open_1.wav
+  ONE-SHOT, 1.2 s requested, 0.35 s final; connected
+  One heavy steel cabin door opening with a short hinge creak
+  Trigger: Door opens
+
+world/doors/door_close_1.wav
+  ONE-SHOT, 1 s requested, 0.32 s final; connected
+  One steel cabin door closes firmly with a damped thud
+  Trigger: Door closes
+
+world/doors/door_latch_1.wav
+  ONE-SHOT, 0.5 s requested, 0.28 s final; connected
+  One steel marine door latch clicking into place
+  Trigger: Latch engages
+
+world/gangway/gangway_lower_1.wav
+  ONE-SHOT, 2 s requested, 1.26 s final; connected
+  One aluminium gangway lowered onto a quay, hinge movement then contact
+  Trigger: Gangway deployment
+
+world/gangway/gangway_raise_1.wav
+  ONE-SHOT, 2 s requested, 0.73 s final; connected
+  One aluminium gangway lifted and folded into its support
+  Trigger: Gangway stow
+
+world/gangway/gangway_step_1.wav
+  ONE-SHOT, 0.6 s requested, 0.38 s final; connected
+  One boot step on an aluminium gangway, brief light hollow ring
+  Trigger: Foot contact on gangway
+
+world/gangway/gangway_step_2.wav
+  ONE-SHOT, 0.6 s requested, 0.44 s final; connected
+  One boot step on an aluminium gangway, brief light hollow ring
+  Trigger: Foot contact on gangway
+
+world/ladder/ladder_step_1.wav
+  ONE-SHOT, 0.6 s requested, 0.34 s final; connected
+  One work boot contacting a steel ladder rung
+  Trigger: Boarding ladder contact
+
+world/ladder/ladder_step_2.wav
+  ONE-SHOT, 0.6 s requested, 0.57 s final; connected
+  One work boot contacting a steel ladder rung
+  Trigger: Boarding ladder contact
+
+world/helm/autopilot_click_1.wav
+  ONE-SHOT, 0.5 s requested, 0.34 s final; connected
+  One marine panel pushbutton click with a tiny confirmation pip
+  Trigger: Autopilot toggle
+
+world/helm/breaker_click_1.wav
+  ONE-SHOT, 0.5 s requested, 0.48 s final; connected
+  One stiff electrical breaker switch clicks
+  Trigger: Navigation lighting toggle
+
+world/helm/seat_sit_1.wav
+  ONE-SHOT, 1 s requested, 0.45 s final; connected
+  One padded marine chair compresses with workwear rustle
+  Trigger: Sit at helm
+
+world/helm/seat_stand_1.wav
+  ONE-SHOT, 1 s requested, 0.88 s final; connected
+  One padded marine chair releases with a light fabric rustle
+  Trigger: Leave helm
+
+world/helm/watch_alarm_1.wav
+  ONE-SHOT, 1 s requested, 1.00 s final; connected
+  Three short distinct electronic marine watch alarm beeps, clear and restrained
+  Trigger: Watch timer expired
+
+world/mooring/line_on_1.wav
+  ONE-SHOT, 1.5 s requested, 1.48 s final; connected
+  One thick mooring rope thrown around a steel bollard and drawn taut
+  Trigger: Line secured
+
+world/mooring/line_off_1.wav
+  ONE-SHOT, 1.5 s requested, 1.38 s final; connected
+  One mooring rope slackens and slips free of a bollard
+  Trigger: Line released
+
+world/mooring/line_creak_1.wav
+  LOOP, 6 s requested, 5.75 s final; connected
+  A thick mooring rope gently stretching under changing load
+  Trigger: Mooring tension
+
+world/mooring/fender_rub_1.wav
+  LOOP, 6 s requested, 5.75 s final; connected
+  Rubber marine fender rubbing slowly against steel with subdued squeaks
+  Trigger: Hull contact while moored
+
+world/ramp/ramp_hydraulic_1.wav
+  LOOP, 5 s requested, 4.75 s final; connected
+  Steady hydraulic pump and ram motion for a ferry boarding ramp
+  Trigger: Ramp moving
+
+world/ramp/ramp_land_1.wav
+  ONE-SHOT, 1 s requested, 0.65 s final; connected
+  One heavy ferry ramp landing on rubber stops with a muted steel clunk
+  Trigger: Ramp contacts landing
+
+world/crane/slew_1.wav
+  LOOP, 5 s requested, 4.88 s final; connected
+  Steady electric crane slewing drive, deep motor hum and gearbox
+  Trigger: Crane slewing
+
+world/crane/trolley_1.wav
+  LOOP, 5 s requested, 4.88 s final; connected
+  Steady crane trolley wheels and electric drive on a steel beam
+  Trigger: Crane trolley or boom movement
+
+world/crane/hoist_1.wav
+  LOOP, 5 s requested, 4.88 s final; connected
+  Steady electric wire-rope hoist motor under load
+  Trigger: Hoist moving
+
+world/crane/hook_stop_1.wav
+  ONE-SHOT, 0.6 s requested, 0.57 s final; connected
+  One crane brake engages with a restrained mechanical clack
+  Trigger: Hoist stops
+
+world/crane/grab_open_1.wav
+  ONE-SHOT, 1.5 s requested, 0.96 s final; connected
+  One bulk grab opening, short hydraulic release and steel joints
+  Trigger: Grab opens
+
+world/crane/grab_close_1.wav
+  ONE-SHOT, 1.5 s requested, 0.54 s final; connected
+  One bulk grab closing, short hydraulic strain and steel contact
+  Trigger: Grab closes
+
+world/cargo/container_lift_1.wav
+  ONE-SHOT, 1 s requested, 0.65 s final; connected
+  One freight container taking load, steel tension and locking clunk
+  Trigger: Container lift begins
+
+world/cargo/container_land_1.wav
+  ONE-SHOT, 1.2 s requested, 0.78 s final; connected
+  One heavy freight container settles onto steel supports, weighty short clunk
+  Trigger: Container placed
+
+world/cargo/bulk_pour_1.wav
+  ONE-SHOT, 3 s requested, 2.54 s final; connected
+  One short discharge of dry grain from a grab, granular rushing and tapering tail
+  Trigger: Bulk transfer
+
+world/fishing/winch_1.wav
+  LOOP, 5 s requested, 4.75 s final; connected
+  Steady trawl winch gearbox and rope drum under load
+  Trigger: Fishing winch operating
+
+world/fishing/gear_out_1.wav
+  ONE-SHOT, 1.5 s requested, 1.08 s final; connected
+  One trawl winch clutch engages and brake releases
+  Trigger: Fishing gear deployed
+
+world/fishing/gear_in_1.wav
+  ONE-SHOT, 1.5 s requested, 0.98 s final; connected
+  One trawl winch clutch and brake securing retrieved gear
+  Trigger: Fishing gear retrieved
+
+world/fishing/net_splash_1.wav
+  ONE-SHOT, 1.5 s requested, 1.17 s final; connected
+  One bundled fishing net splashes into seawater
+  Trigger: Net hits water
+
+looped/ocean/calm_seas_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Gentle open-water swell, soft water movement, no shore surf
+  Trigger: Wave intensity crossfade
+
+looped/ocean/choppy_seas_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Short choppy fjord waves, water turbulence, no wind
+  Trigger: Wave intensity crossfade
+
+looped/ocean/rough_seas_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Rough offshore waves breaking unevenly, water only
+  Trigger: Wave intensity crossfade
+
+looped/ocean/stormy_seas_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Heavy turbulent sea and breaking crests, water only, no thunder
+  Trigger: Wave intensity crossfade
+
+looped/wind/wind_light_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Soft coastal breeze, broad gentle air movement without whistling
+  Trigger: Local supported wind and shelter
+
+looped/wind/wind_gale_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Strong exposed coastal wind, dense low air rush, no rain or water
+  Trigger: Local supported wind and shelter
+
+looped/rain/rain_drizzle_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Fine sparse drizzle on open ground, delicate individual droplets
+  Trigger: Rain amount; roof track requires overhead shelter
+
+looped/rain/rain_moderate_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Steady medium rain on open hard ground
+  Trigger: Rain amount; roof track requires overhead shelter
+
+looped/rain/rain_heavy_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Dense heavy downpour on open ground, no wind or thunder
+  Trigger: Rain amount; roof track requires overhead shelter
+
+looped/rain/rain_on_roof_2.wav
+  LOOP, 24 s requested, 23.75 s final; connected
+  Rain pattering on a steel cabin roof heard from beneath, damped low resonances
+  Trigger: Rain amount; roof track requires overhead shelter
+Audio revision 1 — 11 October 2026
+Six rejected clips revised; 102 approved WAV files preserved byte-for-byte.
+Drizzle take 2: corrected from -47.83 to -24 dBFS RMS without regeneration.
+Container landing: regenerated for a heavy steel-on-steel deck impact.
+Net deployment: regenerated; final duration 7.43 seconds, 5.7 seconds above the activity threshold.
+Chair: regenerated for fabric and cushion compression.
+Fender: regenerated for sustained rubber friction; first candidate rejected by waveform checks.
+Mooring line: regenerated for heavy rope placement and tension.
+All six revisions await listening approval. Existing approval history remains intact.
+391 additional credits in generation receipts; cumulative 7,506 of 20,000.
+598 audio-library checks passed; review persistence and export checks passed.

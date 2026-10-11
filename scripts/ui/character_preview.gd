@@ -2,7 +2,7 @@ class_name CharacterPreview
 extends Node3D
 
 ## Turntable for menus and the character creator SubViewport. It deliberately
-## uses the same JSON-backed CharacterVisual as gameplay NPCs and the F6
+## uses the same imported CharacterVisual as gameplay NPCs and the F6
 ## wardrobe showcase, so onboarding can never drift back to a legacy body.
 
 const TURN_SPEED := 0.55

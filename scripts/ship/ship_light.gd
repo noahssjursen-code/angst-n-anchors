@@ -33,6 +33,10 @@ enum LightType {
 @export var spot_range_m: float = 22.0
 @export var spot_energy: float = 55.0
 @export var spot_angle_deg: float = 48.0
+## Imported fixtures can keep a readable lens without washing nearby bulkheads.
+@export var omni_range_scale: float = 1.0
+@export var omni_energy_scale: float = 1.0
+@export var lens_energy_scale: float = 1.0
 
 var _light: Light3D
 var _bulb: OmniLight3D
@@ -87,7 +91,7 @@ func _apply_energies() -> void:
 		_bulb.light_energy = _base_bulb_energy * energy_mul
 	if _lens_mat != null:
 		_lens_mat.emission_energy_multiplier = (
-			_lens_on_energy() * energy_mul if _active else 0.0
+			_lens_on_energy() * lens_energy_scale * energy_mul if _active else 0.0
 		)
 
 
@@ -258,6 +262,9 @@ func _emissive_mat(color: Color) -> StandardMaterial3D:
 # --- Light helpers ---
 
 func _make_omni(color: Color, range_m: float, energy: float, vol_energy: float) -> OmniLight3D:
+	range_m *= omni_range_scale
+	energy *= omni_energy_scale
+	vol_energy *= omni_energy_scale
 	var light := OmniLight3D.new()
 	light.name = "Fill"
 	light.light_color = color
@@ -278,6 +285,8 @@ func _make_omni(color: Color, range_m: float, energy: float, vol_energy: float) 
 
 
 func _make_bulb(color: Color, range_m: float, energy: float) -> OmniLight3D:
+	range_m *= omni_range_scale
+	energy *= omni_energy_scale
 	## Tiny near-field glow for the lens glass only — keep range tiny to avoid wall rings.
 	var light := OmniLight3D.new()
 	light.name = "Bulb"
@@ -305,16 +314,16 @@ func _make_spot(pitch_deg: float, range_m: float, energy: float, angle_deg: floa
 	light.spot_range = range_m
 	light.spot_attenuation = 1.25
 	_base_energy = energy
-	_base_vol_energy = clampf(energy * 0.055, 1.5, 3.5)
+	_base_vol_energy = 0.55 # Scatter is secondary to the illuminated deck.
 	light.light_energy = energy * _day_scale
 	light.light_volumetric_fog_energy = _base_vol_energy * _vol_scale
 	light.spot_angle = angle_deg
 	light.spot_angle_attenuation = 1.8
 	light.light_specular = 0.85
-	light.light_size = 0.15
+	light.light_size = 0.35
 	light.shadow_enabled = true
 	light.shadow_bias = 0.06
-	light.shadow_normal_bias = 1.2
+	light.shadow_normal_bias = 0.25
 	light.shadow_blur = 1.5
 	add_child(light)
 	return light

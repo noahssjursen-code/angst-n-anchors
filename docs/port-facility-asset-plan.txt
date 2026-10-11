@@ -1,0 +1,160 @@
+PORT FACILITIES AND ASSET REQUIREMENTS - 6 October 2026
+Research/design record; no runtime layout changes in this pass.
+
+Decision
+--------
+Generate facilities and working areas from the port's actual services and cargo
+handling needs. Import/export is a cargo direction, not a building archetype.
+One shared handling area can serve both directions while cargo identities,
+owners and inventories remain separate. Do not give every plot a small shed.
+
+What exists in the game
+----------------------
+PortData: identity, size, region, berth count, maximum ship class, trade_profile,
+layout_graph, fuel/fishing/lighthouse/foghorn flags, population and features.
+PortTradeProfile: active import/export slots, fixed mature destiny lists, theme.
+Ordinary general cargo (internal ID provisions) is added in both directions.
+PortFishingService adds fresh_groundfish imports for eligible ports; Expander
+then checks actual realized berths before advertising fish landing.
+CommodityCatalog: handling mode, terminal family and commodity identity.
+PortLayoutGraph.initial_attributes: foundation, berth_plan and land_plan.
+Land plan apron pads: stable id, role, commodity_id, zone, footprint, position,
+orientation and template. These describe sites, not operational storage capacity.
+
+Problems located
+----------------
+1. PortApronPadCatalog already defines harbour_office, parking_apron, workshop,
+   crew_welfare and chandlery. Only office is required. Parking, workshop,
+   welfare, customs and chandlery are absent from active V1 placement lists.
+2. Active universal decoration is general_warehouse and fuel_bunker. General
+   cargo adds both provisions_depot and provisions_cold. Containers likewise
+   add container_yard and container_stack. This can multiply sites for one
+   handling function before its required capacity is known.
+3. The current imported fallback ignores role and puts warehouse_12x18 on
+   every sufficiently large unfilled apron plot, including harbour_office.
+   Replace this fallback with role-aware facility recipes.
+4. CommodityCatalog currently gives every trade a dedicated quay; general
+   cargo and containers share their own import/export group, while other
+   groups are commodity-and-direction specific. family_allows_shared_quay
+   returns false. Shared storage is possible without first merging berths.
+   Actual berth consolidation is a separate change to live harbour logic.
+5. Apron placement's berth preference still looks at asphalt_stations, while
+   uses_asphalt_dock currently returns false for all commodities. New facility
+   connections must resolve actual quay station IDs and access points.
+6. A 22 m site lattice and two-cell gap can reserve 44 m between neighbouring
+   sites. It cannot serve as the placement grid for doors, cars or loading bays.
+   Keep coarse parcels, but design their contents in metres with real clearance.
+7. Inland trade decoration is scattered separately from the berth/apron plan.
+   It does not establish connected, authoritative industrial premises.
+8. Fuel-point flag is currently set true by Expander; do not confuse a vessel
+   refuelling service with a port trading bulk diesel/crude/LNG. Verify realized
+   service equipment independently, as fish landing already does.
+
+Asset selection rules (proposed, not implemented)
+------------------------------------------------
+COMMON CORE: one admin/service precinct, connected vehicle access, pedestrian
+route, modest staff/visitor parking, lighting, bins, fire/rescue points and
+quay fittings. Scale down to a small office/service hut for tiny landings.
+Scale by usable site area and working capacity, not by commodity count alone.
+
+HARBOUR OFFICE: distinct one-/two-storey coastal industrial office, public
+entrance/canopy, harbour-facing windows, sign, noticeboard, service counter,
+staff rooms and equipment cupboard. Use modular walls/corners/windows/doors,
+roof, stair/landing and interior pieces. Reception must connect to existing
+harbourmaster/shipwright/freight interactions; do not silently move NPCs into
+inaccessible solid shells. Small ports can combine office and crew welfare.
+
+PARKING: staff/visitor car bays next to office, separate service-van/loading bays,
+and truck/trailer waiting only where cargo traffic warrants it. Reusable kerbs,
+endcaps, ramps, wheel stops, markings, signs and gate/barrier. Car stalls, access
+aisles, loading bays and truck turning space are separate footprints. Initial
+art-layout targets such as 2.6 x 5.2 m car bays are game design values, not a
+claim of compliance with any local road/building standard. Keep walking access
+to the office outside crane reach and heavy-vehicle turning areas.
+
+GENERAL CARGO (provisions): shared open hardstanding/laydown yard with marked
+storage bays and handling aisles; selectively add covered transit shed/canopy
+for cargo needing shelter. Assets: pallet/crate bundles, timber dunnage, cable
+reels, bundled material, loading doors, rack ends, barriers and signs. Reuse
+existing playable CargoYardPad/handling components; decorative stacks must not
+duplicate authoritative freight or advertise fake inventory.
+
+CONTAINERS: shared import/export container yard, numbered real 20/40-foot slots,
+empty-container area and handling lanes. Reuse existing ISO container models.
+Add reefer cabinets only when refrigerated cargo is actually supported; leave
+space for handling vehicles before populating stacks. Yard is primarily space
+and circulation, not an enclosed warehouse or one building per direction.
+
+ORE / COAL: separate commodity stockpile compartments within a shared bulk
+precinct, retaining walls, loading hopper, conveyor supports, transfer housings,
+access stairs and weighbridge on larger sites. Shared precinct does not mean
+mixing commodities or assuming the current berth controller can merge berths.
+
+GRAIN: enclosed dry storage/silos, elevator tower, covered conveyor and loading
+spout. Grain must not inherit the open ore stockpile artwork simply because
+both use bulk cargo gameplay.
+
+LIQUID: product-specific tanks, containment walls, pipe racks, valves, pump
+house and transfer arms. Diesel/crude may share the site services but retain
+separate product systems. LNG needs a visibly different insulated tank/process
+kit; terminal_family=liquid is insufficient to select one generic tank model.
+
+FISH LANDING: existing pump/receiving equipment, appropriate shore tanks, wash
+area, drained working floor, fish tubs, covered sorting/landing canopy and cold
+storage/loading face where appropriate. Use has_fish_landing plus realized
+berths. The legacy name provisions_cold does not make all general cargo cold.
+
+SERVICE: workshop/chandlery/welfare when the port supports those functions,
+refuel point where realized, shore power/water, waste enclosure. Lighthouse and
+foghorn follow existing flags and navigational placement, not every cargo yard.
+
+Data changes needed
+-------------------
+Add an explicit facility layer inside the existing land_plan; do not create a
+parallel economy or derive storage capacity from mesh size. Proposed fields:
+id, kind, commodity_ids, served_berth_ids, parcel_polygon, building footprints,
+access points, vehicle routes, pedestrian routes, keepouts, phase and recipe
+version. Separate required needs from placed facilities and record unmet needs
+when a site is too constrained. Mature destiny can reserve expansion space;
+only active trade/realized services should populate operational equipment.
+Deduplicate compatible handling requirements across import/export lists while
+retaining product separation, direction and ownership in existing freight data.
+Throughput, dwell time, target occupancy and vehicle mix are not established
+facility-sizing inputs today. Until defined, use documented size-tier layouts,
+not fictional precise capacity inferred from trade slot count.
+
+Preserve existing saved graphs and IDs. Read old role pads through a compatible
+presentation adapter; apply new parcel planning only to newly generated graphs
+or an explicit migration. Never erase captain modifications to rebuild scenery.
+
+First application: reviewed Gronnvik, seed 424242
+------------------------------------------------
+Current reviewed port has general cargo, iron ore export and fish landing;
+four apron roles are office, provisions depot, provisions store and general
+warehouse. Replace this repeated-shed composition with an office/parking
+precinct; one shared general-cargo yard with selective covered storage; an ore
+working/storage precinct; and a fish receiving/cold-chain area. Keep its current
+three berth IDs while testing facility access. Do not add a container terminal
+or LNG plant when those trades are not active. Refuelling is a separate service.
+
+Build order
+-----------
+1. Role-aware recipes and office/public parking precinct, including usable
+   entrance and existing NPC access. Retain saved blueprint priority.
+2. Shared open-yard parcels, loading lanes and selective covered storage.
+3. Specialist ore/fish areas for this actual port; then other commodity kits.
+4. Verify small, constrained and larger port profiles, saved graph reloads,
+   walking, vehicle clearances, cargo handling and mooring/crane exclusion zones.
+5. Once visual port layout reads correctly, perform Noah's requested semi-realistic
+   material pass: worn paint, exposed metal, localized rust, roughness/normal
+   detail, damp concrete and patched paving, preserving custom paint controls.
+
+Primary reference inspected
+---------------------------
+Port of Blyth Terminal Plans, September 2025, PDF pages 3 and 4:
+https://portofblyth.co.uk/wp-content/uploads/2025/09/POB-Terminal-Plans-Brochure.pdf
+The maps distinguish office/welfare, parking, open storage, covered sheds,
+container areas, roads and pedestrian routes. Use the spatial relationships
+as reference; do not copy its dimensions or offshore specialization into every
+Norwegian coastal port. Local reference renders are archived under
+C:/Users/noahs/Pictures/machinescreenshots/2026-10-06-blyth-layout-3.png and -4.png.

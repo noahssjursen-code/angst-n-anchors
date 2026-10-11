@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dgi3cqpdqvblw"
+path="res://.godot/imported/fft_ocean_slope_mip.glsl-7fd18e561d93ccb51613fa159a79757b.res"
+
+[deps]
+
+source_file="res://resources/shaders/fft_ocean_slope_mip.glsl"
+dest_files=["res://.godot/imported/fft_ocean_slope_mip.glsl-7fd18e561d93ccb51613fa159a79757b.res"]
+
+[params]
+

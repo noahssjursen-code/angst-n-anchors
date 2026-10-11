@@ -7,11 +7,11 @@ extends RefCounted
 const PATCH_SCALE_M := 2800.0
 const DETAIL_SCALE_M := 520.0
 ## Keep a thin bare rock strip at the shore, then let canopy start close inland.
-const MIN_INLAND_M := 22.0
-const FULL_INLAND_M := 95.0
-const MAX_SLOPE := 0.58
+const MIN_INLAND_M := 10.0
+const FULL_INLAND_M := 55.0
+const MAX_SLOPE := 0.80
 const MAX_HEIGHT_M := 900.0
-const COVERAGE_MAP_SIZE := 128
+const COVERAGE_MAP_SIZE := 256
 
 
 static var world_seed: int = 0
@@ -22,12 +22,14 @@ static var _initialized := false
 static var _coverage_texture: ImageTexture
 static var _world_half_extent_m := 20000.0
 static var _flatten_zones: Array = []
+static var _zone_chunks: Dictionary = {}
 
 
 static func initialize(layout: Object, seed: int, flatten_zones: Array = []) -> void:
 	_layout = layout
 	world_seed = seed
 	_flatten_zones = flatten_zones
+	_zone_chunks.clear()
 	_world_half_extent_m = float(layout.half_extent_m) if layout != null else 20000.0
 	_ensure_noise()
 	_coverage_texture = bake_coverage_map()
@@ -38,6 +40,7 @@ static func clear() -> void:
 	_layout = null
 	_coverage_texture = null
 	_flatten_zones = []
+	_zone_chunks.clear()
 	_initialized = false
 
 
@@ -79,13 +82,14 @@ static func sample(world_xz: Vector2) -> float:
 		return 0.0
 
 	var inland_w := smoothstep(MIN_INLAND_M, FULL_INLAND_M, inland)
-	var slope_w := 1.0 - smoothstep(0.28, MAX_SLOPE, slope)
+	var slope_w := 1.0 - smoothstep(0.35, MAX_SLOPE, slope)
 	var height_w := 1.0 - smoothstep(520.0, MAX_HEIGHT_M, height)
 
 	var patch := _noise_01(_patch_noise, world_xz, PATCH_SCALE_M)
 	var detail := _noise_01(_detail_noise, world_xz, DETAIL_SCALE_M)
-	# Broad coastal belts with gaps — still patchy, not a lawn.
-	var cover := smoothstep(0.22, 0.58, patch) * lerpf(0.55, 1.0, detail)
+	# Closed stands with broad clearings, rather than thinning every hillside
+	# into isolated dots. Slope, exposure and altitude still shape their edges.
+	var cover := smoothstep(0.30, 0.44, patch) * lerpf(0.85, 1.0, detail)
 	return clampf(cover * inland_w * slope_w * height_w, 0.0, 1.0)
 
 
@@ -95,11 +99,11 @@ static func bake_coverage_map() -> ImageTexture:
 		image.generate_mipmaps()
 		return ImageTexture.create_from_image(image)
 	var half := _world_half_extent_m
-	var denom := float(COVERAGE_MAP_SIZE - 1)
+	var denom := float(COVERAGE_MAP_SIZE)
 	for y in range(COVERAGE_MAP_SIZE):
-		var world_z := lerpf(-half, half, float(y) / denom)
+		var world_z := lerpf(-half, half, (float(y) + 0.5) / denom)
 		for x in range(COVERAGE_MAP_SIZE):
-			var world_x := lerpf(-half, half, float(x) / denom)
+			var world_x := lerpf(-half, half, (float(x) + 0.5) / denom)
 			var density := sample(Vector2(world_x, world_z))
 			image.set_pixel(x, y, Color(density, density, density))
 	image.generate_mipmaps()
@@ -117,7 +121,14 @@ static func _estimate_slope(world_xz: Vector2) -> float:
 
 
 static func _inside_flatten_zone(world_xz: Vector2) -> bool:
-	for zone_variant in _flatten_zones:
+	var coord := Vector2i(floori(world_xz.x / 1000.0), floori(world_xz.y / 1000.0))
+	if not _zone_chunks.has(coord):
+		_zone_chunks[coord] = WorldTerrainStreamer.zones_intersecting_chunk(_flatten_zones, coord, 1000.0)
+	return inside_flatten_zones(world_xz, _zone_chunks[coord])
+
+
+static func inside_flatten_zones(world_xz: Vector2, zones: Array) -> bool:
+	for zone_variant in zones:
 		var zone := zone_variant as Dictionary
 		## Town / polygon clears (forest only) and legacy rectangular pads.
 		if zone.has("polygon"):

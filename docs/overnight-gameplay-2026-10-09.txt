@@ -1,0 +1,935 @@
+Overnight gameplay quality pass — 9–10 October 2026
+
+Authorization and limits
+Noah requested an overnight run improving the game/gameplay while out. Finish
+the requested 40-container T-bridge ship first. Working cutoff: 08:00 Europe/Oslo
+10 October (06:00 UTC); pause overnight-marine-models-and-integration then.
+30-minute heartbeat. Work substantial batches between checkpoints. No subagents.
+Read AGENTS.md and resources/models/README.md. Accepted walking and ocean stay
+unchanged. Preserve captain saves, geography, unrelated work and current editors.
+Use --shipyard-playtest; archive all captures in Pictures/machinescreenshots.
+Commit only verified scoped changes, push feature/3d-model-migration, verify SHA.
+
+Order
+1. Finish Northline 40: editor-authored reusable Blender hull/outfit, forty real
+   deck container positions, T bridge, all access, handling and cargo delivery.
+2. Noah's new ferry request: research Bergen-area Skyss/Norled passenger
+   catamarans and terminals, then build a coherent passenger ferry/terminal
+   slice. Research is saved in docs/passenger-ferry-research-2026-10-09.txt.
+   Resume its build order; do not treat the legacy empty catamaran as finished.
+3. Inspect full gameplay loop with real production services: purchase/deploy,
+   boarding, freight booking/cancellation, load, moor, unload/pay, save/reload.
+   Read every report and fix demonstrated failures. Keep tests lean and fast.
+4. Noah said at approximately 21:17 local on 9 October to leave multiplayer
+   alone. Do not resume multiplayer implementation or network tests.
+5. Review performance/visual fitout in actual play; improve concrete deficiencies
+   found during these journeys rather than broad rewrites or gratuitous changes.
+At cutoff record pushed commits, checks, screenshots and remaining gaps here.
+
+Starting checkpoint, 9 October approximately 20:00 local
+Northline 40 is uncommitted work currently being verified. 88 x 14 m, 477 editable
+parts, 40 x 20 ft single-deck containers (no invented stacking), 1500/2100 kW
+presets. 1850 t lightship and 2650 t with forty real 20 t ContainerUnits.
+Actual Shipyard editor save/reload passes. Handling passes free Jolt simulation:
+12.4/12.3 kn empty/laden, 42.2/55.6 s crash stop from 7.8 kn, actual cargo mass,
+propeller/rudder and bow thruster. Test report feeder-handling-1791568370-622.json
+under screenshot archive. World journey passes harbourmaster deploy, four-unit
+booking/load, destination ropes, crane unload, exact once-only payment. Report:
+fleet-journeys-1791568458-263/report.json. Found and narrowly fixed selection of
+out-of-reach cargo by cranes on long vessels. Initial failure report retained.
+Outstanding current work: rendered real-controller stair/door test (headless
+mouse capture does not work), moved liferafts off upper passage, regenerate
+materials to remove Blender .001 rubber name, final renders and scoped commit.
+Detailed logs live in C:/Users/noahs/Documents/Codex/2026-10-05/
+referenced-chatgpt-conversation-this-is-an/work/feeder-*.log.
+Unrelated large UI refactor is already unstaged; do NOT sweep it into this commit.
+
+9 October approximately 20:15 local — feeder acceptance
+Resolved player access through authored geometry only: liferaft cradles moved off
+gallery, upper stair reversed to face the aft landing, stairwell lengthened for
+head clearance, bridge wing door added, seats moved clear of the doorway.
+Rendered container_feeder_test now passes the whole real-input stair/door route.
+ship_gangway_test with --vessel=container_feeder_40 --rotated passes boarding and
+return across a moving span on both sides, stow/redeployment and bad-landing limits.
+Captures: gangway-1791569371-container_feeder_40*.png in the screenshot archive.
+Added larger-stock editable copies to the builder Drafts menu and nearest authored
+bed snapping, checked all forty seats through the actual editor. All four original
+starters pass imported_starter_fleet_test; harbour_service_routing_test passes.
+All five ships pass vessel_handling_test; heavy ship limits preserve longer inertia
+while retaining finite astern braking and unpowered deceleration. Report:
+handling-1791569166-799.json. Free-floating laden result remains the more useful
+speed estimate (12.3 kn); yaw/heave-locked benchmark reports 14.3 kn for the feeder.
+New asset finish-name audit passes; accidental Blender rubber suffixes corrected.
+Remaining overnight gameplay priority: full forty-unit crane load/unload across
+multiple crane work envelopes, then purchase/cancellation/persistence and network
+authority checks. Do not call the four-unit delivery a forty-unit crane test.
+Final rendered review: feeder-1791569517-129/{loaded-bow,loaded-stern,bridge,
+deck-walkway,helm,empty-bow}.png. Warmed loaded scene at 1920x1080 on RTX 5070:
+median 10.03 ms, p95 10.984 ms, 1503 draw calls (isolated sea scene, not a full
+port benchmark). Inspect batching opportunities during later performance work.
+Starter editor save/load regression passes with the expanded stock-copy menu.
+
+Checkpoint saved: ff7675b788ba265dcda344f1181cbc58d198bb9b committed and pushed
+to origin/feature/3d-model-migration; ls-remote matched exactly. Priority 1's
+vessel build/access/handling acceptance is complete. Resume priority 2 with the
+full-capacity crane journey; do not repeat the completed construction work.
+Final actual Shipyard capture: feeder-editor-1791569638-654.png. Test processes
+have exited. The user's existing editor/game instances were preserved.
+
+9 October approximately 20:50 local — full-capacity freight
+Reproduced a real large-vessel failure: the 40-unit booking issued/loaded only
+25 units, then the crane reported completion. FreightService stopped after the
+first reachable yard. Failure report: fleet-journeys-1791570848-071/report.json.
+Staging now uses all reachable crane bays, respects the actual issued footprint,
+and replenishes finite yard space after a physical lift lands aboard. Shared
+issued counts prevent duplicate cargo. Each NPC still controls its own crane;
+the test visits successive operators along the quay. Operator messages now say
+when this crane's work is finished and distinguish reach limits from full beds.
+No global port creation, crane teleporting, or invented cargo capacity was added.
+
+Extended the existing fleet_world_journey with --containers=40, explicit fixture
+scope and per-lift manifest/equipment records. It uses generated ports 11 and 23,
+seed 424242, a controlled 40-unit provisions booking, real acceptance/staging/
+physical lifting/destination ropes/settlement. Ship motion is frozen at the quay
+and the voyage is teleported, as before. This is local authority, not multiplayer
+proof. The provisions load is 128 t; the earlier heavy handling load was 800 t.
+Headless complete journey passed in 340.34 s at --speed=8:
+fleet-journeys-1791570996-915/report.json, forty loaded, forty delivered, zero
+remaining ship cargo mass, exact 16,440 fixture payment and all duplicate
+deliveries rejected. Initial rendered attempt 1791571341-757 was deliberately
+interrupted because the harbourmaster conversation covered the scene; its
+report records that reason. Added normal Escape input to dismiss it in the test.
+Harbour service routing regression passes, now including multi-yard issuance,
+unreachable-yard exclusion, repeated staging and one-slot yard replenishment.
+Existing freight_cancellation_test passes 29 checks, including failed-save
+rollback and scratch-save reload. Its deliberate failed-write error is expected.
+Unrelated UI/cancellation edits remain unstaged and must not be swept into this
+batch. Only new freight hunks in the shared files were selected for this commit.
+
+Final rendered acceptance: fleet-journeys-1791571443-933/report.json passes all
+158 checks, records 80 physical transfers and 8 archived captures. Inspected
+deployed, staged-yard, fully-loaded, destination-transfer and empty-after-delivery
+images. Loading used crane 0 for 15 units and crane 1 for 25; destination unloading
+used crane 0 for 4 and crane 1 for 36. No floating cargo remained on the hooks or
+deck after completion. No engine errors/warnings in the rendered log. The full
+1600x900 rendered run took 478.0 s with 8x simulation, versus 340.34 s headless;
+this exercises accelerated world physics and is not a normal-play FPS benchmark.
+Loaded capture: container_feeder_40-loaded-0.png in that report folder.
+All task test processes exited; existing user editor/game processes were preserved.
+
+Next: real purchase/deploy/return-to-storage and persistence in the generated
+world, then two-client authority. The existing uncommitted voyage_ui_test assumes
+every sale vessel is affordable with new-captain capital; that assumption is now
+wrong for the 98,000 Northline 40. Fund that test through an explicit test ledger
+credit and retain the insufficient-funds case; do not lower the ship's price or
+increase starting capital to make a test pass. Do not use remote_realtime_join_smoke
+as an isolated test: it targets the production server and an existing captain.
+
+9 October approximately 21:25 local � storage lifecycle and blocked fish berth
+Extended the existing fleet_world_journey locally with --lifecycle-only. It buys
+through the actual shipwright service (explicit 200,000 test ledger capital),
+checks out-of-range rejection, canonical debit, complete fitout and recovery
+archive, retries without double charging, deploys, stores/releases occupancy,
+writes a real scratch captain file, reloads and redeploys the same UUID/design.
+Both save roots are redirected before any writes. Captain saves are untouched.
+All five catalog vessels passed 190 checks in 47.13 s at 1600x900:
+fleet-journeys-1791572853-557/report.json; captures reviewed for each vessel.
+Initial lifecycle failures were harness defects: wrong deploy payload key, then
+checking deferred mooring too early. Corrected; no production purchasing or
+storage change was needed. voyage_ui_test now funds expensive stock explicitly,
+retains insufficient-funds rejection and avoids indexing an empty purchase;
+46 checks pass (rendered). This test is preexisting untracked UI work.
+
+Visual review exposed a real issue the old berth-face check missed: seed 424242,
+port-10's fishing berth placed the trawler inside the neighbouring provisions
+pier. Reproduced collision with QuayPier/PierCollision, reports 1791573251-752
+and 1791573364-101. A separate initial probe run 1791573197-455 had a harness
+property error and is explicitly marked invalid_test_runtime_error, not a pass.
+The requested 82 m comb spacing became about 58 m after snapping onto the short
+curved face. A 72 m fish pier beside a 36 m provisions pier left only ~4 m of
+water on the alternating loading side. PortBerthPlan now checks actual neighbour
+edges and longitudinal overlap, switching to the opposite loading face only
+when it offers design-beam clearance plus 5 m. Pier geometry, port positions,
+IDs, terrain and saved vessel records stay unchanged. Bollards, equipment and
+ship placement all use that same resolved face. This does not claim to repair a
+site that has insufficient clearance on both sides.
+
+Added the measured case to harbour_service_routing_test; all routing, deployment,
+doors and staging checks pass. The older port_trade_profile_test stopped at its
+preexisting obsolete apron service-prop assertion (line 142), before the new
+case; no unrelated production decoration was changed to satisfy it. Its hung
+test process was stopped. The focused case was moved to the maintained routing
+test. fleet_world_journey now probes the middle hull volume against neighbouring
+port collisions, excluding its own fittings. Final rendered all-stock lifecycle
+passes 195 checks, zero failures and no engine errors/warnings:
+fleet-journeys-1791573589-5/report.json. Corrected trawler image:
+fishing_trawler-stored-reloaded-redeployed.png. A complete trawler trip after the
+face change passes 26 checks in 19.03 s, including destination lines, physical
+500 kg landing and 120 marks payment: fleet-journeys-1791573667-595/report.json.
+Inspected the new berth and unloading images. Captures are all under
+C:/Users/noahs/Pictures/machinescreenshots/ with these unique folder names.
+
+Scope: lifecycle-only purchase/storage harness additions and voyage_ui_test
+funding remain in the working copy beside the preexisting uncommitted UI/service
+rebuild they require. Do not sweep that unrelated rebuild into a commit. The
+scoped shipping change is the loading-face fix, its routing regression, and the
+shared world-journey collision check. New local baseline of the journey before
+this batch is work/fleet-before-lifecycle.gd.
+
+Multiplayer stopped at Noah's explicit request. Before that request, the existing
+22-scenario service suite passed on a disposable loopback Go server/PostgreSQL
+instance (work/mp-night-isolated-report.json). It used independent in-process
+clients, not two rendered game processes. A first run could not bootstrap under
+the playtest guard; its remaining 21 scenarios were skipped, not gameplay bugs.
+Temporary network harness/guard changes have been removed; no multiplayer source
+changes are included. Test server process and auto-remove database container are
+stopped; user's running server on 8080 was untouched. Automation prompt updated
+to exclude multiplayer and preserve the 08:00 cutoff/30-minute cadence.
+
+Next single-player work: inspect real boarding and freight cancellation/rebooking
+at varied generated ports, especially layout pockets and equipment reach. Northline
+construction, forty-unit delivery, accepted movement and ocean need no repeat pass.
+Do not restart network work. Preserve the unrelated UI work and all captain saves.
+
+9 October - passenger ferry research, new user priority
+Reviewed primary Brødrene Aa, Skyss, Oma and Servogear references for a
+Bergen-area passenger catamaran and terminal. Visually inspected Fjordbris
+exterior, bridge, saloon and controls; rendered the Skyss/Rambøll 2021 terminal
+study's Strandkaien layout and bow-boarding/pontoon proposals. Source evidence,
+proposed original vessel/terminal arrangement and implementation gaps are saved
+in docs/passenger-ferry-research-2026-10-09.txt. Source photographs remain in the
+task's work/ferry-research-20261009; PDF captures are archived in machinescreenshots.
+Research only: no new ferry model, passenger service or physics changes yet.
+Key gaps: imported pipeline assumes one hull/drive and one convex collision;
+existing side gangway cannot supply wide bow boarding; there is no current
+passenger manifest/fare service. Preserve the accepted monohulls, ocean and gait.
+Next batch starts the brief's isolated twin-hull support and measured arrangement,
+then reusable Blender models and terminal. Multiplayer stays out of scope.
+
+
+9 October 22:18 Oslo - Coastal Express 240 construction milestone
+Built the original 36.5 x 11 m catamaran from the researched arrangement: 194
+editable Shipyard placements, 240 authored seat sockets, raised forward bridge,
+open twin-hull tunnel, twin 1.45 m propellers/rudders and a 3600 kW engine package.
+Reusable Blender sources and separate GLBs cover saloon, seating, bridge, stairs,
+bow ramp, rails, luggage and fittings. The 24 x 24 m pile pier and 18 x 9 m
+waiting room use a separate reusable passenger-terminal kit. All use approved
+materials, including a low-relief composite-enamel profile. These are isolated
+development assets, not yet a commissioned passenger service or stock sale boat.
+
+Split demihull collisions and separate buoyancy strips retain the common mass
+contract; the existing monohull path retains one strip and its drive aliases.
+Tested actual Shipyard save/reload, open tunnel collision, both hull collisions,
+240 seat sockets, design displacement, equilibrium and powered handling. Final
+flat-water results: 35.35 kn full power; 18.30 kn after 30 s coasting; 6.12 s
+astern stop FROM that reduced speed, not from full cruise. No speed clamp.
+Report: machinescreenshots/ferry-construction-test-1791576835-087.json.
+
+The real player initially failed on bridge stair headroom. Expanded the authored
+roof opening, added a stair trunk and cleared the bridge aft entrance. Rendered
+access now passes pier-to-bow ramp, opening/entering bow door, centre aisle,
+bridge ascent/descent and side aisle around stairs to the aft seats:
+ferry-construction-test-1791576939-979.json. Its log has no engine errors or
+warnings. The separate editor-roundtrip run passes but reports ObjectDB / seven
+resources in use at shutdown; earlier combined editor/access runs also reported
+renderer environment RIDs. This cleanup issue remains; do not call those logs
+clean. Existing starter_drafts_test passes all four starter roundtrips.
+
+Actual daytime Godot images reviewed through several iterations. Corrected
+over-transparent saloon glass, boxy bridge profile, wall/roof gaps, stair access,
+diagonal bow rail spacing and doubled pier/canopy posts. Latest full captures:
+C:/Users/noahs/Pictures/machinescreenshots/coastal-express-1791576792-777/
+bow.png, side.png, stern.png, saloon.png, bridge.png, tunnel.png, terminal.png,
+terminal-entrance.png. Bow plus terminal: 339 draw calls, median 9.98 ms and
+p95 10.35 ms across 100 warmed frames at 1920 x 1080 on this machine. This is
+a local scene sample, not full-world or minimum-hardware performance acceptance.
+
+Next: working deploy/stow bow boarding with berth/propulsion interlocks, passenger
+manifest and route lifecycle using the existing local company authority, two
+isolated terminal stops and exact-once fare/payment persistence. Still pending:
+night lighting, moving/wave boarding, side boarding, interior detail and eventual
+save-compatible real-port placement. Shared throttle represents the symmetric
+twin-drive package; independent engine control is not implemented. Keep water,
+locomotion, multiplayer and unrelated UI working-copy changes untouched.
+
+
+9 October 22:50 Oslo - functional ferry boarding and passenger berth
+Completed the next construction batch: authored rigid bow leaf, physical hinge,
+separate barrels/sliding rods and landing rollers, plus an L-shaped side quay
+assembled from existing pier modules. Bow-in QuayBerthSlot placement uses actual
+vessel length. PassengerTerminal explicitly registers its berth and mooring posts
+with the existing harbour; production generated ports remain unchanged.
+
+FerryBoarding discovers hinge/tip sockets, verifies both roller lanes on real
+pier collision, alignment, speed, slope/roll and head clearance, then deploys only
+with both lines fast. The rigid leaf tracks small hull motion; it never stretches.
+An occupied ramp cannot be lifted. Cast-off first requests stow and retains lines;
+a second order releases when secured. Direct propulsion/thruster commands also
+respect the equipment interlock and do not burn fuel while blocked. Fit-out
+rebuild leaves exactly one current callback. Bow-in mooring does not haul the hull
+sideways by the alongside berth's 2.2 m capture retract.
+
+Failures investigated, not hidden: an initial centre support probe hit a tiny
+bevel at a pier tile seam and wrongly rejected the landing. Two actual roller
+support probes fixed that without permitting a water gap. A destination fixture
+produced a rope toward the old pier and large drift because dock_at_berth reenabled
+physics during synthetic pose movement; restoring the fixture freeze after dock
+fixed that. This was not proof of a live destination bug. The separate final
+free-floating phase stays aligned, 0.027 m displacement after eight seconds.
+A hardware iteration added siblings during _ready and produced parent-busy errors
+and leaked unparented resources; moved construction before tree entry. Its report
+ferry-boarding-1791578373-057 is explicitly marked invalid. Final logs are clean.
+
+Verified rendered reports, all under C:/Users/noahs/Pictures/machinescreenshots:
+- ferry-boarding-1791578882-31/report.json: real player crosses both directions
+  under scripted +/-0.18 m heave, +/-0.25 degree pitch and +/-1.25 degree roll;
+  occupied ramp, single-line release and force/fuel interlocks; stow collision;
+  rotated second berth; steep/misaligned/wrong-heading/water-gap rejection;
+  actual free-floating stability, hydraulic stroke and safe fit-out rebuild.
+  Zero failures. Earlier final-mechanism run 1791578722-112 also verifies the
+  current working-copy helm line command before its UI-independent test wrapper.
+- ferry-construction-test-1791578831-014.json: updated pier/ramp, bow door,
+  saloon aisles and stairs traversed by real player; 35.35 kn flat-water cruise,
+  monohull contract retained. Zero failures and no engine errors/warnings.
+- gangway-1791578574-coaster*.png and work/ferry-gangway-regression.log: existing
+  coaster walks both rotated quay sides, stows, rejects bad landings and rebuilds
+  fit-out. Zero failures, no engine errors/warnings.
+- harbour_service_routing_test passes existing local freight/deployment checks.
+  Its shutdown still reports ObjectDB/four resources in use; not a clean log.
+  No network tests were run.
+- coastal-express-1791578930-425/: eight daytime in-engine views, reviewed bow,
+  terminal and ramp close-ups. 387 draw calls, median 10.009 ms, p95 12.305 ms
+  across 100 warmed 1920x1080 frames on this GPU. Local scene sample only.
+
+Only scoped ferry/berth/interlock changes are committed. The UI-specific one-line
+rejection message in the existing uncommitted order_lines_from_helm remains with
+that unrelated UI rebuild. Baselines in work/mooring-before-ferry.gd and
+controller-before-ferry.gd preserve its original state. The committed boarding
+test calls the underlying gameplay moor/release endpoints directly.
+
+Next unfinished priority: lean passenger manifest/seat capacity and two-terminal
+sailing lifecycle using existing company authority/ledger, exact-once payment and
+scratch save restoration. Not yet passenger service, stock sale, generated-port
+integration, autonomous bow approach, rough-weather acceptance, side boarding,
+night fixture acceptance or completed interior detail. Do not repeat completed
+Northline40, ocean or locomotion work; multiplayer remains out of scope.
+
+9 October 23:16 Oslo - passenger manifest, fares and seated crowd
+Implemented the isolated local two-terminal service using PassengerService inside
+player.company and the existing CompanyService ledger. Supported passenger-seat
+sockets define capacity and stable allocation; the helm seat never counts. Real
+secured berth, entrance door and bow ramp gate boarding/alighting. Missing booked
+seats block departure. Each boarded passenger adds 90 kg including luggage through
+the existing ship mass system. Cancellation returns boarded passengers at origin.
+Complete destination disembarkation pays once, with the ledger retaining a durable
+receipt even after the bounded processed-request cache is cleared.
+
+Final rendered journey report, read and all checks passed:
+C:/Users/noahs/Pictures/machinescreenshots/passenger-journey-1791580416-783/report.json
+Includes 241 rejected vs 240 supported seats, idempotent/conflicting booking,
+interrupted boarding, scratch save/load, 21.6 t passenger mass, removed seat row,
+placement reordering, actual owned-vessel reconstruction underway, wrong-terminal
+and at-sea rejection, partial destination save, one 18000-mark test fare, replay
+and request-cache eviction protection, and a cancelled partial return sailing.
+Journey positions are teleported/retained by the fixture. This does not establish
+live-world restoration or autonomous terminal approach. Log is clean of engine
+errors/warnings: work/passenger-journey-perf.log. Captain saves remain untouched.
+
+Failures investigated: the first seat probe used parent ancestry, incorrectly
+rejecting the vessel's separate walk-deck physics body. Corrected to its actual
+boat-owner metadata and probed at feet clear of the chair base, so floating chairs
+do not count as seats. A subsequent failing assertion expected the passenger
+warning while the physical ramp interlock correctly won; corrected assertion,
+not gameplay. Final current report supersedes those failed development runs.
+
+Added static seated passengers baked in Blender from the approved in-house mariner
+runtime export; original player mesh/rig/clips/IK unchanged, no downloaded models.
+Shared near/far meshes: 6992/1794 triangles per person, four material variants,
+no individual character controllers/skeletons/physics. Shared MultiMesh projection
+follows the manifest; detail switch 80 m, interior people culled beyond 450 m.
+Authored source, generator and triangle report included. Actual cabin and exterior
+captures inspected: saloon-full.png, fully-boarded.png and arrival-paid.png in the
+same report directory. Seated fit works; identical body/hair and static pose are
+explicit remaining visual limitations, not final animated passenger art.
+
+Noah asked about cost. Measured 180 warmed frames per state at 1920x1080 on RTX5070,
+D3D12 Forward+, test-only VSync disabled, identical view and crowd visible/hidden:
+- Saloon GPU median: 2.371 ms empty / 2.970 ms full, +0.599 ms.
+  Render CPU: 0.670 / 0.794 ms. Draw calls: 173 / 245.
+- Outside at about 120 m GPU: 1.880 / 2.003 ms, +0.123 ms.
+  Render CPU: 1.143 / 1.280 ms. Draw calls: 365 / 425.
+The earlier ordinary frame sample was about 10 ms in both states and hid this
+cost. These GPU comparisons describe the isolated fixture on this hardware;
+busy live-port performance and minimum hardware are still unmeasured. Geometry
+budget alone (1.68 M near triangles for240) must not be presented as frame cost.
+
+Next unfinished ferry work: production terminal/route registration and passenger
+NPC booking interface, stock sale only when the route is playable, normal-world
+voyage restoration, nighttime fixtures and terminal/interior detail. No moving
+boarding queues, individual passenger animation, side boarding or autonomous bow
+approach claim. Existing ocean/locomotion and multiplayer remain untouched.
+2026-10-09 23:45 Oslo - User steering: development captain
+- Added Singleplayer > Development captain / all ships. Reuses one distinct local
+  captain and grants the five current stock arrangements plus Coastal Express.
+  Normal onboarding's Harbour Cargo is adopted, not duplicated. Future catalog
+  additions are granted on load, while existing names, paint and selected ship
+  remain untouched. No multiplayer or ordinary captain grant path was changed.
+- Includes the existing local captain creation/load safeguards (clear old active
+  slot before switching, validate create/save/load outcome); the new bootstrap
+  depends on these to preserve the currently selected captain.
+- Actual title-button/render and 26 persistence/catalog checks passed in
+  tests/development_captain_test.tscn -- --shipyard-playtest. Read the produced
+  report. All six records pass the normal deployable-record validator.
+- Evidence: C:/Users/noahs/Pictures/machinescreenshots/development-captain-1791582224-883/
+  report.json and singleplayer-development-captain.png. Another isolated normal
+  captain's player.json remained byte-identical throughout development operations.
+- Earlier test fixture initially left a future vessel recovery archive behind,
+  so archive recovery correctly restored it and the fixture incorrectly counted
+  a duplicate. Corrected the older-save fixture to omit that future archive;
+  final run has no failures or engine errors. An initial UI lookup also needed
+  to account for the menu theme's uppercase button text.
+- Main-menu changes are scoped to the new action and preview guard. Preserve the
+  unrelated existing UI rebuild and other working-copy changes.
+2026-10-09 23:47 Oslo - Passenger terminals in streamed single-player ports
+- Added deterministic additive siting against existing quay geometry and water
+  depth. Seed424242 has six suitable locations out of35; full terminals are
+  instantiated only when those local ports stream in. Cargo layout/graph and
+  world terrain/checksum stay unchanged. No destination scene needed to book a
+  route: passenger routes now store durable berth IDs instead of weak scene refs.
+- New original Blender6m accessible shore bridge, matching approved deck/metal
+  finishes and physical collisions. Landward waiting-room doors connect it to
+  the boarding apron. Ferry equipment prefers the passenger berth on deployment.
+- Actual world review passed at port2, port24 and curved port8: deployment,
+  secured bow-ramp alignment, real player walking across shore bridge, through
+  waiting room and onto ferry, and full240-seat manifests. All35 graph snapshots
+  remain unchanged. Report/captures: Pictures/machinescreenshots/ferry-world-1791581554-777/.
+- Inspected shore connection and overview captures. The earlier missing terrain
+  came from capturing before near terrain completed streaming; final test waits
+  for terrain readiness and shows land correctly. No terrain change was made.
+- Initial fixture failures: camera stayed behind so port streaming did not move;
+  then reused vessel UID retained its old berth claim. Fixed test camera, unique
+  vessel IDs, and actual ramp-stow/berth-release cleanup. Final report has zero
+  failures and clean engine log. Tests are fixtures, not proof of terminal NPC UI.
+- Full-world1920x1080 exterior240-passenger comparison: port2 GPU3.812 ->3.993ms,
+  port24 3.151 ->3.323ms, port8 2.390 ->2.680ms (median). Frame medians around
+  10-11ms while streaming. These are isolated world-fixture measurements, not
+  a promise for all gameplay or interior views.
+- Existing passenger_journey_test rerun passed partial manifest persistence,
+  boarding/door/ramp gates, delivery, exact-once fare and cancellation.
+  Evidence: Pictures/machinescreenshots/passenger-journey-1791582137-511/report.json.
+  harbour_service_routing_test also passed (headless, isolated).
+- Still unfinished: production passenger NPC offers/boarding controls and the
+  full passenger journey through that UI. Next user steering is cargo offers
+  filling current vessel capacity (Northline40 currently gets only6).
+2026-10-10 00:05 Oslo - Vessel-sized freight offers
+- Cargo agents now quote actual unreserved cargo capacity: Northline40 gets forty
+  containers when empty, HarbourCargo two, CoastalBulk80t and CoastalFreighter120t.
+  Pricing uses the existing per-unit/route rule at the new quantity. Existing
+  bookings retain their original quantities, identities and agreed payment.
+- Sizing and booking share capacity calculation: real ISO pad footprint, occupied
+  space, pending reservations and separate bulk-consignment holds. Capacity is in
+  quote identity so stale UI cannot silently book a different quantity/price.
+- Read all30 checks in freight-capacity-1791582864-694/report.json: zero failures.
+  Includes physical occupancy, stale quote, pending/partial/full reservations,
+  no mixing of bulk consignments, and all five cargo/fishing stock arrangements.
+  Existing freight generator and harbour service routing regressions also passed.
+- Full rendered world journey passed with NO test quantity override: actual cargo
+  agent offered40 provisions containers for5064 marks, real cranes loaded all40,
+  destination port23 mooring/unloading succeeded,128t cargo mass cleared and exact
+  payment/duplicate-delivery rejection passed. Originport11, seed424242.
+  Evidence: Pictures/machinescreenshots/fleet-journeys-1791582744-87/report.json;
+  inspected loaded and delivered captures. Engine log has no errors/warnings.
+- Initial capacity test called a nonexistent fixture release method; corrected to
+  the existing unplug_ship. Final test and full journey have no failures.
+- User reports12.4kn Northline speed. This matches earlier1500kW free-floating
+  results, not yet evidence of a regression. Comparing existing2100kW package.
+2026-10-10 00:14 Oslo - Next-pass user direction: shorter voyages
+- Noah finds a22-minute autopilot channel crossing uninteresting compared with
+  loading and harbour manoeuvres. Wants world/distances made smaller in the NEXT
+  pass; later onboard food/sleep/cleaning tasks may justify longer passages.
+- Proposed nearby-port passages of3-6minutes, preserving full-size approach and
+  turning room, with longer voyages optional. This is a proposed target, not a
+  measured or implemented world redesign. Do not silently rescale current-world
+  coordinates: plan an explicit compatible world/save migration first.
+- Finish the active Northline machinery request before that next pass.
+2026-10-10 00:15 Oslo - Northline factory machinery upgrade
+- Noah chose15-16kn rather than retaining12-14kn coaster tuning. The existing
+  2100kW option measured13.12/13.03kn empty/heavy: insufficient for that request.
+- Added original larger Blender V12 package with approved finishes,5600kW,
+  32t machinery,1344L/h full-output fuel consumption and220rpm shaft. Stock,
+  editable draft and reproducible authoring recipe select it. No hull resistance,
+  ocean, locomotion, world geography or multiplayer changes.
+- Original feeder_1500 factory IDs resolve in memory to the new package, including
+  existing owned boats on next deployment. No captain save was opened/rewritten;
+  layouts, names, paint and cargo retained. Explicit2100kW choices stay unchanged.
+  Preserve the original11.2t engine allowance: added machinery mass20.8t.
+- First full-output run reached15.38/15.28kn but astern was excessive at11.95kn
+  empty. Corrected only this package's reverse multiplier to0.28; generic imported
+  packages keep0.65. Runtime engine refits apply the same reverse setting.
+- FINAL free-floating Jolt report feeder-handling-1791583965-539.json read: both
+  cases passed. Empty/heavy(40x20t actual units):15.38/15.28kn; coast30s to
+  10.55/11.20kn; full-speed crash stop54.12/73.92s over202/277m; stopping from
+  7.8kn29.23/39.33s; astern after60s7.48/5.41kn. Turning/roll checks passed.
+  Acceptance now enforces15-16kn, finite full-speed stopping and controlled astern,
+  rather than the previous broad5-17kn cruise threshold. Flat water, no weather.
+- Actual Shipyard save/reload preserved477placements and selected machinery;
+  inspected Pictures/machinescreenshots/feeder-editor-1791583865-337.png.
+- All engine packages passed power/fuel/reverse/compatibility/JSON checks plus
+  old-ID resolution, unchanged old layout and correct added mass. Inspector used
+  a three-hull lookup that failed on feeder/ferry; now frames actual model bounds.
+  Rendered all packages both sides; inspected new engine front/rear captures in
+  Pictures/machinescreenshots/engine-packages-final-20261010-001046/.
+- Logs feeder-high-output-final.log, feeder-engine-final-review.log and
+  feeder-repower-editor.log are clean. No rough-weather speed claim.
+2026-10-10 00:34 Oslo - Optional 75-percent world, including terrain generation
+- Noah authorized a compact-world experiment including terrain. Added Compact
+  trial (30x30km) to new single-player company setup; standard stays40x40km and
+  existing captains preserve their own geography. Ships/ports retain physical size.
+  Actual terrain, coastlines, forest bounds, chart and ports use the smaller layout.
+- Six layouts/three seeds:840 checks passed,35 ports each, full physical approach
+  and footprint checks, nearest-port and home-to-all routes valid. Main seed
+  nearest-port median15kn passage6.0->3.3min; home-to-all29.6->28.6min. Smaller
+  map does NOT solve every long voyage. Other seeds/details:docs/compact-world-trial.txt.
+- Actual new-company selection/home-chart confirmation/live world/scratch save
+  reload passed.16 final checks; preview/live checksum identical. Legacy captain
+  with omitted size now explicitly restores40km after a compact preview; explicit
+  unequal sizes reject coordinate restore even before checksum is present.
+- Existing9 v8 field/checksum baselines unchanged. Config/context tests passed.
+  Daytime captures and reports read/inspected:compact-world-1791585011-287(final),
+  compact-world-1791584840-358(40km),compact-world-1791584539-93(metrics), all in
+  Pictures/machinescreenshots. Final engine logs clean. About10ms median wall
+  frames in review. Detailed performance and limits are in the experiment doc.
+- Initial review captured before distant streaming completed and an8km-high view
+  was unusable. Fixture now follows the observer and drains terrain work. Elevated
+  views still expose pre-existing ocean coverage boundaries; do not claim those
+  as accepted art or change the already-accepted ocean for this size experiment.
+- Noah reported destination mooring, then clarified he had parked incorrectly.
+  No mooring changes made. Earlier tests attach lines directly, not through the
+  newer helm reach check; only investigate that if a reproducible issue returns.
+- Unrelated UI/editor working-copy changes preserved. Only the new world selector
+  and size-restoration changes are staged from shared dirty files.
+2026-10-10 00:56 Oslo - Development captain home with all terminal types
+- Noah requested every possible terminal/quay at the Development home. Its saved
+  home ID now opts into a separate trade profile and 1200m coast-traced frontage.
+  Other captains and all other seeded ports retain their previous generation.
+  No captain migration, terrain edits or live-save writes. Re-enter Development
+  Captain from the main menu to rebuild its home with this layout.
+- Nine dedicated commodity quays: provisions, containers, fish landing, iron ore,
+  coal, grain, crude oil, diesel and LNG; plus a separate passenger terminal and
+  bow-in ferry berth in a reserved 120m waterfront pocket. Existing fuel,
+  harbourmaster and port services remain. Uses existing models/materials.
+- Grain/LNG are deliberately available only at this development home; their
+  unfinished gameplay has NOT been completed or re-enabled in ordinary ports.
+  Passenger booking NPC/UI is still unfinished as recorded earlier.
+- Actual world + local harbourmaster deployed all six owned ships at their
+  preferred service family, including Northline and ferry. Hull water-clearance
+  and ferry ramp checks passed. 109 live checks. Initial test incorrectly treated
+  a replaced ship's occupied berth as unavailable; corrected the expectation to
+  the authority's actual atomic replacement semantics. No authority changes.
+- Long frontage exposed a shallow fish-quay loading side beside a headland.
+  Development-only placement now checks neighbour gaps AND working-side water
+  depth, flipping this quay to the deep side. Unused shore-facing water may remain
+  shallow. Normal three-quay budget and ordinary dock placement are unchanged.
+- Definition serialization and cache key distinguish development layouts. Pure
+  port generation stays independent of player/runtime classes: a first CLI
+  regression exposed that dependency; moved captain marking to DevelopmentFleet.
+  Final ordinary-world trade test is clean:35 ports,7 ore docks(5 export/2 import),
+  no grain/LNG. Final geometry/save reload/isolation checks also clean.
+- Reviewed daytime whole-harbour, Northline quay and ferry landing captures in
+  Pictures/machinescreenshots/development-harbour-1791586389-093; report.json
+  passed. Live world boot20.0s,1600x900 review median14.02ms,p9517.79ms,3983 draws
+  in final waterfront view on RTX5070. This is a deliberately heavier dev home,
+  not a claim that normal ports need this much geometry.
+- Earlier rejected/fault-finding captures retained in the screenshot archive.
+  Final isolation report:development-harbour-1791586540-411. Logs under task work:
+  dev-harbour-final.log,dev-harbour-isolation-final.log,
+  dev-harbour-ordinary-final.log. Runnable scene:tests/development_harbour_test.tscn
+  with --shipyard-playtest (--geometry-only skips rendering/deployment).
+- Known existing terrain/coast and elevated ocean-horizon artefacts remain visible
+  in the wide review; accepted ocean/geography/player movement left untouched.
+2026-10-10 01:20 Oslo - Live passenger terminal operations
+- Found the production integration gap: owned ferries never received the
+  PassengerVoyage component used by isolated tests. The live world now owns one
+  PassengerOperations instance, registers safe terminal data without building
+  distant scenes, and attaches the component to owned passenger ferries.
+- Generated terminals now have an approachable passenger agent. Its dedicated
+  panel uses the existing HUD theme/materialled in-house NPC. Offers select the
+  nearest three real terminal destinations; passenger counts use supported seats
+  up to240, with explicit game fares and direct distances (not quoted sea routes).
+  Book, reopen boarding equipment, cancel/return and land passengers use the
+  existing company manifest, physical ramp/door/line checks and exact-once ledger.
+  UI reads through LocalPlayerView. Panel lifetime follows its streamed terminal.
+- Active sailings block harbourmaster storage/replacement. In the current UI,
+  the storage action explains the restriction. Whole-world scratch reload plus
+  harbourmaster redeployment restores the manifest, crowd and21.6t passenger mass.
+  This does NOT restore the ship's mid-passage coordinates; that remains a gap.
+- Final actual-world test: tests/passenger_live_loop_test.tscn with
+  --shipyard-playtest,44 checks passed. Includes actual terminal buttons, normal
+  interaction ray, Escape/modal closure, partial cancellation then new booking
+  in the same panel,240 boarding with panel closed, whole-world reload, departure,
+  wrong-terminal rejection, streamed destination,240 landed and14640 NOK paid
+  once. Transfer accelerated and travel teleported; no autonomous approach claim.
+- Read report and reviewed daytime route, boarding and arrival captures under:
+  C:/Users/noahs/Pictures/machinescreenshots/passenger-live-1791587838-193
+  Earlier reviewed iterations:1791587456-735 and1791587561-812. Corrected the
+  backward-facing agent and excessive empty height during active sailings.
+- Runtime review at actual1920x1080: frame median11.802ms,p9516.132ms,
+  GPU median2.353ms,2276 draws in terminal/ferry view on RTX5070. All35-port
+  passenger-site metadata generation added2.779ms total, no distant models.
+  This view measurement is not a whole-game performance guarantee.
+- Final engine and import logs clean: work/passenger-live-verified.log and
+  work/passenger-live-verified-import.log. Initial rejected run had an erroneous
+  hook in editor-preview scope; fixed. Early fixture could emit an empty success
+  after that parse failure; added a mandatory final-checkpoint assertion.
+- Scoped staging preserves the large pre-existing UI rebuild. The shared storage
+  predicate also protects the committed legacy abandon entry point. Its hook in
+  the working UI's new request_storage method and two-line disabled-reason hook
+  in the already-untracked PortServiceDesk remain with that pending UI rebuild;
+  do not discard them. Tests exercised this working copy, not a clean HEAD UI.
+  Staging script/backups: work/stage_passenger_live.py and passenger-live-baseline.
+- Next: inspect actual mid-voyage save/re-entry behaviour and passenger itinerary
+  visibility away from the terminal; then stock-sale commissioning and terminal
+  night fixtures/interior review. No multiplayer, ocean, locomotion or geography
+  changes in this batch. Moving passenger queues remain unimplemented.
+2026-10-10 01:39 Oslo - clear coastal air and new overnight direction
+- Noah requested Norwegian atmosphere/world work after the passenger ferry, with
+  clear-air distance haze immediately. Existing overnight schedule updated to this
+  priority, preserving the 08:00 Oslo cutoff. Latest steering also identifies
+  illogical rain/cloud combinations and artificial-looking rain; investigate next.
+- Fixed WorldRenderer's clear weather setting distance fog to exactly zero.
+  Existing exponential fog now has a 0.00010/metre clear-air floor, mildly raised
+  with cloud/storm, plus the existing weather extinction. Thin air samples the
+  directional sky radiance; dense fog retains its previous colour response.
+  No new volumetric pass, meshes, ocean/locomotion/geography/save changes.
+- Review uses actual generated 40km world, ocean, forests, ports and renderer.
+  tests/coastal_atmosphere_review.tscn extends the existing isolated world review;
+  --mainland adds port-2 coastline and distant hills. Day, sunset (21:50), night,
+  rain and dense fog matched comparisons inspected. 21 streaming/world checks
+  passed each run. world_lighting_grade_test passed including near/far contrast.
+- Captures/report: C:/Users/noahs/Pictures/machinescreenshots/
+  compact-world-1791588331-282 (outer islands),
+  compact-world-1791588470-833 (mainland). Best comparison: channel-clear-before
+  and channel-clear-after; harbour views keep near trees/quays readable.
+- Actual viewport1920x1080; mainland post-change frame medians10.29-14.60ms,
+  p9515.87-21.16ms, unchanged paired draw counts. GPU timings varied considerably
+  between samples; these short runs do not establish a precise incremental cost.
+  Engine logs clean. Existing near-water depth edge and distant canopy artefacts
+  appear in both baselines and changed views; not introduced or fixed here.
+- Source: Godot4.6 Environment documents low-density exponential fog and sky
+  radiance aerial perspective (docs.godotengine.org/en/4.6/classes/class_environment.html).
+  Future landscape reference: NIBIO coastal heath is a mosaic of heath, grass
+  and poor bog with juniper/birch/rowan/pine encroachment:
+  https://www.nibio.no/tema/landskap/kulturlandskap-og-biologisk-mangfold/kulturmarkstyper/kystlynghei
+  Fureneset documents wet/windy western coastal setting, moraine/peat, natural
+  birch/Scots pine and planted spruce: https://nibio.no/en/about-eng/addresses/fureneset
+- Next immediate issue: weather matrix explicitly permits clear-sky drizzle and
+  light-cloud rain; interpolated cells/fronts need continuous rain support too.
+  RainField currently renders fixed, unshaded42cm boxes with an excessive wind
+  ratio. Inspect/update coherence, sky lighting and actual rain appearance.
+  Then resume remaining ferry itinerary/persistence/stock and wider atmosphere.
+Batch - 10 October 2026, 01:46 Oslo - coherent precipitation and optical rain
+- Corrected the weather compatibility table: clear/light cloud now select dry,
+  broken cloud cannot select heavy rain. Shared idempotent cloud-support cap is
+  applied after cell blending, fronts and presentation smoothing. Dry overcast,
+  dry gale and fog without rain remain possible. No ocean or locomotion edits.
+- Rain uses lit, soft alpha quads aligned to its actual fall/wind velocity;
+  terminal fall speed, physical wind drift, near-camera fade and depth softening
+  replace fullbright rigid boxes. 6000-drop ceiling is 12000 triangles versus
+  the previous 1800 boxes/21600 triangles. Does not add indoor roof occlusion or
+  surface splash simulation; those are honest remaining VFX limitations.
+- Precipitating skies acquire a lower/deeper rain bank, darker undersides and
+  reduced direct sunlight, with more diffuse ambient support. First candidate
+  made a uniform grey dome; rejected and adjusted to retain broad bank variation.
+- WeatherComposer contract passes: 2205 field/front samples (275 wet/1196 dry),
+  invalid sunny rain, fade-in/out, deterministic/chart parity and independent
+  fog/wind/convection checks. WorldLightingGrade passes. Logs in workspace work/
+  rain-contract.log and rain-lighting-contract.log were read.
+- Actual 1600x900 production-renderer/model review: before rain-1791589064-6884;
+  rejected first after rain-1791589229-7356; refined rain-1791589320-5944;
+  final runtime density rain-1791589394-5793. All archived under machinescreenshots.
+  Inspected sunny/cloudy dry, drizzle, rain, wind-driven rain and night lamp
+  response. Final report verifies emission off for dry/invalid sunny states.
+  Wall-clock median16.65-16.68ms/p9516.86-17.03ms at vsync60; no GPU savings claim.
+  Earlier review incorrectly sampled fixed simulation delta and restart() forced
+  emission true; both review errors corrected before final captures/report.
+  Existing showcase shutdown RID/ObjectDB leaks occur both before/after; no
+  runtime script/shader failures. Do not call these runs entirely error-free.
+- Reference: Met Office low/mid-level cloud and rain/showers descriptions:
+  https://weather.metoffice.gov.uk/learn-about/weather/types-of-weather/clouds/low-level-clouds
+  https://weather.metoffice.gov.uk/learn-about/weather/types-of-weather/rain/rain-and-showers
+- User added inhabited coastal scenery (houses/towns) and continuous shoreline
+  cliff inspection. Automation updated to retain these priorities. The ledge
+  is the previously identified shelf/backshore height discontinuity (8-26m),
+  not low ocean height. Investigate a narrow continuous join while retaining
+  deterministic port grading/identities and captain saves; test actual ports,
+  forest roots and collision. Do not raise sea level or reroll existing worlds.
+  Then finish remaining ferry navigation/stock and settlements. Riksantikvaren
+  settlement references: https://riksantikvaren.no/kystens-kulturmiljo/naust-og-sjohus-sjoen-som-ressurs/
+  and https://riksantikvaren.no/eksempelsamling/by-og-stedsutvikling/gjenoppbygging-av-naust-i-stekka/
+- Correction: prior haze entry's01:39 heading was approximate; haze commit was
+  already pushed/verified at01:32. No change to the08:00 Oslo overnight cutoff.
+2026-10-10 01:57 Oslo - Continuous backshore, preserved harbour sites
+- Removed the shelf/backshore branch discontinuity that created a continuous
+  8-26m cliff ring. Physical terrain now joins the shelf over180m and fades the
+  residual detail at360m. This intentionally changes local backshore heights;
+  sea level, coastline SDF, underwater shelf and upland mountains are unchanged.
+- Kept the historical height acceptance surface exclusively for seeded port
+  selection. No generation-version change, world reroll or captain migration.
+  Compared uncached expansions for210 ports across3 seeds and30/40km sizes:
+  identities, chart/trade records and entire berth plans match. The first
+  comparison used the expansion cache; caught that weak test and reran uncached.
+-7013 shelf joins: old maximum24.7063m jump across2cm, new maximum0.000407m.
+  WorldTerrainStreamer, shore clipping (2836points/0bad), ForestField/streamer
+  and actual root contact regression pass.7862 roots, maximum triangle-height
+  error0.000107m. Disposable distant-forest cache bumped v2->v3 for new roots;
+  captain/company saves untouched.
+- Actual world review before: compact-world-1791589598-311. Initial after
+  compact-world-1791589688-438 captured before canopy regeneration finished;
+  rejected as incomplete. Final compact-world-1791589860-371 explicitly waits
+  for near/far forest, all3 harbour/channel/coast views inspected. Archives in
+  C:/Users/noahs/Pictures/machinescreenshots. Root review forest-root-1791589897-645.
+  Final report has no failures, no pending forest/terrain.1600x900 vsync60:
+  median16.662-16.684ms,p9516.806-16.821ms,GPU4.744-4.840ms. No speedup claim.
+  Logs read: shore-continuity-uncached, shore-terrain-contract,
+  shore-clip-regression, shore-forest-contract, shore-root-regression, shore-final.
+- The broad low coastal shelf still exists; this removes the artificial vertical
+  ledge, not every remaining terrain/art limitation. Remaining next: ferry
+  passage navigation/stock, inhabited coastal scenery, continued atmosphere.
+2026-10-10 02:07 Oslo - Ferry stock and booked passage navigation
+- Coastal Express is now official shipwright stock (78000NOK, existing3600kW
+  authored recipe/240 supported seats). Removed duplicate development recipe;
+  stable coastal_express grant identity preserves existing development vessels.
+- Distant passenger berth approaches are baked as metadata with cargo lanes,
+  without instantiating terminal models. Planned and live bow-in centres agree.
+  BoatController uses this vessel's sailing, then this vessel's freight only;
+  another ship's first contract can no longer choose the navigation destination.
+- Ferry departure requires manual backing clear120m and facing the outbound
+  passage. Existing VesselAutopilot handles travel and hands over200m short
+  for manual berthing. No automatic docking, new follower or multiplayer changes.
+-39 production-world checks pass in passenger-passage-1791590643-307/report.json:
+  actual shipwright purchase/retry charge, harbour deployment, terminal booking,
+  all6 passenger navigation targets, unloaded destination, ramp/line/heading
+  guards, 4.442km route with minimum18.116m sampled land clearance, actual144.36m
+  movement using ordinary propulsion/rudder, disengagement and contract ownership.
+  Boarding transfers accelerated; initial clear-of-pier pose placed by test.
+  Only32 simulation seconds of sailing observed, not a full autopilot crossing.
+  Full240-person loading/unloading/payment journey was covered in prior live loop.
+- First test failed because it bypassed the NPC's door-opening request and
+  editor isolation suppresses automatic autopilot creation. Fixed the test to
+  use agent.request and install the ordinary component while preserving isolated
+  saves. It was a test setup failure, not a successful initial sailing.
+- Company tablet now shows passenger destination, status, count and fare away
+  from terminal. Inspected final underway and itinerary captures; first underway
+  shot had unfinished terrain streaming, replaced after waiting for readiness.
+  Performance final1920x1080 median16.65ms/p9517.573ms,GPU3.029ms,3090draws.
+  Shared MarineAutopilot contracts and development captain/save-preservation
+  regression pass. All logs read; final passage has no script/runtime errors.
+- Scope caveat: two small presentation hooks (get_voyage_snapshot objective and
+  VoyagePanel accepted-work rows) remain within Noah's already-uncommitted UI
+  rebuild. Passenger read API and controller-only navigation hunks are committed;
+  unrelated UI removal/style changes are deliberately not swept into this batch.
+  Pre-hook VoyagePanel backup: workspace work/voyage-panel-before-passenger.gd.
+- Next: inhabited Norwegian coast, building/road material and distance review.
+  Ferry animated queues, terminal night fitout and full continuous passage remain
+  possible follow-up polish; do not repeatedly rerun completed passenger journey.2026-10-10 02:31 Oslo - Inhabited coastal scenery, authored kit and forest cost
+- Added original Blender cottages, two-storey timber houses and boathouses with
+  near/far geometry, named shared ambientCG finishes, six paints, roof seams,
+  joinery, plinths, porch steps and rainpipes. Near/far triangles3046/238,
+  4054/322,2494/154 respectively. Sources, references and limits in kit README.
+- Existing shore/terrain/port metadata places519 buildings around32 settlements
+  in30km seed424242,659 around33 in40km. Narrow lanes and gravel drives follow
+  current terrain triangles. No land pads, port moves, save edits or new world
+  identity. Clear only occupied house/road/drive footprints from woodland.
+- Shared MultiMesh batches use3D far buildings, not sprites; no distance holes.
+  Nearby closed-house collision only. Exteriors are scenery, not enterable
+  interiors, new businesses, resident simulation or a vehicle road network.
+- Initial actual-world run exposed sparse clusters, downward road normals and
+  ground-intersecting road strips; corrected spacing/setback trials, normals,
+  terrain subdivisions and entry drives. First draft forest failed120s budget.
+  Worker-private spatial filtering replaces repeated global exclusion scans;
+  exact full-world cache parity passed after first optimization, then narrower
+  coverage-cell bounds filtering retained deterministic exclusion test results.
+- Final cold world forest prepares32.807s asynchronously, all2,904,193 distant
+  trees ready36.912s. Warm cache prepares150ms, whole canopy uploaded8.192s.
+  New scenery plans~299ms. First-use chunk build peak45.544ms remains a startup
+  cost; this is not an assertion of hitch-free first-time asset upload.
+- Placement/determinism/exclusion checks pass for30/40km. Persistent canopy
+  placement/cancellation regression passes701 samples. Real-world house ray
+  confirms physical walls. Final report has no failures or pending terrain/trees.
+  All logs read. One intermediate type-inference error was repaired before the
+  final run. Preserved unrelated existing UI/editor work with partial world hunk.
+- Kit captures coastal-building-1791591089-22; first world draft
+  compact-world-1791591374-905 rejected incomplete canopy/road artifacts.
+  Revisions1791591910-688 and final warm1791592089-558 inspected close/harbour/
+  channel, archived under C:/Users/noahs/Pictures/machinescreenshots.
+  Final1600x900 RTX5070 vsync60:16.677-16.685ms median,p9516.799-17.256ms,
+  GPU5.014-5.588ms. Same-view hiding settlement geometry reduces350-370draws;
+  measured GPU difference -0.085 to+0.094ms is within short-run variability.
+- Next substantial visible issue: terrain's obvious repeated ground tiles in
+  the new inhabited views. Researching stable texture tiling/blending; also
+  settlement night-window presentation and rain shelter remain unfinished.
+2026-10-10 - Ground repetition and settlement night presentation
+- Ground037/Ground048 retain original approved image files, but now share
+  triangular offset blends across colour/normal/roughness and both terrain LODs.
+  Explicit derivatives keep mip selection stable across cell boundaries. The
+  source/detail blend is narrower to preserve detail; not a histogram transform.
+  Research: Deliot/Heitz tiling/blending and Godot shader sampler documentation,
+  linked in the marine material README. Cooler, slightly darker heath tint.
+- Actual world revealed that the separate moss mask still repeated every28m;
+  replaced that with two differently oriented broader scales. Final same-camera
+  field no longer shows the pronounced marching green/brown patch pattern.
+  Terrain geometry, forests, world identity, accepted ocean and motion unchanged.
+- Added stable household/floor window occupancy and gradual twilight activation.
+  Existing near panes and physical far models agree. No point lights, per-house
+  controllers or new far draw calls. These are lit scenery shells, not interiors.
+- Initial terrain shader draft rejected: Godot disallows reusing a sampler
+  function across different texture hints. Split colour/normal/roughness helper
+  entry points; subsequent close kit and actual-world renders compile cleanly.
+  Discarded terrain-material-1791592358-891 from acceptance (shader failure).
+- Baseline terrain-material-1791592329-879; valid revised close/wide surfaces
+  terrain-material-1791592438-137. First world texture revision1791592480-075
+  still had repeating moss; final daylight compact-world-1791592815-617 inspected
+  against settlement baseline1791592089-558. Night1791592683-776 all3 views
+  inspected: warm panes readable from channel and close up. Day kit
+  coastal-building-1791592610-717 confirms original model/finish remains coherent.
+  Every capture archived in C:/Users/noahs/Pictures/machinescreenshots.
+- Actual-world report no failures; near house collision still passes. Final
+  1600x900 RTX5070 vsync60:median16.660-16.733ms,p9517.088-17.459ms,
+  GPU4.787-5.687ms, same3836-4919draws. These short runs do not establish a
+  performance improvement; texture sample cost remains small in these views.
+- Next: rain presently passes through roofs and can spawn below roof height.
+  Investigating bounded local GPU heightfield collision, with sheltered/exposed
+  comparisons and actual vessel review before acceptance. No implementation yet.
+2026-10-10 03:06 Oslo - Rain shelter and actual bridge review
+- Drops now spawn above eye level and stop at a bounded local GPU heightfield.
+  One80x80m/512-map, snapped4m, at most8Hz while wet; dry weather stops work after
+  residual drops expire. Layer20 isolates rain from other particle collisions.
+  No per-drop nodes/CPU rays. Top-down shelter approximation, not wind-through-
+  window fluid simulation or impact splashes. Details in docs/weather-rain.txt.
+- Baseline rain-shelter-1791593393-899 reproduces streaks through the covered
+  canopy and actual imported feeder bridge. Pixel counts247/304 under canopy,
+  103 stationary bridge and138 moving bridge. New final1791593934-069 has zero
+  covered pixels in all four regions; removed roof496 and exposed deck453
+  confirm outside rain still renders. Dry emitter and collider disabled; no
+  failures. Earlier fixture had wrong material profile; corrected before the
+  valid baseline. One later check caught a9-pixel optical tail at a roof edge:
+ 60Hz particle steps and a half-streak contact radius fixed that actual leak.
+- Production compact-world-1791594037-481 fully loaded terrain/forest/port,
+  bridge, deck and public quay captures inspected. First world1791593537-35
+  had an invalid under-foundation quay camera; replaced using public spawn.
+  Final report no failures, final runtime no script/render errors. Repeated
+  collider on/off: GPU medians2.19-3.60ms, deltas -0.008 to+0.017ms; GPU p95
+  deltas at most+0.046ms in these views. Frame p95 up to17.572ms at1600x900,
+  RTX5070/vsync60. These are bounded local measurements, not universal FPS.
+- Seven-state weather matrix rain-1791594182-6175 complete; invalid clear/fair
+  precipitation and dry overcast emit no rain; drizzle/rain/wind/night visually
+  inspected. Median16.658-16.713ms,p9516.904-17.374ms. Existing lighting-showcase
+  shutdown RID leaks remain; no runtime/shader errors. All produced reports read.
+- Captures remain under C:/Users/noahs/Pictures/machinescreenshots. Separate
+  narrow funnel contact-face repair found during this review follows this batch.
+2026-10-10 03:07 Oslo - Northline bridge ceiling contact-face repair
+- Actual rain review exposed the funnel flange's bottom cap coplanar with the
+  underside of the roof: a large orange flickering patch over the helm. Removed
+  only the two buried contact-face triangles in Blender. Source generator,
+  editable .blend and GLB agree. Exact per-material bounds unchanged; all four
+  finish groups retained. No stock recipe, saved placement, collision bounds,
+  propulsion or accepted locomotion changes. Existing owned vessels use this fix.
+- Baseline interior rain-shelter-1791593393-899; final stationary/moving interior
+  1791593934-069 inspected, large orange patch gone. Production-world final
+  compact-world-1791594037-481 confirms the same at real port coordinates.
+  Narrow tile-edge glints remain visible on floors at large world coordinates;
+  investigate shared surface rendering precision separately, do not pretend this
+  contact-cap correction solves every tile seam.
+- Blender source rebuild/export and Godot reimport clean. Geometry comparison
+  confirms identical bounds and exactly two fewer triangles (5076 to5074).
+  Full rain shelter acceptance remains passing. Other ship gameplay was unchanged,
+  so completed cargo/journey tests were not repeated for a hidden visual face.
+- Rain batch commit7499c20. Next useful atmosphere work: inspect outdoor ground
+  response to sustained rain (currently the surfaces stay dry); keep any wetness
+  out of cabin interiors. Shared floor/roof edge precision is a separate observed
+  visual issue. Finish scoped work with actual views/performance, no multiplayer.2026-10-10 03:27 Oslo - Gradual wet-weather ground response
+- Sourced quay paving/paint, village roads/gravel and both terrain LODs now
+  respond to supported local rain. Asphalt darkens with a broad sky/light sheen;
+  bedrock/soil/heath use different restrained responses. Original source images,
+  terrain geometry, vegetation, ocean and captain records are unchanged.
+- SurfaceWetness reuses local WeatherLighting, no new authority/autoload/save.
+  Initial rainy world starts damp; onset builds over tens of seconds, drying over
+  several real minutes.8Hz bounded updates, no work when stable; weak material
+  registrations allow streamed resources to expire. Late resources inherit state.
+  Rain exposure is explicit and cached separately; ship/cabin finishes stay dry.
+  This is dampness, not new puddles/SSR/splash simulation or roof exposure masks.
+- Close kit wet-ground-1791594908-543: nine checks pass,18 renders including
+  source materials, ground LODs and sheltered finish. Same-profile interior and
+  exterior instances remain separate. Shared material library regression passes.
+  Initial fixture had a null/default uniform assertion error; exposed the absent
+  CPU-side default and now explicitly initializes dry parameters. Corrected run
+  clean. First world fixture had two type-inference errors, fixed before review.
+- Actual world compact-world-1791594998-852: paired dry/wet day quay, night quay
+  and inland woodland inspected; all streaming complete, no failures. Night
+  lamps now reflect softly in wet paving. Ground retains texture and canopy stays
+  rough. Captures archived under C:/Users/noahs/Pictures/machinescreenshots.
+- One inland sample had26.185ms frame p95; investigated instead of dismissing.
+  Repeat compact-world-1791595261-371 all pass, p95 dry17.334/wet17.580ms.
+  Four settled alternating samples: GPU3.250/3.256/3.255/3.256ms, p95
+ 18.214/17.293/16.957/16.936ms. No repeatable wetness penalty in this view;
+  short samples and background machine activity do not prove hitch-free play.
+  Same3487draws. Day/night quay705/707draws, GPU1.774-2.092ms;1600x900,
+  RTX5070/vsync60. All produced logs and reports read; final runs clean.
+- Reference and opt-in policy: docs/weather-rain.txt and material README.
+  Next investigate observed shared floor/roof tile glints at far world positions,
+  first with a controlled origin/far comparison. No geometry change started.
+
+2026-10-10 03:48 Oslo - Shared-frame ship floors and roofs
+- Reproduced a visible tile grid at (12500,10,-13800), absent at origin:
+  surface-precision-1791595534-832. Independent per-tile world matrices lose
+  matching precision. ShipSurfaceKit now copies the authored infill triangles,
+  crown normals and UVs into bounded draw batches sharing one local frame.
+  Blender source modules, outlines, paint regions and saved records unchanged.
+- First single-mesh prototype fixed the image but FAILED the real feeder test:
+  Jolt compound subshape-ID overflow removed walk collision, blocking bridge
+  entry. Corrected to at most4096 triangles per batch; no physics solver or
+  accepted player movement changes. Final container_feeder_test passes cargo,
+  save, both real-player stair flights and bridge door/entry. Full log read.
+- Final surface-precision-1791596444-133:20 checks pass, original versus baked
+  triangle corners across six floor/roof outlines, crown, independent paint and
+  shared bounded cache. Origin/far floor/roof images inspected. Cache is capped
+  at16 assemblies/32MiB estimated mesh storage. First8x8m construction measured
+  floor307ms, roof581ms; repeat geometry is reused, not baked every frame.
+- Actual Shipyard drawing/preview,26/45/concave and both-winding coverage,
+  perimeter miters/crown, paint, save/reload and erase/undo all pass:
+  surface-kit-1791596636-471. Every editor capture now also uses the archive.
+- Actual loaded world compact-world-1791596659-725:14 checks pass, all terrain
+  and forest streaming complete. Bridge floor grid/ceiling seam gone compared
+  with1791594037-481; exposed deck and quay also inspected.1600x900 RTX5070:
+  bridge2443->1811 draw calls, GPU3.578->3.440ms. Final views GPU2.116-3.440ms,
+  frame p95 16.946-17.581ms, vsync60. Short local measurements, not universal FPS.
+- Separate roof eaves keep their original morph/miter structure; thin far-edge
+  glints remain possible. This does not claim a global floating-origin fix.
+  Intermediate fixture errors (paint lookup/early-return guard) corrected before
+  the final clean20-check run. Reports and failed-attempt logs retained.
+- Resume actual-world atmosphere/coastal review, no repeat of completed ferry,
+  cargo, water or walking work. No multiplayer.
+2026-10-10 03:56 Oslo - Weather audio follows actual conditions
+- Wider weather audit found atmosphere mix incorrectly using cloud/fog as rain/
+  gale axes. Reproduced dry overcast selecting drizzle at-12dB, calm dry fog
+  selecting full storm at-12.6dB, dry gale barely selecting squall. Also maximum
+  rain crossfaded into absent rain_heavy, silencing the dedicated rain layer.
+  Baseline weather-audio-1791597055-722 has five failed states, retained.
+- Corrected beds to smoothed supported rain/wind; no new weather authority,
+  audio assets, ocean or movement changes. Missing sequential recordings are
+  skipped, retaining strongest available recording instead of fading to silence.
+- Eight actual AudioStreamPlayer gain cases now pass (dry clear/overcast/fog,
+  dry gale, drizzle, downpour, wet gale, cleared). Final headless report
+  weather-audio-1791597100-0 clean; no runtime/shutdown errors. This is playback
+  activation verification, not a claim of listening/mastering new recordings.
+- Rendered rain-1791597129-8249 also passes all audio and emission checks. Seven
+  images and report read, representative dry/wet/night views inspected. Frame
+  p95 16.951-17.108ms at1600x900 RTX5070 vsync60. Existing lighting-showcase
+  shutdown mesh/RID leaks remain (also present before this batch); no runtime
+  script failure. Keep separate from the clean audio-only verification.
+- Actual40km mainland atmosphere sweep compact-world-1791596846-734 completed
+  without functional failures. Reviewed clear/sunset/night/rain/fog plus elevated
+  coast. Haze/settlements remain visible; observed a jagged bright water patch in
+  one low mainland view. Diagnose terrain/depth/render-tier source before any
+  ocean edit; accepted ocean behavior remains unchanged. Distant woodland on
+  one far ridge appears elevated; check roots/LOD before claiming allworld artdone.

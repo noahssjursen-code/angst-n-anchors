@@ -170,6 +170,14 @@ func _rebuild() -> void:
 		var flatten_zones := WORLD_TERRAIN_STREAMER.make_flatten_zones(
 			defs, 0.0, world_seed, _world_layout
 		)
+		var settlements := CoastalSettlements.new()
+		settlements.name = "CoastalSettlements"
+		add_child(settlements)
+		var settlement_plan := CoastalSettlementPlan.build(_world_layout, defs, flatten_zones)
+		settlements.configure(_world_layout, settlement_plan, flatten_zones)
+		# Clear actual occupied footprints only. Settlement scenery must not
+		# flatten terrain, move a quay or erase woodland around the entire town.
+		flatten_zones.append_array(settlement_plan.exclusions)
 		ForestField.initialize(_world_layout, world_seed, flatten_zones)
 		_add_terrain_streamer(defs)
 		_add_forest_streamer(flatten_zones)
@@ -333,9 +341,17 @@ func _add_editor_preview(defs: Array[PortDefinition]) -> void:
 
 
 func _setup_ports(defs: Array[PortDefinition]) -> void:
+	var passengers: PassengerOperations
+	if PlayerSession.persistence_mode != PlayerSession.PersistenceMode.REMOTE:
+		passengers = PassengerOperations.new()
+		passengers.name = "PassengerOperations"
+		add_child(passengers)
 	var loader  := ProximityLoader.new()
 	loader.name = "ProximityLoader"
 	add_child(loader)
+	# Until the player camera exists, the streaming reference falls back to (0,0,0).
+	# Do not instantiate unrelated ports around that temporary position during boot.
+	loader.set_process(false)
 
 	var port_proximity := preload("res://scripts/world/port_proximity.gd").new()
 	port_proximity.name = "PortProximity"
@@ -352,6 +368,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 	for i in range(defs.size()):
 		var def  := defs[i]
 		var data := PortExpander.expand(def, world_seed, _world_layout)
+		if passengers != null: passengers.register_port(data, _world_layout)
 
 		if registry != null:
 			registry.register_port(
@@ -363,7 +380,10 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				data.layout_seed,
 				data.population, data.features, data.rotation_y,
 				data.berth_count, data.size,
+				"", ShipClass.display_name(data.max_ship_class), data.trade_profile.export_slots,
+				def.to_dict(),
 			)
+			registry.register_freight_berths(data.port_id, data.freight_berths())
 
 		var is_home := data.port_id == home_port_id or (i == 0 and home_port_id == "port-home")
 		if is_home and get_node_or_null("HomePort") == null:
@@ -401,13 +421,14 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 		freight.prune_unknown_ports()
 
 
-
 func _generate_definitions() -> Array[PortDefinition]:
-	return COASTAL_PORT_PLACER.place_ports(
+	var definitions := COASTAL_PORT_PLACER.place_ports(
 		_world_layout,
 		maxi(port_count, 1),
 		PackedStringArray(WORLD_PORT_NAMES.NAMES),
 	)
+	DevelopmentFleet.configure_home_port(definitions, PlayerSession.data)
+	return definitions
 
 
 func _spawn_player() -> void:
@@ -434,28 +455,16 @@ func _spawn_player() -> void:
 	if view != null and view.has_method("restore_player_state"):
 		view.call("restore_player_state")
 
-	# Phase 11 — fire the welcome hint once per captain after spawn settles.
-	var tut := get_node_or_null("/root/Tutorial")
-	if tut != null:
-		tut.call_deferred("show", "welcome")
-
-	# Bake far-LOD impostors while the gate is still up (buildings + village houses).
+	# Bake far-LOD impostors before boot completes (buildings + village houses).
 	await _warm_impostors()
 
+	var port_loader := get_node_or_null("ProximityLoader")
+	if port_loader != null: port_loader.set_process(true)
 	boot_finished.emit()
-	var gate := get_node_or_null("/root/LoadingGate")
-	if gate != null and gate.has_method("notify_world_ready"):
-		gate.call("notify_world_ready")
 
 
 func _warm_impostors() -> void:
-	var gate := get_node_or_null("/root/LoadingGate")
-	var status_cb := Callable()
-	if gate != null and gate.has_method("set_detail"):
-		status_cb = gate.set_detail
-	elif gate != null and gate.has_method("notify_status"):
-		status_cb = gate.notify_status
-	await IMPOSTOR_SERVICE.warm_catalog(self, status_cb)
+	await IMPOSTOR_SERVICE.warm_catalog(self, Callable())
 
 
 func _await_spawn_terrain(spawn_pos: Vector3) -> void:

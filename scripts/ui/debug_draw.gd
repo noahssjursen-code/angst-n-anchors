@@ -633,7 +633,7 @@ func _build_gameplay(e: Array) -> void:
 
 	# ── Player ────────────────────────────────────────────────────────────────
 	_sec(e, "PLAYER")
-	_row(e, "Marks", PlayerSession.format_money(gs.player.marks), C_GOLD)
+	_row(e, "NOK", PlayerSession.format_money(gs.player.marks), C_GOLD)
 	_row(e, "Name",  gs.player.display_name,     C_VALUE)
 
 	var players := get_tree().get_nodes_in_group("player")

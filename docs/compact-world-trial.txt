@@ -1,0 +1,62 @@
+Compact world trial — 10 October 2026
+
+Trying it
+Single player -> New captain -> Company setup -> Sailing area -> Compact trial.
+This creates a new 30 x 30 km world (75% of standard width/length; 56.25% of
+standard area). Standard remains 40 x 40 km. Existing captains retain their own
+world dimensions, seed, coordinates and geography. No save migration is needed.
+
+The existing deterministic WorldConfig/WorldLayoutGenerator size pipeline drives
+the actual coast SDF, islands, fjords, terrain heights, forests, port siting,
+navigation and chart. This is not a scaled scene or closer port icons. Terrain
+uses a 193 x 193 field, retaining the standard 156.25 m field sample spacing.
+Ships, buildings, local terrain detail, elevations, bollard spacing, port
+footprints and the 650 m approach-clearance checks stay in physical metres.
+Port sites regenerate to fit the smaller geography; same-numbered ports are not
+one-to-one scaled versions of the old world. Ocean and locomotion are unchanged.
+
+Measured travel (minutes at a steady 15 kn; excludes loading and manoeuvring)
+Seed       nearest-port median, 40 -> 30 km    home-to-others median, 40 -> 30 km
+424242                  6.0 -> 3.3                          29.6 -> 28.6
+42                      5.6 -> 2.9                          25.8 -> 20.5
+8675309                 3.6 -> 3.6                          26.9 -> 20.9
+These use actual MarineRoutePlanner passage distances. 'Nearest' means the
+geographically nearest other port, not necessarily a compatible cargo destination.
+Each home sample is all 34 other ports. Smaller area does not guarantee a 25%
+reduction on each trip: home location, available port sites and channel detours
+change. Short local jobs are promising; lengthy cross-world jobs remain lengthy.
+Cargo offer destinations/rewards were not retuned in this experiment.
+
+Verification
+- Three seeds at both sizes: 840 checks, zero failures; 35 ports per map,
+  full-sized land footprints/approach water, and valid nearest/home routes.
+- Actual new-captain company selector -> compact home-port chart -> confirmation
+  -> live world -> scratch save/reload. Preview/live terrain checksum agrees.
+  The forest field uses the new bounds and all 35 ports register. No captain
+  outside the isolated review directories was read or modified by the fixture.
+- Loading an older captain without dimensions after a compact preview explicitly
+  restores standard size; it no longer inherits the preview's session setting.
+- WorldGenerationContext rejects explicitly different dimensions even while a
+  checksum is unavailable. Missing legacy context fields remain compatible.
+- Existing world_config_size_test and world_context_test pass. Nine pre-existing
+  v8 layout/field hashes (three seeds at 10/40/120 km) are byte-identical to their
+  recorded baselines. Generation version and existing geometry are unchanged.
+- Daytime Godot harbour/channel captures inspected after terrain streaming drains.
+  Compact review: about 10 ms median wall frame, roughly 1.4-1.9 ms GPU in the
+  reviewed 1600x900 views on RTX5070. Different harbour geometry means this is a
+  local cost check, not a controlled performance claim across all gameplay.
+- High aerial review views expose pre-existing horizon/ocean coverage boundaries;
+  these are not approved aerial presentation. Normal harbour/channel views are
+  the useful scale references. Do not alter the accepted ocean as part of this trial.
+
+Evidence under C:/Users/noahs/Pictures/machinescreenshots/
+compact-world-1791584539-93/report.json — six-world route/site comparison
+compact-world-1791584840-358/ — final 40 km daytime baseline
+compact-world-1791585011-287/ — final compact UI/world/save review
+
+Reproduce with Godot and --shipyard-playtest:
+tests/compact_world_review.tscn --metrics
+tests/compact_world_review.tscn --size=40000
+tests/compact_world_review.tscn --menu
+The review requires the isolation flag and archives captures/reports uniquely.
+Its viewport is positioned for inspection; voyages are measured, not sailed.

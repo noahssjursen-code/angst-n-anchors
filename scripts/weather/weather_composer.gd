@@ -91,7 +91,8 @@ static func _compose_from_parts(
 		* storm_access
 		* smoothstep(0.42, 0.82, sample.cloud_cover)
 	)
-	sample.precipitation = clampf(base.precipitation + front_rain_support * 0.22, 0.0, 1.0)
+	sample.precipitation = WeatherSample.supported_precipitation(
+		base.precipitation + front_rain_support * 0.22, sample.cloud_cover)
 
 	# Fog stays an independent selected dimension. Light wind can disperse a little.
 	var fog_density := 1.0 - base.visibility

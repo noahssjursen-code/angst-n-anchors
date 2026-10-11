@@ -1,0 +1,1028 @@
+[
+  {
+    "path": "looped/ocean/calm_seas_1.wav",
+    "duration": 13.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -28.043212074671608,
+    "seam_step": 0.002327602063093971,
+    "sha256": "1a9acac428596f62b438904743236c7ae3ea69ee9b93776ac5417f4a6271af89",
+    "seam_relative_to_rms_step": 0.13710806705805734
+  },
+  {
+    "path": "looped/ocean/choppy_seas_1.wav",
+    "duration": 13.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -26.613949390851577,
+    "seam_step": 0.005233179374485079,
+    "sha256": "5cf19c645414907ebd74fa4cf7019c5ef2e6920a9ee37f72082c5e75ab8269bb",
+    "seam_relative_to_rms_step": 0.33405884423962534
+  },
+  {
+    "path": "looped/ocean/rough_seas_1.wav",
+    "duration": 13.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -23.363540514264134,
+    "seam_step": 0.004113619662363021,
+    "sha256": "7be233bf35061e8ace84fa8457ca6858e0b0351873bdc0dfa702d2a595419906",
+    "seam_relative_to_rms_step": 0.1451021882270372
+  },
+  {
+    "path": "looped/ocean/stormy_seas_1.wav",
+    "duration": 13.75,
+    "channels": 2,
+    "peak_dbfs": -4.5393819611531425,
+    "rms_dbfs": -22.007740482773038,
+    "seam_step": 0.024635333877232303,
+    "sha256": "3ed70fc7af0622890fee14eb3ad98d3c16bafa7bb2d92e590c32f363e14285af",
+    "seam_relative_to_rms_step": 1.0183809582343128
+  },
+  {
+    "path": "looped/wind/wind_light_1.wav",
+    "duration": 13.75,
+    "channels": 2,
+    "peak_dbfs": -17.72948650853795,
+    "rms_dbfs": -33.32872623364898,
+    "seam_step": 0.0026339711621403694,
+    "sha256": "c64bf7c5a259967e4259300493b2634399968b10545279dc28f4c9290b17ecc1",
+    "seam_relative_to_rms_step": 0.8933722724674488
+  },
+  {
+    "path": "looped/wind/wind_gale_1.wav",
+    "duration": 13.75,
+    "channels": 2,
+    "peak_dbfs": -8.139692595562517,
+    "rms_dbfs": -21.97805208798648,
+    "seam_step": 0.0052214152633023175,
+    "sha256": "793de6d8ba6d6f93d053df152d65677d64faec6d479a44d63344071a880be736",
+    "seam_relative_to_rms_step": 0.5355148964169615
+  },
+  {
+    "path": "looped/rain/rain_drizzle_1.wav",
+    "duration": 11.75,
+    "channels": 2,
+    "peak_dbfs": -15.081581006903358,
+    "rms_dbfs": -42.553258916892645,
+    "seam_step": 0.00031543720979243517,
+    "sha256": "710bf33b229088532dda96ed1d7e21106b0333febed2cf019f375eceb2a600e2",
+    "seam_relative_to_rms_step": 0.09600163156004228
+  },
+  {
+    "path": "looped/rain/rain_moderate_1.wav",
+    "duration": 11.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -25.23054894308104,
+    "seam_step": 0.029892078280983645,
+    "sha256": "5e4a1db19d4cbab3cdc55d28ef7d0358f419b5fb68b002911e395d111571d937",
+    "seam_relative_to_rms_step": 0.7968004498686136
+  },
+  {
+    "path": "looped/rain/rain_heavy_1.wav",
+    "duration": 11.75,
+    "channels": 2,
+    "peak_dbfs": -7.214984347084583,
+    "rms_dbfs": -21.97653892480494,
+    "seam_step": 0.0664380712776841,
+    "sha256": "55de8122213adb6559b52df7b3a03242157735d28266f9ef68a6daa4d80a0a41",
+    "seam_relative_to_rms_step": 1.452065162580099
+  },
+  {
+    "path": "looped/rain/rain_on_roof_1.wav",
+    "duration": 11.75,
+    "channels": 2,
+    "peak_dbfs": -11.102023201703696,
+    "rms_dbfs": -33.65760726608055,
+    "seam_step": 0.005090981721878052,
+    "sha256": "a12329f8b974611070ab9197abd8ea64583f81c255c02f4f1038a34040902311",
+    "seam_relative_to_rms_step": 0.6129967973850114
+  },
+  {
+    "path": "normal/thunder/thunder_01.wav",
+    "duration": 4.825351473922902,
+    "channels": 2,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -23.123479763408486,
+    "seam_step": null,
+    "sha256": "830cd58942b327684ca45238b1182d254b53ea79b430ce3ca4805073971b2339"
+  },
+  {
+    "path": "normal/thunder/thunder_02.wav",
+    "duration": 5.622743764172336,
+    "channels": 2,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -24.11470840717672,
+    "seam_step": null,
+    "sha256": "9b8f25fdd160d69c1f8c1108809bf66015eff3eaf7e4a8ea144dd5c213c01ee0"
+  },
+  {
+    "path": "world/horns/harbour_horn_1.wav",
+    "duration": 3.9226303854875284,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -17.326307774619348,
+    "seam_step": null,
+    "sha256": "a21e9e4504d71107a7ca7c68bec4c3b03f76952a0d68b38fd36a70b1fb1a76f9"
+  },
+  {
+    "path": "world/horns/ship_horn_1.wav",
+    "duration": 2.0,
+    "channels": 1,
+    "peak_dbfs": -10.844752462369433,
+    "rms_dbfs": -19.980361586319763,
+    "seam_step": 0.0049185957737001434,
+    "sha256": "6cd0d0abdce197055d3cf1dde1209ed2aed2809b0534c24fb7409f482a12fc79",
+    "seam_relative_to_rms_step": 0.19172034530388374
+  },
+  {
+    "path": "ship/engines/compact_i6/engine_idle_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -8.68533787336635,
+    "rms_dbfs": -19.977847509523855,
+    "seam_step": 9.002483494385816e-05,
+    "sha256": "7bcb18679dee061915cbc6a89c692d4fa75f1ce2071fba4d320d02929edef695",
+    "seam_relative_to_rms_step": 0.030148288318106054
+  },
+  {
+    "path": "ship/engines/compact_i6/engine_load_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -9.465075828205961,
+    "rms_dbfs": -19.994297642769162,
+    "seam_step": 0.0005959208098538851,
+    "sha256": "53873a4ee277a9fc8f0b79ee92fb1227530575347c796828a4db857d666f3364",
+    "seam_relative_to_rms_step": 0.3891184012960552
+  },
+  {
+    "path": "ship/engines/compact_i6/engine_start_1.wav",
+    "duration": 3.0,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -18.646225887037236,
+    "seam_step": null,
+    "sha256": "56257aa97dd043173171d06aaa0fe12db1ba24d534fd3cc16f04ecce6c95d4eb"
+  },
+  {
+    "path": "ship/engines/compact_i6/engine_stop_1.wav",
+    "duration": 1.083015873015873,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -18.766869205855116,
+    "seam_step": null,
+    "sha256": "39a9ef39cafd2c031d0b6af1589f75f0774f754f91ea394674c62f8ca8c7c5b7"
+  },
+  {
+    "path": "ship/engines/coastal_i6/engine_idle_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -6.881981338799797,
+    "rms_dbfs": -19.977756036484745,
+    "seam_step": 0.0012065489937980456,
+    "sha256": "4247e9f12c84eee8c76694ef8ab2ed245974d6718d0ad92b24534b91207fc8e8",
+    "seam_relative_to_rms_step": 0.10747093090345722
+  },
+  {
+    "path": "ship/engines/coastal_i6/engine_load_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -7.409525856137437,
+    "rms_dbfs": -19.9748947404361,
+    "seam_step": 0.011955617802395763,
+    "sha256": "c6f26449cbba70626877ddf8555cfab6dde3f7e4adc756cfcd2d0810e39dbbf0",
+    "seam_relative_to_rms_step": 0.8120782185347392
+  },
+  {
+    "path": "ship/engines/coastal_i6/engine_start_1.wav",
+    "duration": 3.0,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -19.47371639151519,
+    "seam_step": null,
+    "sha256": "405730fe548ada1f54502489eaf358e1df14b4af69df9594f557108c9e6f22d7"
+  },
+  {
+    "path": "ship/engines/coastal_i6/engine_stop_1.wav",
+    "duration": 1.9409750566893424,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -22.056601314805455,
+    "seam_step": null,
+    "sha256": "ed0c29122ba79bf6c90f07cd20952273e873922f60c3a0a89453db122876c429"
+  },
+  {
+    "path": "ship/engines/freighter_v12/engine_idle_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -10.637979449277708,
+    "rms_dbfs": -19.9658233243144,
+    "seam_step": 0.004633146317968587,
+    "sha256": "c2bb1972687a4b2aa51bce14f7688f7f6067f2a725a5950c3a78f4d26c30a603",
+    "seam_relative_to_rms_step": 1.3735398626452906
+  },
+  {
+    "path": "ship/engines/freighter_v12/engine_load_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -5.272264823453369,
+    "rms_dbfs": -19.985093783316596,
+    "seam_step": 0.020706887000023058,
+    "sha256": "21bb3bb674a92ff8b81316f795d02643f152b6850c98225a972d3b9ac08ec848",
+    "seam_relative_to_rms_step": 0.4663937466418457
+  },
+  {
+    "path": "ship/engines/freighter_v12/engine_start_1.wav",
+    "duration": 3.0,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -19.74178539778783,
+    "seam_step": null,
+    "sha256": "c61f7d5c4ddb03eacc8c2bf1f3cd90602fccaecded5df0a295297af1c74495a1"
+  },
+  {
+    "path": "ship/engines/freighter_v12/engine_stop_1.wav",
+    "duration": 1.8496825396825396,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -21.649401608924542,
+    "seam_step": null,
+    "sha256": "9d3b6e46b1fb48821065f03f9b89bca4901efa91a02020d54a5f28a4f51b2959"
+  },
+  {
+    "path": "ship/engines/catamaran_twin/engine_idle_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -8.90844049780487,
+    "rms_dbfs": -19.981617628957977,
+    "seam_step": 0.0005670844936451896,
+    "sha256": "3498f0b29dfc00fa17dd44097a153d3aa12107e6d12279915ffe940e5afb82cd",
+    "seam_relative_to_rms_step": 0.20358981510059665
+  },
+  {
+    "path": "ship/engines/catamaran_twin/engine_load_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -8.384696498405695,
+    "rms_dbfs": -19.97414885896447,
+    "seam_step": 0.0014094359044103597,
+    "sha256": "a5e90c04863fce04564399112b00dc32ab7b8fbd5052b5dbfcb704745750bd57",
+    "seam_relative_to_rms_step": 0.40298814064652605
+  },
+  {
+    "path": "ship/engines/catamaran_twin/engine_start_1.wav",
+    "duration": 3.0,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -18.02083101036804,
+    "seam_step": null,
+    "sha256": "7f2c8abbab5c9b0b0f4a93976f7001514dc550cb11510eba4decd075b35c38fe"
+  },
+  {
+    "path": "ship/engines/catamaran_twin/engine_stop_1.wav",
+    "duration": 2.0,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -18.16532599345973,
+    "seam_step": null,
+    "sha256": "ad7a7b5b8c077ee8b7542f6448da3d3d0740323603dce22ebe616a8b0d64a360"
+  },
+  {
+    "path": "ship/engines/feeder_v12/engine_idle_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -11.022784773919197,
+    "rms_dbfs": -19.94159612752148,
+    "seam_step": 0.0005219273019763798,
+    "sha256": "fc60845649ed5e7aa2155387e59503015cf8311e0fb2d3b9dcb9af08b2d2a899",
+    "seam_relative_to_rms_step": 0.6092792018453355
+  },
+  {
+    "path": "ship/engines/feeder_v12/engine_load_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -9.314472822015318,
+    "rms_dbfs": -19.947166375149685,
+    "seam_step": 0.0010176216877171643,
+    "sha256": "56f64901f297d56ba65ae393432ed2151ca5b8554b1231fcd8f86cd4c06316c9",
+    "seam_relative_to_rms_step": 1.1805005367162236
+  },
+  {
+    "path": "ship/engines/feeder_v12/engine_start_1.wav",
+    "duration": 2.4088208616780045,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -21.359772306868678,
+    "seam_step": null,
+    "sha256": "2295f51a928869eb5e0fe3b8e56fa77d55e649801c1dffc4c4dfa3face131b7f"
+  },
+  {
+    "path": "ship/engines/feeder_v12/engine_stop_1.wav",
+    "duration": 1.0284126984126984,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -23.61165637387151,
+    "seam_step": null,
+    "sha256": "c7d9b726ac39bdb14b1a47fa67bd1aabba92d1c00695d55d2e211d528c751c70"
+  },
+  {
+    "path": "ship/engines/feeder_high_v12/engine_idle_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -7.620287036278064,
+    "rms_dbfs": -19.980853734990394,
+    "seam_step": 0.0010860469719660287,
+    "sha256": "ef7e0d2938ddb5e0b0b3493383bcee637f898ca706cd3e9c560c5177a03e880f",
+    "seam_relative_to_rms_step": 0.7298644246167347
+  },
+  {
+    "path": "ship/engines/feeder_high_v12/engine_load_1.wav",
+    "duration": 7.88,
+    "channels": 1,
+    "peak_dbfs": -10.085260344428237,
+    "rms_dbfs": -19.98254869258386,
+    "seam_step": 0.0005012045124149628,
+    "sha256": "1f4f4616061d6fe33f094731269b007d23deda8ab79def6f6f98e8da2f587d02",
+    "seam_relative_to_rms_step": 0.4372679378806527
+  },
+  {
+    "path": "ship/engines/feeder_high_v12/engine_start_1.wav",
+    "duration": 3.0,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -11.387332499527307,
+    "seam_step": null,
+    "sha256": "c3829a7a9e89f793f6601597ce524a3f2de945810a6b381b1823a6037840a71f"
+  },
+  {
+    "path": "ship/engines/feeder_high_v12/engine_stop_1.wav",
+    "duration": 1.9831972789115646,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -17.32385168255098,
+    "seam_step": null,
+    "sha256": "a08984401bade04b0228c08a73b3ebce670c42bb47b21ff01bd6b57a331938c1"
+  },
+  {
+    "path": "ship/thruster/bow_thruster_1.wav",
+    "duration": 5.75,
+    "channels": 1,
+    "peak_dbfs": -9.446917038049227,
+    "rms_dbfs": -19.92584469979686,
+    "seam_step": 0.005591542339360548,
+    "sha256": "7ddb514c19d61cb5289d8e065ff6d3f68296fdf0327db428da98f2bd601c1244",
+    "seam_relative_to_rms_step": 1.7621523225837017
+  },
+  {
+    "path": "ship/hull/hull_creak_1.wav",
+    "duration": 6.75,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -28.36376108548115,
+    "seam_step": 1.113376137619449e-05,
+    "sha256": "33866985a50ddca08f40cdb61b77a30a8540db4338144d4bb03e61310682c3d9",
+    "seam_relative_to_rms_step": 0.005263552756500365
+  },
+  {
+    "path": "ship/controls/throttle_click_1.wav",
+    "duration": 0.2850113378684807,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -28.524857815849792,
+    "seam_step": null,
+    "sha256": "37001d935cad4046bca55a7b5bd3f53d69c0f93be668606e07a09d0d3345209f"
+  },
+  {
+    "path": "ship/controls/throttle_click_2.wav",
+    "duration": 0.29882086167800453,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -26.481077659633083,
+    "seam_step": null,
+    "sha256": "9b4b25d6eea7a553bd615bd66bdc9160d36fb98b7f332ff3305680791f923161"
+  },
+  {
+    "path": "world/water/quay_lap_1.wav",
+    "duration": 7.75,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -35.93550281120968,
+    "seam_step": 0.0005757690225066572,
+    "sha256": "456ecfaae9a72303b72c45100340113327096bda5853b98f55de607372042307",
+    "seam_relative_to_rms_step": 0.0974317089404672
+  },
+  {
+    "path": "world/water/bow_wash_1.wav",
+    "duration": 7.75,
+    "channels": 1,
+    "peak_dbfs": -6.356767674295706,
+    "rms_dbfs": -19.978635795466438,
+    "seam_step": 0.06317643043416046,
+    "sha256": "84f303252a57910f905234bd018eb06e619cb8e1e34444b7690c21cdff89b96c",
+    "seam_relative_to_rms_step": 1.7596563630931128
+  },
+  {
+    "path": "world/water/stern_wash_1.wav",
+    "duration": 7.75,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -24.518384982198857,
+    "seam_step": 0.006184692344596936,
+    "sha256": "9d76c13b77ad85755d424614df8f34bf628ba9499068a15380e5d4aa4aace280",
+    "seam_relative_to_rms_step": 0.46899142714744285
+  },
+  {
+    "path": "world/water/wade_1.wav",
+    "duration": 7.75,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -30.03534306270491,
+    "seam_step": 0.0011145676609188176,
+    "sha256": "beb6b8fc2e36e3e337e4ba571446690b6bb348a6b89390d8e6f497bd2dd8f102",
+    "seam_relative_to_rms_step": 0.09819966498869345
+  },
+  {
+    "path": "world/water/hull_slap_1.wav",
+    "duration": 1.0129251700680273,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -29.466027831057872,
+    "seam_step": null,
+    "sha256": "1b9a56c1f84646840a2dcb3fc49b2c25168f5a3acb0607509034d3eabe01116c"
+  },
+  {
+    "path": "world/water/hull_slap_2.wav",
+    "duration": 0.8509523809523809,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -29.297127591603,
+    "seam_step": null,
+    "sha256": "c66c42ff992cda87dad04c39fedf2c72129004a40ce7a7ca829b56bef08caa7f"
+  },
+  {
+    "path": "world/water/splash_enter_1.wav",
+    "duration": 1.1983219954648525,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -24.502887094258263,
+    "seam_step": null,
+    "sha256": "77cf97c1b77c2d3cd297246836a27e56a97f5565727847f6248abc3bcb9571e9"
+  },
+  {
+    "path": "world/water/splash_enter_2.wav",
+    "duration": 1.4280045351473922,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -27.304887409811386,
+    "seam_step": null,
+    "sha256": "a49e1236ada67564a161faa18b2eb560a97f07f450bf5001c1271ba14a3c40bf"
+  },
+  {
+    "path": "world/footsteps/step_steel_1.wav",
+    "duration": 0.29462585034013605,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -24.143400860688292,
+    "seam_step": null,
+    "sha256": "04a8454e80cd04d6cd13c214976a7af049368fcc8607a503ed608471c82cd9a9"
+  },
+  {
+    "path": "world/footsteps/step_steel_2.wav",
+    "duration": 0.27154195011337867,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -25.326813617478013,
+    "seam_step": null,
+    "sha256": "c3e19b9d31618e371f9bf0904ce5e46cfe620aec9f68bc56df2f6de9cd6efcd7"
+  },
+  {
+    "path": "world/footsteps/step_steel_3.wav",
+    "duration": 0.3773469387755102,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -24.150328433915277,
+    "seam_step": null,
+    "sha256": "c1681a35a1c541889211b7ebd1b9a6dd1e9c4d5d0ad5651dbb389e74f8bbd1d2"
+  },
+  {
+    "path": "world/footsteps/step_concrete_1.wav",
+    "duration": 0.43526077097505667,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -22.134357534374157,
+    "seam_step": null,
+    "sha256": "5b0bede18ab31d525266b51d058b3e7e082421fee3bd685f41d47a03b35ae48e"
+  },
+  {
+    "path": "world/footsteps/step_concrete_2.wav",
+    "duration": 0.6,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -23.454669212554855,
+    "seam_step": null,
+    "sha256": "5a1af870b45628a8bcb0f8c97d799f185cde4129ccd3da0233226ad117a32da7"
+  },
+  {
+    "path": "world/footsteps/step_concrete_3.wav",
+    "duration": 0.6,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -24.256773924616645,
+    "seam_step": null,
+    "sha256": "b1d4b35f409039ef2db8b61e719a3c6769dd3bc9ce2d164382b373bf896e63e7"
+  },
+  {
+    "path": "world/footsteps/step_wood_1.wav",
+    "duration": 0.4984353741496599,
+    "channels": 1,
+    "peak_dbfs": -13.760140318285615,
+    "rms_dbfs": -32.18020187414336,
+    "seam_step": null,
+    "sha256": "361d47c86fac2a3d217f49b554328e58d9b49a4333b6107a68ed46a9f8022be7"
+  },
+  {
+    "path": "world/footsteps/step_wood_2.wav",
+    "duration": 0.6,
+    "channels": 1,
+    "peak_dbfs": -19.556346128459033,
+    "rms_dbfs": -35.314994055946855,
+    "seam_step": null,
+    "sha256": "d3b0aba77c6040c62c1fa4d1aa3cf08282dee38bf4d6feeeb6beafa9618e132f"
+  },
+  {
+    "path": "world/footsteps/step_grating_1.wav",
+    "duration": 0.6,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -26.456371662789206,
+    "seam_step": null,
+    "sha256": "dd57fa417fdfef9139e90701cf8d06768d25fb22807b3d438c79bf1b23573a3c"
+  },
+  {
+    "path": "world/footsteps/step_grating_2.wav",
+    "duration": 0.36859410430839,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -23.843735070428714,
+    "seam_step": null,
+    "sha256": "eb0c8bae68921f36e4746f1d6089430c56df4c29fc745f91d476ea1f83ae80e2"
+  },
+  {
+    "path": "world/footsteps/step_gravel_1.wav",
+    "duration": 0.5346938775510204,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -32.69557615069965,
+    "seam_step": null,
+    "sha256": "a40a6fa24874bdd4cc1cac2a39a334457c78ad50713d6f05e16824d373acd4f2"
+  },
+  {
+    "path": "world/footsteps/step_gravel_2.wav",
+    "duration": 0.6,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -30.795935687370676,
+    "seam_step": null,
+    "sha256": "b78d5ad2452ecff4925476eab4048c257be00e6a9d8b7093fdac106d4147b6f4"
+  },
+  {
+    "path": "world/body/jump_1.wav",
+    "duration": 0.2615873015873016,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -25.297884617435543,
+    "seam_step": null,
+    "sha256": "771f3cf344d68db12e88ae266c6e818e531ff314d6e035d47c169ad109da3db2"
+  },
+  {
+    "path": "world/body/land_steel_1.wav",
+    "duration": 0.44004535147392293,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -21.987261615060536,
+    "seam_step": null,
+    "sha256": "9a6d8f232e20150bbe80a2e06dd6db903d794ac5d2204a285672abc6fc12e146"
+  },
+  {
+    "path": "world/body/land_concrete_1.wav",
+    "duration": 0.37335600907029476,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -26.233725124266755,
+    "seam_step": null,
+    "sha256": "b5cac35a10725f209eae600acbeff8357c8e3deee3d3c12795059fb680743f74"
+  },
+  {
+    "path": "world/doors/door_open_1.wav",
+    "duration": 0.34750566893424034,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -23.93728627820638,
+    "seam_step": null,
+    "sha256": "499902eda4b7f713658a83b8b415bbb75aa242318a2c80e576fccfdf67767e79"
+  },
+  {
+    "path": "world/doors/door_close_1.wav",
+    "duration": 0.316530612244898,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -21.722674709627732,
+    "seam_step": null,
+    "sha256": "3df3c3fcd45b9e52f62f9da1e1d70f0bdd42bdd906c72697eec77d047d5991e3"
+  },
+  {
+    "path": "world/doors/door_latch_1.wav",
+    "duration": 0.2784580498866213,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -25.957518152636556,
+    "seam_step": null,
+    "sha256": "835b0edd2abd35bfc194a4a7f08b7c9ab6e5c34981eee5d8e94e6a3983069355"
+  },
+  {
+    "path": "world/gangway/gangway_lower_1.wav",
+    "duration": 1.2580498866213152,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -29.62243505299933,
+    "seam_step": null,
+    "sha256": "96771b94c0e680d0bd1b29444af33efe5d6fdd652038f6c461645eb3ff3aee02"
+  },
+  {
+    "path": "world/gangway/gangway_raise_1.wav",
+    "duration": 0.7250340136054422,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -26.817230234798245,
+    "seam_step": null,
+    "sha256": "6f6ef8a620dd25cbea731959728fc424ae163779f87430fde1a03c9e4978e3be"
+  },
+  {
+    "path": "world/gangway/gangway_step_1.wav",
+    "duration": 0.3819047619047619,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -28.901826955721116,
+    "seam_step": null,
+    "sha256": "ae2386f06a02bb910a93e2fd5b16ee25a37f697c8bc1ad735400c2dab1b81490"
+  },
+  {
+    "path": "world/gangway/gangway_step_2.wav",
+    "duration": 0.4357142857142857,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -29.415753114271965,
+    "seam_step": null,
+    "sha256": "45b1fb112b93cbf75fe997181cde98d0e406fb04199d4acf475cd0388e214f83"
+  },
+  {
+    "path": "world/ladder/ladder_step_1.wav",
+    "duration": 0.3382312925170068,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -26.225228730302682,
+    "seam_step": null,
+    "sha256": "0424c132c86845016db2f225c90d1a7695c9177a7effe7eda7d25f3bc5e88989"
+  },
+  {
+    "path": "world/ladder/ladder_step_2.wav",
+    "duration": 0.5739455782312926,
+    "channels": 1,
+    "peak_dbfs": -16.66866781669511,
+    "rms_dbfs": -34.7268485890144,
+    "seam_step": null,
+    "sha256": "4d8d1e744afe272d1fe8b977e4138bc5c4677ab30aad2cafa4c9a1568482e1a6"
+  },
+  {
+    "path": "world/helm/autopilot_click_1.wav",
+    "duration": 0.34068027210884355,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -27.19056927806689,
+    "seam_step": null,
+    "sha256": "4dd7b1003c7f9cc7c6cd98869915520c9894d59a3225e17c3979f13673a8fb7b"
+  },
+  {
+    "path": "world/helm/breaker_click_1.wav",
+    "duration": 0.48,
+    "channels": 1,
+    "peak_dbfs": -16.43027366017493,
+    "rms_dbfs": -34.87882889476659,
+    "seam_step": null,
+    "sha256": "de196953f8898ae6bdeb9078d836ce9b73b91a7b2d5e5255fdb0e2337810d8fd"
+  },
+  {
+    "path": "world/helm/seat_sit_1.wav",
+    "duration": 1.6607482993197278,
+    "channels": 1,
+    "peak_dbfs": -6.000000000000001,
+    "rms_dbfs": -32.55445235040017,
+    "active_seconds": 0.4,
+    "sha256": "0710a517804ae0a48896a83a5235fd45d63450682b29c905080f5bed27ef8f1e",
+    "gain_db": 5.007528758123075
+  },
+  {
+    "path": "world/helm/seat_stand_1.wav",
+    "duration": 0.8833106575963718,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -22.892024486815412,
+    "seam_step": null,
+    "sha256": "b1435a13bf8314c2ab823c565395b5d049e9d9b403d9c5455b65982101a92d1f"
+  },
+  {
+    "path": "world/helm/watch_alarm_1.wav",
+    "duration": 1.0,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -16.761099163306703,
+    "seam_step": null,
+    "sha256": "1aee43f0cdd9803ab1d1d470567038a7d82018b5841a47952d7efeff996e8a43"
+  },
+  {
+    "path": "world/mooring/line_on_1.wav",
+    "duration": 2.98421768707483,
+    "channels": 1,
+    "peak_dbfs": -6.000000000000001,
+    "rms_dbfs": -29.615067671899045,
+    "active_seconds": 2.5,
+    "sha256": "0af0383518ddf4f01ee8482d5595d9d5d7d27c9e71dfa4bfa0dcc1e2109e625b",
+    "gain_db": -9.502944993276566
+  },
+  {
+    "path": "world/mooring/line_off_1.wav",
+    "duration": 1.3819274376417234,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -19.521890856725236,
+    "seam_step": null,
+    "sha256": "0ba8a13b077e7b3f9e42bbb15a48cb008d21b1abeacfa693443b354acdbb8062"
+  },
+  {
+    "path": "world/mooring/line_creak_1.wav",
+    "duration": 5.75,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -32.09442401597557,
+    "seam_step": 0.0003326964370424361,
+    "sha256": "e332a650b4cc3264f2f4e017e45f2eac7d75db5a9b118fd5432edbddde61dc82",
+    "seam_relative_to_rms_step": 0.01618634785436826
+  },
+  {
+    "path": "world/mooring/fender_rub_1.wav",
+    "duration": 9.75,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -22.493897098796992,
+    "active_seconds": 9.700000000000001,
+    "sha256": "9b94b724ddf3e89bc049986d358b50a9a3344a573851c761b7c134e9a5682aed",
+    "gain_db": -2.1549058591629047,
+    "seam_step": 0.0328652868121664,
+    "seam_relative_to_rms_step": 0.4784750018443926
+  },
+  {
+    "path": "world/ramp/ramp_hydraulic_1.wav",
+    "duration": 4.75,
+    "channels": 1,
+    "peak_dbfs": -7.4708902614175425,
+    "rms_dbfs": -19.95857168292771,
+    "seam_step": 0.09820440421433549,
+    "sha256": "01934719316763860375c36c596fd195eb1d2a72d78623bbc6dd7db214fea678",
+    "seam_relative_to_rms_step": 2.2649909590405457
+  },
+  {
+    "path": "world/ramp/ramp_land_1.wav",
+    "duration": 0.6537868480725624,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -22.953169343459507,
+    "seam_step": null,
+    "sha256": "ee4db781e9baeea86b6cc7633d3dcd972fb2b58a0d5fbd3cec04d7c0ee7ca136"
+  },
+  {
+    "path": "world/crane/slew_1.wav",
+    "duration": 4.88,
+    "channels": 1,
+    "peak_dbfs": -5.721246900928207,
+    "rms_dbfs": -19.9786207808787,
+    "seam_step": 0.00010056720719352555,
+    "sha256": "f39c759005313368de54a47b01d37b482f2f34e4a5665086768148e7e39c5085",
+    "seam_relative_to_rms_step": 0.009212807819120901
+  },
+  {
+    "path": "world/crane/trolley_1.wav",
+    "duration": 4.88,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -21.525427281477047,
+    "seam_step": 0.04968800750191399,
+    "sha256": "5c425cffe62310bd94b585d17e1f56dec87fc49087fea566ee6c76ef7e30c5bd",
+    "seam_relative_to_rms_step": 1.9261556021188078
+  },
+  {
+    "path": "world/crane/hoist_1.wav",
+    "duration": 4.88,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -22.03148407501516,
+    "seam_step": 0.025730178611244554,
+    "sha256": "0928d3f2d6a06c1673493c5ec33fb085a0a7e4b386e5a8d3fd0d749aaac38497",
+    "seam_relative_to_rms_step": 0.832080334734927
+  },
+  {
+    "path": "world/crane/hook_stop_1.wav",
+    "duration": 0.5652154195011337,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -20.331317148602793,
+    "seam_step": null,
+    "sha256": "c29044550785aee1f616b4d0cb76dc35332e6e9b89a97b5b41690b68cbd6020e"
+  },
+  {
+    "path": "world/crane/grab_open_1.wav",
+    "duration": 0.9611337868480726,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -26.0287214192295,
+    "seam_step": null,
+    "sha256": "86549ab736cb6e9a38e40f5c503b54773fb46c8967b164eb25eb19a98c10c94e"
+  },
+  {
+    "path": "world/crane/grab_close_1.wav",
+    "duration": 0.5369160997732426,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -23.323391221739264,
+    "seam_step": null,
+    "sha256": "1fb581ce623980e6c070c8c8654b0c796e008764d35ffd9b8f907f3a4df7a114"
+  },
+  {
+    "path": "world/cargo/container_lift_1.wav",
+    "duration": 0.6462585034013606,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -27.02113405826378,
+    "seam_step": null,
+    "sha256": "9e738520332e0867a9cef8d2a6f699f86117195cd16f071d45498c937742b7e8"
+  },
+  {
+    "path": "world/cargo/container_land_1.wav",
+    "duration": 2.3912925170068027,
+    "channels": 1,
+    "peak_dbfs": -6.000000000000001,
+    "rms_dbfs": -22.452410778637493,
+    "active_seconds": 1.8,
+    "sha256": "e617a29ec7f114b438ebe954e39bdbb86a23d73e4d90b4b17c923233ae4dcbd6",
+    "gain_db": -8.801476796995477
+  },
+  {
+    "path": "world/cargo/bulk_pour_1.wav",
+    "duration": 2.537301587301587,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -20.761793016052465,
+    "seam_step": null,
+    "sha256": "b649e3a27db7a5e1e280b7c729e67d0810ae05aabd758b083d3103888c4e0ce6"
+  },
+  {
+    "path": "world/fishing/winch_1.wav",
+    "duration": 4.75,
+    "channels": 1,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -25.711989579442896,
+    "seam_step": 0.011351955812326384,
+    "sha256": "b7d968bfb7c06a23f346e5944d363305c890d0938103c44fae6c2e5f8fb08bc5",
+    "seam_relative_to_rms_step": 0.4325901444704473
+  },
+  {
+    "path": "world/fishing/gear_out_1.wav",
+    "duration": 1.081360544217687,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -24.143664155579163,
+    "seam_step": null,
+    "sha256": "0e604743795ec67fb902fe6b8d29c45ed472bf8ca45e7b4256d25863b6ff5250"
+  },
+  {
+    "path": "world/fishing/gear_in_1.wav",
+    "duration": 0.9843310657596371,
+    "channels": 1,
+    "peak_dbfs": -6.0000004906757844,
+    "rms_dbfs": -22.528937255825134,
+    "seam_step": null,
+    "sha256": "88cf468df77627860469ab08cacaa0be875a02220a5f7bd9e0e1878b346c2e13"
+  },
+  {
+    "path": "world/fishing/net_splash_1.wav",
+    "duration": 7.429002267573696,
+    "channels": 1,
+    "peak_dbfs": -6.000000000000001,
+    "rms_dbfs": -24.569882574157077,
+    "active_seconds": 5.7,
+    "sha256": "4314bd58cbbc364a50d7cd90c1007e42e839b42fe9d86f239e8bfbe72c4d66e9",
+    "gain_db": -9.40159417525747
+  },
+  {
+    "path": "looped/ocean/calm_seas_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -33.70824461645705,
+    "seam_step": 0.003078425792626285,
+    "sha256": "a9a69764bcfd8da68b67628ddc295e3d390ab20f1d4d721f274f923433c7ca2e",
+    "seam_relative_to_rms_step": 0.4092560803665135
+  },
+  {
+    "path": "looped/ocean/choppy_seas_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -25.98607015418294,
+    "seam_step": 0.011675267314960824,
+    "sha256": "1332d1ec76debed9bdadb2f0307510bccbab5c7aedd6bc098e6d03a87b836473",
+    "seam_relative_to_rms_step": 0.7510073680394996
+  },
+  {
+    "path": "looped/ocean/rough_seas_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -25.930552046340097,
+    "seam_step": 0.014325913243614173,
+    "sha256": "4a9337aa54f202bc427dcc922bbe3ceaeea7e9781a7afeeb46f2e6eccdff0e04",
+    "seam_relative_to_rms_step": 0.8605976797711036
+  },
+  {
+    "path": "looped/ocean/stormy_seas_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -25.752995448042228,
+    "seam_step": 0.028915586024335256,
+    "sha256": "75d666a1e7674c07cf65700fb67654afba15e13ead3712ae54452f2e37b0e482",
+    "seam_relative_to_rms_step": 0.9262849701824696
+  },
+  {
+    "path": "looped/wind/wind_light_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -12.159502903500425,
+    "rms_dbfs": -25.38927880263643,
+    "seam_step": 0.0077217742800712585,
+    "sha256": "e5bbd6a25c175d07ca89d7a6fa77a81ff87643bc1253340378f2228144c19d20",
+    "seam_relative_to_rms_step": 0.7902592833857537
+  },
+  {
+    "path": "looped/wind/wind_gale_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -8.205810712550601,
+    "rms_dbfs": -21.993533887676513,
+    "seam_step": 0.012520361655434992,
+    "sha256": "f2774129e9d21f3f9634f6c4f6d993bd5ad63e154219560925b460692d9997f6",
+    "seam_relative_to_rms_step": 1.000762169504282
+  },
+  {
+    "path": "looped/rain/rain_drizzle_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -7.574912346576387,
+    "rms_dbfs": -24.0,
+    "active_seconds": 23.700000000000003,
+    "sha256": "df95a5f0d5c9b5316a2816d440f544bae87eecd3ded4946ca29396c876ebc06f",
+    "gain_db": 35.87207526114222,
+    "seam_step": 0.014056492614945505,
+    "seam_relative_to_rms_step": 1.055918435376446
+  },
+  {
+    "path": "looped/rain/rain_moderate_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -31.881469969072192,
+    "seam_step": 0.040914990259903534,
+    "sha256": "6f863ebf460fb5187f22cf1da82eff368fb74c007716747d132f3a91a18e594a",
+    "seam_relative_to_rms_step": 2.126984342223753
+  },
+  {
+    "path": "looped/rain/rain_heavy_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -8.040494120608672,
+    "rms_dbfs": -21.987015200960798,
+    "seam_step": 0.10836428634378087,
+    "sha256": "528792e83708603c4109929edbab48195eb844e5737e159b4d482ac315ddac56",
+    "seam_relative_to_rms_step": 1.3667205184699283
+  },
+  {
+    "path": "looped/rain/rain_on_roof_2.wav",
+    "duration": 23.75,
+    "channels": 2,
+    "peak_dbfs": -4.0,
+    "rms_dbfs": -27.412951812329705,
+    "seam_step": 0.048023282352115226,
+    "sha256": "a9c5f3b236e2ce68e7b885bc3ee0f0e182e64c9cd5e84f0b957fd4a854445fa1",
+    "seam_relative_to_rms_step": 2.040578090570933
+  }
+]

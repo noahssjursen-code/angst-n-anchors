@@ -2,6 +2,8 @@
 class_name FishingSystem
 extends Node3D
 
+signal status_reported(message: String)
+
 ## Visual and physical fishing system component.
 ## Instantiated on vessels with the "fishing" capability.
 ## Renders a spinning trommel winch and casts a trailing semi-transparent net.
@@ -32,6 +34,10 @@ const NET_MESH_HEIGHT := 7.0
 ## How far the net mouth trails horizontally beyond the rope head ring.
 const NET_MOUTH_AFT_OFFSET := 2.6
 
+var authored_winch: Node3D
+var authored_gantry: Node3D
+var imported_rig: ImportedTrawlRig
+var _winch_audio: AudioStreamPlayer3D
 var _body: BoatBody = null
 var _propulsion: PropulsionComponent = null
 
@@ -82,21 +88,18 @@ func toggle_trawling() -> void:
 	trawling = not trawling
 	if not trawling:
 		_cancel_haul(false)
-	if _body != null:
-		var controller = _body.find_child("BoatController", true, false) as BoatController
-		if controller != null:
-			var hud = controller.get("_ship_hud")
-			if hud != null and hud.has_method("show_toast"):
-				if trawling:
-					hud.show_toast("Net Cast - Trawling Active")
-				else:
-					hud.show_toast("Net Retracted - Trawling Stopped")
+	_notify_trawl("Setting trawl gear" if trawling else "Recovering trawl gear")
+	WorldSound.play(
+		"res://resources/audio/world/fishing/gear_%s_1.wav" % ("out" if trawling else "in"),
+		global_position, -6.0)
+	if trawling:
+		WorldSound.play("res://resources/audio/world/fishing/net_splash_1.wav", global_position, -4.0)
 
 
 func _setup_visuals() -> void:
 	# Clean up existing nodes to avoid duplicates when running in tool mode
 	for child in get_children():
-		if child.name in ["TrommelWinch", "TrawlNet", "TowRope"]:
+		if child.name in ["TrommelWinch", "TrawlNet", "TowRope", "ImportedTrawlRig"]:
 			if Engine.is_editor_hint():
 				child.free()
 			else:
@@ -155,74 +158,85 @@ func _setup_visuals() -> void:
 			stern_local.x -= 0.6 * scale
 		position = Vector3(stern_local.x, deck_y + 0.2 * scale, stern_local.z)
 	
-	# 1. Trommel Winch Mount Node
-	_trommel_winch = Node3D.new()
-	_trommel_winch.name = "TrommelWinch"
-	_add_child_with_owner(self, _trommel_winch)
+	if authored_winch != null:
+		_trommel_winch = authored_winch
+		_drum_rotation_node = authored_winch.find_child("DrumPivot*", true, false)
+	else:
+		# 1. Trommel Winch Mount Node
+		_trommel_winch = Node3D.new()
+		_trommel_winch.name = "TrommelWinch"
+		_add_child_with_owner(self, _trommel_winch)
 	
-	# 2. Spin-capable drum
-	_drum_rotation_node = Node3D.new()
-	_drum_rotation_node.name = "DrumRotationNode"
-	_add_child_with_owner(_trommel_winch, _drum_rotation_node)
+		# 2. Spin-capable drum
+		_drum_rotation_node = Node3D.new()
+		_drum_rotation_node.name = "DrumRotationNode"
+		_add_child_with_owner(_trommel_winch, _drum_rotation_node)
 	
-	# 3. Main drum mesh (horizontal cylinder)
-	var drum_mi := MeshInstance3D.new()
-	drum_mi.name = "WinchDrum"
-	var drum_mesh := CylinderMesh.new()
-	drum_mesh.top_radius = 0.22
-	drum_mesh.bottom_radius = 0.22
-	drum_mesh.height = 1.6
-	drum_mesh.radial_segments = 16
-	drum_mi.mesh = drum_mesh
+		# 3. Main drum mesh (horizontal cylinder)
+		var drum_mi := MeshInstance3D.new()
+		drum_mi.name = "WinchDrum"
+		var drum_mesh := CylinderMesh.new()
+		drum_mesh.top_radius = 0.22
+		drum_mesh.bottom_radius = 0.22
+		drum_mesh.height = 1.6
+		drum_mesh.radial_segments = 16
+		drum_mi.mesh = drum_mesh
 	
-	# Steel material
-	var steel_mat := StandardMaterial3D.new()
-	steel_mat.albedo_color = Color(0.20, 0.22, 0.24)
-	steel_mat.metallic = 0.9
-	steel_mat.roughness = 0.25
-	drum_mi.material_override = steel_mat
+		# Steel material
+		var steel_mat := StandardMaterial3D.new()
+		steel_mat.albedo_color = Color(0.20, 0.22, 0.24)
+		steel_mat.metallic = 0.9
+		steel_mat.roughness = 0.25
+		drum_mi.material_override = steel_mat
 	
-	# Rotate horizontal (align with Z axis)
-	drum_mi.rotation.x = PI * 0.5
-	_add_child_with_owner(_drum_rotation_node, drum_mi)
+		# Rotate horizontal (align with Z axis)
+		drum_mi.rotation.x = PI * 0.5
+		_add_child_with_owner(_drum_rotation_node, drum_mi)
 	
-	# 4. Flanges (side metal plates)
-	for side in [-0.8, 0.8]:
-		var flange := MeshInstance3D.new()
-		flange.name = "Flange_" + ("Port" if side < 0 else "Stbd")
-		var flange_mesh := CylinderMesh.new()
-		flange_mesh.top_radius = 0.38
-		flange_mesh.bottom_radius = 0.38
-		flange_mesh.height = 0.08
-		flange_mesh.radial_segments = 16
-		flange.mesh = flange_mesh
-		flange.material_override = steel_mat
-		flange.rotation.x = PI * 0.5
-		flange.position.z = side
-		_add_child_with_owner(_drum_rotation_node, flange)
+		# 4. Flanges (side metal plates)
+		for side in [-0.8, 0.8]:
+			var flange := MeshInstance3D.new()
+			flange.name = "Flange_" + ("Port" if side < 0 else "Stbd")
+			var flange_mesh := CylinderMesh.new()
+			flange_mesh.top_radius = 0.38
+			flange_mesh.bottom_radius = 0.38
+			flange_mesh.height = 0.08
+			flange_mesh.radial_segments = 16
+			flange.mesh = flange_mesh
+			flange.material_override = steel_mat
+			flange.rotation.x = PI * 0.5
+			flange.position.z = side
+			_add_child_with_owner(_drum_rotation_node, flange)
  
-	# 5. Trommel Winch Supports (V-shaped legs down to the deck at 70 degrees stilt angle)
-	var leg_angle_rad := deg_to_rad(20.0) # 70 degrees relative to horizontal deck
-	var leg_length := 1.49 * _visual_scale
-	var leg_thickness := 0.08 * _visual_scale
-	var leg_width := 0.12 * _visual_scale
-	for side in [-0.8, 0.8]:
-		for tilt in [-1.0, 1.0]:
-			var leg_pivot := Node3D.new()
-			leg_pivot.name = "LegPivot_" + ("Port" if side < 0 else "Stbd") + "_" + ("Fwd" if tilt > 0 else "Aft")
-			leg_pivot.position = Vector3(0.0, 0.0, side)
-			leg_pivot.rotation.z = tilt * leg_angle_rad
-			_add_child_with_owner(_trommel_winch, leg_pivot)
+		# 5. Trommel Winch Supports (V-shaped legs down to the deck at 70 degrees stilt angle)
+		var leg_angle_rad := deg_to_rad(20.0) # 70 degrees relative to horizontal deck
+		var leg_length := 1.49 * _visual_scale
+		var leg_thickness := 0.08 * _visual_scale
+		var leg_width := 0.12 * _visual_scale
+		for side in [-0.8, 0.8]:
+			for tilt in [-1.0, 1.0]:
+				var leg_pivot := Node3D.new()
+				leg_pivot.name = "LegPivot_" + ("Port" if side < 0 else "Stbd") + "_" + ("Fwd" if tilt > 0 else "Aft")
+				leg_pivot.position = Vector3(0.0, 0.0, side)
+				leg_pivot.rotation.z = tilt * leg_angle_rad
+				_add_child_with_owner(_trommel_winch, leg_pivot)
 			
-			var leg_mesh_instance := MeshInstance3D.new()
-			leg_mesh_instance.name = "LegMesh"
-			var leg_mesh := BoxMesh.new()
-			leg_mesh.size = Vector3(leg_width, leg_length, leg_thickness)
-			leg_mesh_instance.mesh = leg_mesh
-			leg_mesh_instance.material_override = steel_mat
-			leg_mesh_instance.position = Vector3(0.0, -leg_length * 0.5, 0.0)
-			_add_child_with_owner(leg_pivot, leg_mesh_instance)
+				var leg_mesh_instance := MeshInstance3D.new()
+				leg_mesh_instance.name = "LegMesh"
+				var leg_mesh := BoxMesh.new()
+				leg_mesh.size = Vector3(leg_width, leg_length, leg_thickness)
+				leg_mesh_instance.mesh = leg_mesh
+				leg_mesh_instance.material_override = steel_mat
+				leg_mesh_instance.position = Vector3(0.0, -leg_length * 0.5, 0.0)
+				_add_child_with_owner(leg_pivot, leg_mesh_instance)
  
+	if authored_winch != null:
+		imported_rig=ImportedTrawlRig.new()
+		imported_rig.winch=authored_winch;imported_rig.gantry=authored_gantry
+		imported_rig.boat=_body;imported_rig.rope_length=net_rope_length
+		add_child(imported_rig)
+		return
+	# Legacy vessels retain their previous presentation until separately migrated.
 	# 6. Tow rope + trawl net trailing far astern on the pay-out line.
 	_rope_mesh = MeshInstance3D.new()
 	_rope_mesh.name = "TowRope"
@@ -271,6 +285,14 @@ func _add_child_with_owner(parent_node: Node, child_node: Node) -> void:
 
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
+		return
+	if _winch_audio == null:
+		_winch_audio = WorldSound.loop_on(self, "res://resources/audio/world/fishing/winch_1.wav", "TrawlWinch")
+	WorldSound.drive(_winch_audio, 1.0 if trawling else 0.0, -10.0)
+	if is_instance_valid(imported_rig):
+		imported_rig.update_rig(trawling,delta)
+		if _drum_rotation_node != null:
+			_drum_rotation_node.rotate_z(-imported_rig.warp_travel_delta/.315)
 		return
 	if trawling and _drum_rotation_node != null:
 		_drum_rotation_node.rotate_z(delta * trommel_rotation_speed)
@@ -435,7 +457,10 @@ func _complete_one_haul_crate() -> bool:
 		"vessel_id": vessel_id,
 		"owner_id": str(_body.get_meta("owner_player_id", "")),
 	})
-	var overflow := hold.accept_lot(lot)
+	var overflow := lot
+	for tank in CatchHoldComponent.get_all_for_ship(_body):
+		overflow = tank.accept_lot(overflow)
+		if overflow.is_empty(): break
 	if not overflow.is_empty():
 		_notify_trawl("Catch hold full - return to a fish landing")
 		return false
@@ -444,8 +469,8 @@ func _complete_one_haul_crate() -> bool:
 		var tier_label := str(zone.get("tier_label", "")) if not zone.is_empty() else ""
 		if tier_label.is_empty() or tier_label == "Normal":
 			_notify_trawl("Catch aboard - %.1f / %.1f t" % [
-				hold.state.total_mass_kg() / 1000.0,
-				hold.state.capacity_kg / 1000.0,
+				catch_totals().mass_kg / 1000.0,
+				catch_totals().capacity_kg / 1000.0,
 			])
 		else:
 			_notify_trawl("%s grounds - catch aboard" % tier_label)
@@ -457,6 +482,8 @@ func get_catch_hold() -> CatchHoldComponent:
 
 
 func get_activity_status() -> String:
+	if is_instance_valid(imported_rig) and imported_rig.is_transitioning():
+		return imported_rig.activity_label()
 	var hold := _catch_hold()
 	if hold != null and hold.state.available_kg() <= CatchLot.MASS_EPS_KG:
 		return "HOLD FULL"
@@ -464,7 +491,10 @@ func get_activity_status() -> String:
 
 
 func _catch_hold() -> CatchHoldComponent:
-	return CatchHoldComponent.first_for_ship(_body)
+	var holds := CatchHoldComponent.get_all_for_ship(_body)
+	for hold in holds:
+		if hold.state.available_kg() > CatchLot.MASS_EPS_KG: return hold
+	return holds[0] if not holds.is_empty() else null
 
 
 ## External trawl control (e.g. autonomous NPC sim).
@@ -485,17 +515,11 @@ func _retract_trawl(notify_message: String = "") -> void:
 
 
 func _notify_trawl(message: String) -> void:
-	if _body == null:
-		return
-	var controller := _body.find_child("BoatController", true, false) as BoatController
-	if controller == null:
-		return
-	var hud = controller.get("_ship_hud")
-	if hud != null and hud.has_method("show_toast"):
-		hud.show_toast(message)
+	status_reported.emit(message)
 
 
 func _update_trawl_visuals() -> void:
+	if is_instance_valid(imported_rig):imported_rig.update_rig(trawling,0)
 	if _net_mesh != null:
 		_net_mesh.visible = trawling
 		if not trawling:
@@ -521,6 +545,9 @@ func _scaled_rope_length() -> float:
 
 
 func _rope_payout_local() -> Vector3:
+	if is_instance_valid(authored_winch):
+		var socket := authored_winch.find_child("PayoutSocket*", true, false) as Node3D
+		if socket != null: return to_local(socket.global_position)
 	# Drum pay-out point just aft of the trommel drum centre.
 	return Vector3(0.18 * _visual_scale, 0.0, 0.0)
 
@@ -593,3 +620,11 @@ func _update_rope_mesh_between(start_global: Vector3, end_global: Vector3) -> vo
 	_rope_mesh.basis = Basis(x_axis, dir, z_axis)
 	_rope_mesh.scale = Vector3(1.0, length, 1.0)
 	_rope_mesh.position = start + span * 0.5
+
+
+func catch_totals() -> Dictionary:
+	var result := {"mass_kg":0.0, "capacity_kg":0.0}
+	for hold in CatchHoldComponent.get_all_for_ship(_body):
+		result.mass_kg += hold.state.total_mass_kg()
+		result.capacity_kg += hold.state.capacity_kg
+	return result

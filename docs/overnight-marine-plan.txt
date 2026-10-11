@@ -1,0 +1,285 @@
+OVERNIGHT MARINE WORK PLAN — 5–6 October 2026 (Europe/Oslo)
+
+Authorization and scope
+Noah requested overnight recurring work on fishing trawler, cargo and bulk ship
+models, supporting equipment, research, lighting and project integration. He
+explicitly authorized commits and pushes along the way, after a planning pass.
+Stay on feature/3d-model-migration. No reset, force-push or merge to main.
+This plan precedes new marine implementation. Existing character/helm work is
+the initial checkpoint, not a completed overnight vessel deliverable.
+
+Planning findings from the current repository
+- ImportedDraftVessel, ImportedShipPartsEditor and ShipyardPlaytest are the current
+  imported builder/runtime path. Follow resources/models/README.md and AGENTS.md.
+- PropulsionComponent already exposes throttle, delivered_thrust_n and fuel-aware
+  thrust. Ahead throttle is NEGATIVE. Do not guess signs from variable names.
+- RudderComponent already owns rudder_input, max_rudder_angle_deg and physical
+  rudder_position. Render steering from this state; do not create new steering physics.
+- Existing Blender/GLB assets: marine_kit/bronze_propeller and marine_kit/rudder.
+  Inspect their axes, pivots and quality before deciding to reuse or revise them.
+- BulkCrane currently uses a JSON ModelAssembler and named mechanical transforms.
+  Its slew/boom/hoist/grab commands and authoritative cargo transfer must survive
+  a visual replacement. ProvisionCrane and equipment jobs are related interfaces.
+- FishLandingPump owns connecting, pumping, flushing and completion; CatchLot and
+  ShoreRswTankBank own transferred quantities. FishLandingLayout/service/job files
+  define the dock workflow. Model appearances must not duplicate inventory logic.
+- MooringComponent already derives ropes from cleat/bollard endpoints and enforces
+  line constraints. Keep dynamic sagging ropes; replace static fittings with Blender
+  assets and named attachment sockets instead of replacing ropes with rigid models.
+- Builder kit already covers structures, rails, floors, roofs and interiors. Ships
+  must remain assemblies of reusable parts, not single baked complete-ship meshes.
+- Existing editor-import warnings reference two missing unrelated showcase scripts
+  (vessel_skin_showcase.gd and ui_system_showcase.gd). Record rather than hide them.
+
+Ordered work packages (resume the earliest unfinished package each run)
+0. Save and push the tested current character migration and seated helm checkpoint.
+1. Audit hull catalog, builder catalog, vessel spawning, attachment state, navigation
+   lights, cranes, cargo holds, fishing machinery, ports and docking. Record exact
+   integration paths and current gaps. Research primary manufacturer/operator/class
+   references, including visual diagrams. Save source URLs and access dates.
+2. Default propulsion presentation: authored shaft/propeller/rudder mounts per hull,
+   named pivots, visible propeller animation during powered operation, reverse sense,
+   stopped/no-fuel behavior, rudder limits. Reuse existing physics and local/server
+   state. Test no duplicate mounts after reload and no changes to thrust/steering.
+3. Fishing trawler: validate the existing hull and build a usable example draft with
+   wheelhouse, safe deck circulation, rails, working deck, winch/net gear, catch-hold
+   and fish-unloading interfaces. Separate fixed frames, drums, sheaves and doors.
+4. General cargo vessel: derive dimensions from existing hull and cargo footprints;
+   create a distinct hull/platform if needed. Reuse structural parts; add reusable
+   hatch covers/coamings, holds or deck cargo provisions, access and handling gear.
+5. Bulk vessel: distinct hold arrangement with hatch covers and grab clearance;
+   integrate with existing bulk cargo and crane jobs. Do not fake functional transfer
+   by moving visible cargo while bypassing the authoritative records.
+6. Shared port/deck kit: crane pedestal/slew/boom/hoist/grab or hook, bollards,
+   cleats, fairleads, fenders, fish pump/hopper/hose connectors, shore equipment.
+   Prioritize pieces actually required by the three assembled vessel examples.
+7. Lighting and final verification: sourced navigation-light placement appropriate
+   to vessel dimensions and operating state, independent work/deck lights, practical
+   night render. Preserve existing light controls and gameplay state boundaries.
+
+Rules for every package
+- Research before inventing functional equipment dimensions or navigation-light rules.
+- Author individual reusable Blender models, keep .blend source and exported GLB,
+  metres/applied scale, named local pivots and sockets, independent paint regions.
+- Maintain the established deck lattice/edge angles, seamless joins and 1.8 m reference.
+- Never restore deleted legacy character/ship-brick models or flatten a UGC ship into
+  one mesh. Do not overwrite user drafts/saves or connect test scenes to live servers.
+- Verify imported geometry and material isolation; run relevant regression scenes,
+  save/load round-trips, state-driven animations and ocean/port playtests as applicable.
+- Inspect actual rendered results, including moving joints and collision clearance.
+  A generated file or passing parser is insufficient. Fix visible failures first.
+- Finish a coherent batch, update this progress log, commit scoped changes with a
+  meaningful message, push origin feature/3d-model-migration, and verify remote SHA.
+  If push fails, keep the local commit and record the exact blocker; never force-push.
+- Another task may share this checkout: inspect status before edits and preserve
+  unrelated work. Do not run competing writes or spawn agents without authorization.
+- Keep useful screenshots under the chat workspace outputs/marine; intermediate
+  fixtures/logs under work/. Record paths here, along with checks and commit IDs.
+- Continue substantial work each scheduled run; do not merely post status. When one
+  subsystem is blocked, progress an independent package and document the blocker.
+- Overnight scope ends at 08:00 Europe/Oslo on 6 October, or earlier if completed.
+  Leave a morning handoff: shipped/pushed commits, screenshots, tests, known gaps and
+  next steps. Do not claim all vessel families are finished unless verified.
+
+Progress
+Planning pass completed. Marine implementation not yet started.
+Character/rig and captain onboarding tests passed before this checkpoint.
+Next: package 1 audit/research, then package 2 default propulsion presentation.
+
+6 October, first scheduled batch: package 0 is pushed as 8ce7a08. Package 1
+audit is complete; see docs/marine-integration-audit.txt for exact paths,
+primary references, visual research and acceptance gates. Added a runnable,
+isolated marine_asset_audit_showcase. Actual Godot renders show the earlier
+propeller/rudder experiments disappear inside the solid stern at the current
+physics force points. They cannot simply be mounted there. Also identified
+stale delivered thrust on dry fuel, old 2x hull dimensions versus metre-based
+kit, legacy fleet commissioning boundary and all-round masthead-light issue.
+No new fleet models or propulsion integration claimed in this research batch.
+Verification: Godot 4.6.1 Forward+ audit capture exit 0, imported bounds logged,
+spin and rudder-limit assertions pass; scene-path isolation assertion passes
+without requiring the explicit sandbox flag. git diff --check passed.
+Captures: chat outputs/marine/stern-audit.png and stern-audit-hardware.png.
+NEXT RUN: package 2. Author properly mounted shaft/propeller/rudder hardware
+with documented pivots and swept clearance, then read-only state integration
+and dry-fuel/reverse/neutral tests. Do not repeat package 1 instead of building.
+
+6 October, second scheduled batch: package 2 implemented for the current imported
+14 m hull. Three separate Blender/GLB assets: shaft/support, cambered four-blade
+propeller, balanced rudder/stock. Explicit mounts_14m.json; named pivots; default
+builder and imported runtime installation. External transom prototype clears the
+closed hull; it extends aft of the deck, not a recessed stern aperture. Physics
+force points/deck outline unchanged. Moving gear excluded from walk/convex hull
+collision. Support/foil follow hull lower paint; metal finishes stay separate.
+ShipDriveVisual reads local propulsion/rudder/fuel; finite revisioned snapshots
+provide an external authority seam, not new multiplayer transport. Provisional
+visual RPM, not a shaft simulation. Fixed stale delivered-thrust telemetry when
+the fuel tank is dry. Did not retune rudder prop-wash or vessel handling.
+Checks: real Godot imported-draft showcase, ahead/reverse/neutral/dry fuel,
+invalid/stale remote snapshots, duplicate-free JSON draft reload, full propeller
+sweep and +/-28 degree rudder clearance. Actual builder launch + F helm, drive,
+turn, walking, door, pause/reset, unchanged parent draft regression passed.
+Captures: outputs/marine/stern-gear.png and stern-gear-reverse.png.
+NEXT RUN: package 3, an assembled reusable trawler draft plus fishing equipment
+using FishingSystem and CatchHoldComponent. Cargo/bulk and port kit still pending.
+
+6 October, third scheduled batch: package 3 first playable trawler assembly is
+implemented as resources/models/examples/coastal_trawler_draft.json (60 reusable
+placements). Four new individual Blender assets: fixed winch frame, drum/warp,
+insulated catch tank and separate lid. Two equipment palette families, actual
+footprint bounds, named moving pivot/rope payout/hose connections. Runtime uses
+FishingSystem and CatchHoldComponent (600 kg per tank), preserving inventory,
+mass and real unloading through FishLandingPump/ShoreRswTankBank. No new economy.
+Verified imported drum start/stop, hose socket, 250 kg real shore transfer;
+builder load/save/reload passes. Headless builder teardown emits thumbnail
+material/environment cleanup warnings (documented, not fixed in this batch).
+Rendered showcase exits cleanly. Complete example passed the normal ocean
+playtest with actual F-to-helm, door/walking, movement, steering, HUD and reset.
+Screenshots: outputs/marine/trawler.png, trawler-deck.png, trawler-ocean.png.
+Remaining trawler art: net/doors, gantry and safety/working fittings, lighting.
+Existing FishingSystem still fills only first hold; no multi-hold logic claimed.
+These are follow-up shared-equipment/final-polish items, not finished assets.
+NEXT RUN: package 4 cargo hull/descriptor and editable cargo example; preserve
+the metre-scale kit and avoid the legacy 2x scale catalog shortcut. Packages
+5-7 and the trawler follow-ups above remain outstanding.
+
+6 October, fourth scheduled batch: package 4 platform/example is implemented.
+New Blender hull_24x8, real 5 x 8 m hold opening, separate coaming and two lift-away
+hatch-cover models. Reuses accepted wall/roof/interior kit and 26.565/45 degree
+perimeter sections with four new exact miter variants. Cargo example has 87
+editable placements, aft bridge, side access and default moving stern gear.
+Generalized imported builder/runtime via ImportedHullCatalog: deck height, grid
+boundary/opening, physical profile, fuel, camera, spawn and mount positions now
+come from the selected draft hull. Old trawler draft IDs are preserved.
+Palette contains coaming/cover families with authored seats; hatch selection and
+floor visibility fixed. Cargo rising-bow toggle hidden (flat profile only).
+Reference: earlier Damen CF3850 visual arrangement and MacGregor lift-away cover
+research in marine-integration-audit.txt; compact game dimensions, not certified
+ship engineering. The cargo deck reuses the accepted nonslip texture/paint region.
+Checks: Blender export/miter assertions; actual Godot whole-boat and open-hold
+renders; prop/rudder movement; ray collision through uncovered opening hits the
+tank top while side walkway remains solid; full cargo ocean playtest passes
+F helm, HUD, walking, doors, driving, rudder, pause/reset. Builder passes cross-hull
+load/save/reload, floor/cell offsets, selectable covers and invalid-load preservation.
+Trawler real-button child-process regression passed, unchanged unsaved parent.
+GUI builder verification exits cleanly after explicit editor teardown. The final
+headless run still reports 18 thumbnail Environment RID leaks at shutdown;
+assertions pass, but headless thumbnail cleanup remains unresolved.
+Captures: outputs/marine/cargo.png, cargo-hold.png, cargo-builder.png, cargo-ocean.png.
+Remaining: cargo inventory/handling gear; covers have LiftPoint sockets but no
+crane operation; provisional handling/prop sizing. No fleet commissioning.
+NEXT RUN: package 5 bulk arrangement and real BulkHoldComponent/crane transfer,
+then shared equipment and lighting. Trawler net/gantry and packages 6-7 still pending.
+
+Cargo batch pushed as 13e6db0. This follow-up records the headless-only cleanup warning accurately.
+
+6 October, fifth scheduled batch: package 5 divided-hold integration implemented.
+Separate Blender bulk_divider_5m with stiffeners, meeting seat and two named hold
+sockets. Reuses hull_24x8 and individual coaming/cover kit; bulk example has an
+open forward compartment and covered aft compartment, 87 editable placements.
+ImportedBulkHold uses BulkHoldComponent/BulkHoldState; two 40 t provisional holds,
+real fill below deck, JSON inventory round-trip and BoatBody cargo-mass ledger.
+Covered holds reject pickup/deposit and are excluded from crane job selection.
+Existing BulkCraneAutoOperator completed a load cycle: 12 t fixture -> 21.8 t;
+aft remained empty. Manual crane withdraw/falling-lot return conserves 12 t.
+Close render found two issues and both were corrected: inconsistent ore heightfield
+triangle winding at flat edges, and imported compact-hold auto handling alignment
+that could previously timeout/release at the target rather than actual grab mouth.
+Imported load release now uses actual mouth after clearance validation; timeout
+stops the operation. Legacy-hold positioning behavior is unchanged.
+Checks: Blender export; GUI draft save/load with coaming/divider coexistence;
+actual Godot whole/hold/crane-motion captures; inventory, mixed commodity and
+covered hatch rejection, mass, JSON state; complete bulk ocean playtest passes
+normal helm/HUD/door/walking/drive/steering/reset, no script errors.
+Bulk showcase functional tests pass but its legacy crane path leaks 14 orphan
+mesh/RIDs at process exit, including after explicit teardown. Documented pending
+replacement; no clean-shutdown claim for that showcase. Ocean/draft GUI tests clean.
+Captures: outputs/marine/bulk.png, bulk-hold.png, bulk-loading.png, bulk-crane.png,
+bulk-ocean.png. Logs under work/bulk-*.log.
+Limits: existing crane artwork, unlimited legacy shore stockpile, no finite port
+inventory, cover removal only in builder, no powered hatch operation or production
+fleet commissioning. Shared hull with distinct compartment arrangement, not a new
+larger bulk hull. NEXT: package 6 individual Blender crane/port hardware, then
+lighting, trawler shared-equipment followups and morning handoff by 08:00 Oslo.
+
+6 October, sixth scheduled batch: package 6 crane slice implemented.
+Nine separate Blender/GLB assets replace BulkCrane's default presentation:
+pedestal, cabin/machinery, lattice boom, luff barrel/rod, wire, grab head/two jaws.
+Preserved existing 30 m reach, control limits, lot transfer, auto operator and
+explicit alternate JSON model path. Layer-1 body obstacles remain; no new moving
+boom/grab physics. Corrected crane NPC's infinite deferred legacy-rig retry by
+playing the current Blender rig's seated animation; authored seat used once.
+Liebherr CBG360 primary PDF page 2 visually inspected using Poppler after the web
+screenshot did not expose pixels. Original game-scale design, not a CBG replica.
+Actual Godot renders caught reversed jaw opening and missing fixed cylinder
+support; corrected both, added welded pan end cheeks and transparent cab windows.
+Checks: jaw seam and actual pickup mouth at scales .7/1/1.5; outward opening;
+30 m outreach; slew/luff; vertical cable endpoint; cylinder endpoints at 8/32/72deg;
+seated NPC; existing bulk auto load 12 -> 21.8 t, covered aft stays empty, cargo
+mass and manual withdraw/falling-lot return conservation. Both rendered scenes
+exit cleanly without previous crane mesh/RID warnings. No complete-world test.
+Captures: outputs/marine/crane.png, crane-closed.png, crane-open.png, crane-cabin.png,
+bulk-blender-crane-loading.png; logs work/crane-*.log and bulk-blender-crane.log.
+Limits: inherited provisional grab capacity/reach, simplified cable reeving, no
+crane sway or moving-part collision, no ProvisionCrane migration. Port fittings,
+fish unloading artwork, mooring hardware, lights and trawler net/gantry remain.
+NEXT: continue package 6 fittings attached to existing rope/pump systems, then
+package 7 lighting and final handoff. Do not treat all overnight work as complete.
+
+6 October morning wrap, at Noah's explicit request: overnight schedule PAUSED.
+Crane batch pushed as 4fe8747576a05ee72b220a25e422d93bb4fd7558.
+Final package 6 slice: six Blender parts (deck bitt, quay tee bollard, four landing
+plant components), default model integration and authored rope/hose/fill sockets.
+Imported vessels were missing discoverable cleats; installed four at explicit
+inboard positions per hull. Default scale follows socket geometry, existing
+authority/solver retained. Post rebuild preserves interaction prompt. Alternate
+legacy model paths and timber posts retained. Pump transfer logic unchanged.
+Actual Godot port showcase passes tie/release, transformed/moving anchors,
+250 kg CatchLot transfer, completion/hose disconnect; exits cleanly.
+Initial completion assertion was a showcase stepping error: it kept manually
+calling _process after completion; loop now stops at completion as normal engine
+processing does. No pump state-machine change was required.
+Captures: port-kit.png, port-kit-pump.png, port-kit-mooring.png in outputs/marine.
+Known visible gap: direct mooring ropes intersect solid half-walls; fairlead
+routing/openings remain. No claim of final polished or physically validated plant.
+Morning trawler ocean regression also passed F helm/seats, doors, walking, HUD,
+drive/rudder and reset after installing the default cleats.
+See docs/marine-morning-handoff.txt for the checkpoint review.
+
+MORNING STEERING: Noah subsequently resumed work while leaving for work, requested
+a 30-minute cadence, and explicitly rejected the current model quality as subpar.
+Automation is ACTIVE every 30 minutes. Prioritize substantial visual rework over
+catalog expansion: landing plant supports/pipework/proportions, rope fairlead
+routing through solid bulwarks, then crane and vessel detail. Inspect primary
+visual references and close actual Godot renders. Passing gameplay checks alone
+does not constitute art acceptance. Do not stop after a token short batch if
+visible problems remain. Prior 08:00 Oslo cutoff remains unless Noah extends it.
+
+6 October, morning quality pass (05:24–05:40 UTC): package 6 refinement.
+Primary IRAS PV diagram page 4 inspected, then reworked plant geometry rather than
+adding catalog items: lower domed tank, matched saddles/straps, braced trough,
+small separate vacuum power unit, distinct fish and air routes, bolted flanges,
+continuous curved pipes, cabinet supports and running gear. Added HoseDeparture
+socket and continuous runtime hose; axial coupling departure corrected in render.
+Seven port assets now include a supported deck roller guide. Four guides installed
+per imported hull, fixed inboard rope tails and guide-based external constraint
+attachment. Existing authority, transfer state machine and save schema retained.
+Close pump/service/mooring renders inspected and iterated. Tested flat perimeter
+clears ropes, but arbitrary structures/extreme shore geometry and actual wrap
+contact remain unresolved. No universal collision routing or engineering claim.
+Expanded port rendered check passed both hulls' fittings, transformed anchors,
+bounded maximum rope pool, hose surface endpoints/finite vertices, real partial
+and completed 250 kg transfer, disconnect and release. Ocean regression passed
+F helm/seats, doors, walking, normal HUD, drive/rudder and reset. Clean exits.
+Captures: port-refined*.png and fairlead-ocean.png. Logs: port-refined-verified.log,
+fairlead-ocean.log; source diagram: work/iras-pump-reference.png.
+NEXT: crane/vessel details and lighting remain unfinished; preserve 08:00 cutoff.
+
+6 October 07:55 Oslo closeout: latest implementation 0081c2f is pushed and remote
+SHA verified. Re-rendered existing crane whole/cabin/open/closed; all articulation
+assertions pass and process exits cleanly. This is validation/review, not new art.
+Recorded concrete next-pass failures in marine-morning-handoff.txt: incomplete
+access/guards, abrupt cabin edges, missing winch-to-tip cable route, simplified
+grab mechanics and pedestal support details. No rushed model change before the
+08:00 stop. Paused the 30-minute automation to prevent its next post-cutoff run.
+Remaining packages are unfinished. Resume only with renewed continuation scope;
+do not report functional checks as art approval or all marine work complete.

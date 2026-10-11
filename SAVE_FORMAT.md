@@ -55,6 +55,27 @@ Company mutations use explicit command/result contracts through `CompanyService`
 Processed request ids make opening-company and money commands idempotent so the same
 boundary can later be hosted by a multiplayer server.
 
+### Opt-in passenger sailings
+
+`company.passenger_sailings` is an optional array (absent means empty) used by the
+local passenger-service development slice. This is additive to v6 and preserves
+older captain data. `PassengerService` owns mutations; rendered passengers do not.
+Each record stores `id`, `route_id`, `vessel_uid`, `origin_berth`,
+`destination_berth`, `total`, `onboard`, `landed`, `returned`, `seat_ids`,
+`seat_positions` (vessel-local XYZ arrays), `seat_yaws`, `fare_marks`, `phase` and
+`paid_marks`. Positions and mass survive temporarily missing fit-out seats.
+
+Phases are boarding, ready, underway, alighting, completed, returning or cancelled.
+Completed and cancelled records are retained for idempotency. Fares use the
+existing account ledger with request ID `passenger-fare:<sailing id>`; the ledger
+is the durable receipt beyond the bounded processed-request cache. A quarter-second
+vessel component reconstructs mass and crowd presentation from the manifest.
+
+The isolated journey test verifies scratch save/reload and rebuilding a vessel
+from its owned record. Production route/terminal registration and restoration of
+a live passenger voyage after a normal world load remain pending; the test's
+retained vessel pose is a fixture, not a changed deployment/save policy.
+
 ## Migration
 
 A legacy single-slot `user://save/player.json` is moved into
@@ -127,3 +148,32 @@ Multiplayer worlds take `world_seed`, `generation_version`, and
 `PlayerData.from_dict()` supplies defaults for missing fields, so old envelopes
 upgrade on the next successful save. Flat legacy player dictionaries are still
 wrapped into the current envelope by `PlayerSaveStore`.
+
+## Development captain (9 October 2026)
+
+Singleplayer -> Development captain / all ships creates or reopens a separate
+local captain. All valid ready-built catalog entries plus explicitly registered
+review vessels are granted through the normal owned-vessel ledger. Current fleet:
+Harbour Cargo, Coastal Bulk, Coastal Freighter, Northline 40, Coastal Trawler,
+and Coastal Express. No normal captain is upgraded to development implicitly.
+
+The optional company.development_captain flag opts in; company.development_fleet
+maps stock IDs to granted vessel UIDs. Loading this captain grants newly added
+catalog entries once. Existing owned records, names, paint, active selection and
+runtime state are retained. Stock updates do not overwrite saved customizations.
+Future yard stock is discovered automatically from PrebuiltVesselCatalog; review
+arrangements not yet for sale are registered in DevelopmentFleet.REVIEW_RECIPES.
+Normal company normalization preserves these optional JSON-safe fields; no save
+version migration is required. This is a local development facility, not an
+online account or a change to normal purchase/authority rules.
+
+Verification: tests/development_captain_test.tscn -- --shipyard-playtest exercises
+the real title button, isolated creation, disk roundtrip, reload/new-stock grants,
+customization retention and byte-for-byte protection of another captain's save.
+
+Northline factory-engine balance update (10 October 2026): the old
+`feeder_1500` layout identifier remains valid and resolves to the new
+`feeder_5600` package in MarineEngineCatalog. This is an in-memory component
+replacement on deployment, with no save-file rewrite, new vessel grant, or
+replacement of layout/paint/cargo data. Authored stock now records the new ID.
+Explicit `feeder_2100` choices remain unchanged. No save version bump is needed.

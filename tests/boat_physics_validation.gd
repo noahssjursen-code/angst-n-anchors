@@ -18,6 +18,7 @@ var _failures: PackedStringArray = []
 
 
 func _ready() -> void:
+	_test_query_texel_centres()
 	_test_hydrostatic_profiles()
 	await _test_mass_and_moments()
 	await _test_heave_free_decay()
@@ -34,6 +35,17 @@ func _ready() -> void:
 		for failure in _failures:
 			push_error("Boat physics validation: " + failure)
 		get_tree().quit(1)
+
+
+func _test_query_texel_centres() -> void:
+	var pixels:=PackedFloat32Array([0,10,20,30,1,11,21,31,2,12,22,32,3,13,23,33])
+	for y in 2:
+		for x in 2:
+			var sample:=WaveSurface._bilinear_query_layer(pixels,2,(x+.5)/2.0,(y+.5)/2.0)
+			_check(sample.is_equal_approx(Vector4(x+y*2,10+x+y*2,20+x+y*2,30+x+y*2)),"query texel centre")
+	var seam:=WaveSurface._bilinear_query_layer(pixels,2,0,0)
+	_check(seam.is_equal_approx(Vector4(1.5,11.5,21.5,31.5)),"query seam blends four wrapped texels")
+	_check(WaveSurface._bilinear_query_layer(pixels,2,-1,1).is_equal_approx(seam),"negative periodic query coordinate")
 
 
 func _profile(

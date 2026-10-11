@@ -1,11 +1,18 @@
 shader_type spatial;
-// Water owns its specular — Godot GGX on a flat ocean reads as plastic wrap.
-render_mode diffuse_burley, specular_disabled, cull_disabled;
+// Dielectric water, with the simulation's filtered slopes resolving its surface.
+render_mode diffuse_burley, cull_disabled;
 
+
+// Opaque scene colour is already lit. Transmit it through EMISSION so it is
+// not lit a second time. Depth remains authoritative for hull/shore occlusion.
+uniform sampler2D scene_color : hint_screen_texture, repeat_disable, filter_linear;
+uniform sampler2D scene_depth : hint_depth_texture, repeat_disable, filter_nearest;
+uniform float transmission_strength : hint_range(0.0, 1.0) = 1.0;
+uniform vec3 absorption_per_metre = vec3(0.65, 0.27, 0.19);
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
-uniform sampler2DArray slope_map : filter_linear, repeat_enable;
-uniform vec4 length_scales = vec4(256.0, 64.0, 16.0, 4.0);
+uniform sampler2DArray slope_map : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform vec4 length_scales = vec4(1024.0, 64.0, 16.0, 4.0);
 uniform vec4 cascade_fade_end = vec4(5500.0, 1536.0, 384.0, 96.0);
 uniform float geomorph_strength : hint_range(0.0, 1.0) = 1.0;
 
@@ -50,6 +57,8 @@ uniform float wake_field_texel_m = 2.0;
 uniform float wake_visual_strength : hint_range(0.0, 2.0) = 1.0;
 
 varying vec3 v_world_pos;
+varying vec2 v_fft_xz;
+varying float v_amplitude;
 varying vec3 v_world_normal;
 varying vec3 v_local_pos;
 varying float v_wave_steep;
@@ -95,6 +104,8 @@ void vertex() {
 	}
 
 	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * shelter;
+	v_fft_xz = wp.xz;
+	v_amplitude = amp_scale;
 	displacement *= amp_scale;
 	slopes *= amp_scale;
 
@@ -174,7 +185,15 @@ void fragment() {
 	if (discard_half > 0.0 && abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
 		discard;
 	}
-	vec3 nm = normalize(v_world_normal);
+	// Resolve the simulated slope per pixel instead of stretching one normal
+	// across metre-sized mesh triangles. Geometry and physics are unchanged.
+	float horizontal_distance = length(v_world_pos.xz - CAMERA_POSITION_WORLD.xz);
+	vec2 fine_slope = vec2(0.0);
+	for (int i = 0; i < 4; i++) {
+		float weight = 1.0 - smoothstep(cascade_fade_end[i] * 0.75, cascade_fade_end[i], horizontal_distance);
+		fine_slope += texture(slope_map, vec3(v_fft_xz / length_scales[i], float(i))).xy * weight;
+	}
+	vec3 nm = normalize(vec3(-fine_slope.x * v_amplitude, 1.0, -fine_slope.y * v_amplitude));
 	if (!FRONT_FACING) {
 		nm = -nm;
 	}
@@ -197,19 +216,13 @@ void fragment() {
 		}
 	}
 
-	// Capillary chop — analytic sines near camera (FFT slopes carry the rest).
-	float near_w = 1.0 - smoothstep(35.0, 280.0, dist_to_cam);
+	// The mip-filtered FFT already supplies short waves. Three extra metre-scale
+	// sine waves formed an unrelated crosshatch pattern across sheltered water.
 	vec3 world_n = nm;
 	if (wake_sample.y > 0.001) {
 		vec3 wake_lateral = vec3(-wake_gradient.x, 0.0, -wake_gradient.y)
 			* 0.18 * wake_visual_strength;
 		world_n = normalize(world_n + wake_lateral - world_n * dot(world_n, wake_lateral));
-	}
-	if (near_w > 0.01 && chop_strength > 0.001) {
-		vec2 g_eta = ocean_chop_gradient(xz + wt * vec2(0.22, -0.18), wt);
-		float ripple_gain = chop_strength * 1.85 * near_w;
-		vec3 lateral = vec3(-g_eta.x, 0.0, -g_eta.y) * ripple_gain;
-		world_n = normalize(world_n + lateral - world_n * dot(world_n, lateral));
 	}
 	NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
 
@@ -236,14 +249,10 @@ void fragment() {
 		deep_albedo, shallow_albedo, nm, view_dir, v_world_pos,
 		water_level, near_color_lift, crest, crest_noise
 	);
-	vec3 col = ocean_sky_reflection(
-		body, sky_horizon_color, sky_top_color, nm, view_dir,
-		fres, fresnel_sky_mix
-	);
+	vec3 col = body;
 
 	// Soft glitter (refs), not silver sheets. Clamp for tonemap.
-	float glint = ocean_glint(world_n, view_dir, sun_n, dist_to_cam);
-	col += sun_color * glint * glint_strength * sun_up * (0.2 + fres * 0.5);
+	// Direct sun is evaluated by the material BRDF, not painted into albedo.
 
 	float toward_sun = clamp(dot(-view_dir, sun_n), 0.0, 1.0);
 	float sss = pow(toward_sun, 4.0) * crest * (0.4 + 0.6 * (1.0 - smoothstep(0.15, 0.8, sun_up)));
@@ -252,50 +261,68 @@ void fragment() {
 	// White slosh — FFT Jacobian foam sampled PER PIXEL from the two large
 	// cascades only. Per-vertex sampling showed triangle blotches, and the
 	// small cascades (16 m / 4 m) contribute per-texel speckle, not foam.
-	float jac_foam = textureLod(displacement_map, vec3(xz / length_scales.x, 0.0), 0.0).w * 0.75
-			+ textureLod(displacement_map, vec3(xz / length_scales.y, 1.0), 0.0).w * 0.45;
+	float jac_foam = textureLod(displacement_map, vec3(v_fft_xz / length_scales.x, 0.0), 0.0).w * 0.75
+			+ textureLod(displacement_map, vec3(v_fft_xz / length_scales.y, 1.0), 0.0).w * 0.45;
 	jac_foam = clamp(jac_foam, 0.0, 1.0);
 
 	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
 	mat2 ROT_B = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
 	vec2 xz_a = ROT_A * xz;
 	vec2 xz_b = ROT_B * xz;
-	// Soft edge erosion — one FBM is enough (was two).
-	float erode = ocean_fbm(xz_a * 1.2 + xz_b * 0.35 + wt * vec2(0.4, -0.32));
-	float foam_shape = smoothstep(0.15 + erode * 0.45, 0.85, jac_foam + steep * 0.3);
+	float foam_shape = ocean_foam_coverage(xz, wt, jac_foam, pow(1.0 - clamp(nm.y, 0.0, 1.0), 1.15));
 
 	float foam = foam_shape * foam_strength;
 	// Wake foam laces into Jacobian foam — readable near the stern, not a
 	// solid white ribbon, but still visible at bollard thrust.
-	float wake_erode = ocean_fbm(xz_a * 1.55 + xz_b * 0.42 + wt * vec2(0.55, -0.28));
-	float wake_lace = smoothstep(0.05 + wake_erode * 0.28, 0.62, wake_sample.x);
-	float wake_foam = wake_lace * wake_visual_strength * 0.85;
+	// The 2m wake atlas is an envelope, not a finished foam texture. Never
+	// saturate it into an opaque ribbon: resolve irregular rafts within it.
+	float wake_lace = ocean_foam_coverage(xz, wt, min(pow(max(wake_sample.x, 0.0), 0.45) * 1.15, 0.92), 0.0);
+	float wake_foam = wake_lace * wake_visual_strength * 0.78;
 	float wake_churn = smoothstep(0.03, 0.45, wake_sample.y) * wake_visual_strength;
 	foam = max(foam, wake_foam);
 	foam = clamp(foam, 0.0, 1.0);
-	foam *= 1.0 - smoothstep(300.0, 1600.0, dist_to_cam) * 0.55;
+	foam *= ocean_foam_distance_fade(dist_to_cam);
 
-	col = mix(col, col * vec3(0.72, 0.82, 0.88), wake_churn * 0.18);
+	col = mix(col, vec3(0.06, 0.14, 0.13), wake_churn * 0.22);
 
-	float foam_mask = foam;
+	float footprint = max(length(dFdx(xz)), length(dFdy(xz)));
+	float bubble_detail = 0.78;
+	if (foam > 0.01 && footprint < 0.09) {
+		bubble_detail = ocean_foam_bubbles(xz, wt, footprint);
+	}
+	float foam_mask = foam * bubble_detail;
 	vec3 foam_col = mix(vec3(0.75, 0.84, 0.88), vec3(0.97, 0.98, 1.0), foam_mask);
 	col = mix(col, foam_col, foam_mask * 0.78);
 	col = mix(col, debug_tint.rgb, debug_tint.a);
 
-	ALBEDO = col;
-	ROUGHNESS = mix(mix(0.58, 0.78, wake_churn), 0.95, foam_mask);
-	METALLIC = 0.0;
-	SPECULAR = 0.0;
-}
-
-// Local lights only. Directional sun is in fragment — lighting it here again
-// painted soft plastic white across every swell face.
-void light() {
-	if (!LIGHT_IS_DIRECTIONAL) {
-		float ndl = max(dot(NORMAL, LIGHT), 0.0);
-		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndl * 0.10;
-		vec3 h = normalize(VIEW + LIGHT);
-		float ndh = max(dot(NORMAL, h), 0.0);
-		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * pow(ndh, 80.0) * v_fresnel * 0.35;
+	// Reconstruct the opaque surface behind this water fragment (Forward+ reverse Z).
+	float raw_depth = textureLod(scene_depth, SCREEN_UV, 0.0).r;
+	vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, raw_depth, 1.0);
+	vec3 behind_view = behind.xyz / behind.w;
+	vec3 surface_view = (VIEW_MATRIX * vec4(v_world_pos, 1.0)).xyz;
+	float water_path = max(length(behind_view) - length(surface_view), 0.0);
+	float valid_behind = step(0.000001, raw_depth) * step(0.001, -behind_view.z + surface_view.z);
+	// Small normal-driven refraction. Reject offsets landing on an above-water
+	// foreground object so a cabin/pier cannot smear into the water beneath it.
+	vec2 refracted_uv = clamp(SCREEN_UV + NORMAL.xy * 0.012 * (1.0 - exp(-water_path * 0.5)), vec2(0.001), vec2(0.999));
+	float refracted_depth = textureLod(scene_depth, refracted_uv, 0.0).r;
+	vec4 refracted = INV_PROJECTION_MATRIX * vec4(refracted_uv * 2.0 - 1.0, refracted_depth, 1.0);
+	vec3 refracted_view = refracted.xyz / refracted.w;
+	if (refracted_depth <= 0.000001 || -refracted_view.z <= -surface_view.z + 0.02) {
+		refracted_uv = SCREEN_UV;
+	} else {
+		water_path = max(length(refracted_view) - length(surface_view), 0.0);
 	}
+	float near_transmission = 1.0 - smoothstep(90.0, 180.0, dist_to_cam);
+	vec3 transmission = exp(-absorption_per_metre * water_path)
+		* (1.0 - fres) * (1.0 - foam_mask) * near_transmission
+		* valid_behind * transmission_strength;
+	if (!FRONT_FACING) { transmission = vec3(0.0); }
+	ALBEDO = col * (vec3(1.0) - transmission);
+	EMISSION = textureLod(scene_color, refracted_uv, 0.0).rgb * transmission;
+	float normal_variance = max(length(dFdx(world_n)), length(dFdy(world_n)));
+	float water_roughness = clamp(0.14 + chop_strength * 0.30 + normal_variance * 0.35, 0.14, 0.38);
+	ROUGHNESS = mix(mix(water_roughness, 0.38, wake_churn), 0.85, foam_mask);
+	METALLIC = 0.0;
+	SPECULAR = 0.25; // F0 = 0.02 for water.
 }

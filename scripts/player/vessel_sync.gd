@@ -655,6 +655,7 @@ static func _layout_patch_from_row(row: Dictionary, existing: Dictionary = {}) -
 
 
 static func _layout_has_configuration(layout: Dictionary) -> bool:
+	if ImportedVesselLayout.is_imported(layout) and layout.get("parts") is Array and not layout.parts.is_empty(): return true
 	var cells_raw: Variant = layout.get("cells", {})
 	if typeof(cells_raw) == TYPE_DICTIONARY and not (cells_raw as Dictionary).is_empty():
 		return true

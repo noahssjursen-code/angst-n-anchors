@@ -1,0 +1,2593 @@
+{
+  "format_version": 3,
+  "id": "coastal_coaster",
+  "name": "Coastal Freighter",
+  "hull_id": "hull_32x10",
+  "shaft_power_kw": 1100,
+  "price_marks": 16500,
+  "draft": false,
+  "brick_layout": {
+    "version": 1,
+    "hull": "hull_32x10",
+    "hull_colors": {
+      "upper": [
+        0.08,
+        0.17,
+        0.29
+      ],
+      "lower": [
+        0.29,
+        0.075,
+        0.055
+      ],
+      "deck": [
+        0.28,
+        0.33,
+        0.33
+      ]
+    },
+    "parts": [
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          -2.5,
+          4.5,
+          15
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          2.5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 90,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          -1.5,
+          4.5,
+          15
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          1.5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 90,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_door_straight",
+        "position": [
+          -0.5,
+          4.5,
+          15
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          0.5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 90,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          0.5,
+          4.5,
+          15
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -0.5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 90,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          1.5,
+          4.5,
+          15
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          -1.5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 90,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          -2.5,
+          4.5,
+          15
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          2.5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -2.5,
+          4.5,
+          14
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          2.5,
+          4.5,
+          10
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          -2.5,
+          4.5,
+          13
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          2.5,
+          4.5,
+          11
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -2.5,
+          4.5,
+          12
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          2.5,
+          4.5,
+          12
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -2.5,
+          4.5,
+          11
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          2.5,
+          4.5,
+          13
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          -2.5,
+          4.5,
+          10
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          2.5,
+          4.5,
+          14
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "floor_tile",
+        "position": [
+          0,
+          6.705,
+          0
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "surface": [
+            0.32,
+            0.4,
+            0.39
+          ],
+          "fascia": [
+            0.72,
+            0.77,
+            0.75
+          ],
+          "underside": [
+            0.72,
+            0.77,
+            0.75
+          ]
+        },
+        "outline": [
+          [
+            -2.5,
+            9
+          ],
+          [
+            2.5,
+            9
+          ],
+          [
+            2.5,
+            12
+          ],
+          [
+            4.5,
+            12
+          ],
+          [
+            4.5,
+            15
+          ],
+          [
+            -2.5,
+            15
+          ]
+        ]
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          -2.5,
+          6.7,
+          14
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -1.5,
+          6.7,
+          14
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          -0.5,
+          6.7,
+          14
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          0.5,
+          6.7,
+          14
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_wall_straight",
+        "position": [
+          1.5,
+          6.7,
+          14
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -2.5,
+          6.7,
+          14
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          2.5,
+          6.7,
+          11
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -2.5,
+          6.7,
+          13
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_door_straight",
+        "position": [
+          2.5,
+          6.7,
+          12
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -2.5,
+          6.7,
+          12
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          2.5,
+          6.7,
+          13
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_26_port",
+        "position": [
+          -2.5,
+          6.7,
+          11
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_45_port",
+        "position": [
+          -2,
+          6.7,
+          10
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -1.5,
+          6.7,
+          9.5
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          -0.5,
+          6.7,
+          9.5
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_straight",
+        "position": [
+          0.5,
+          6.7,
+          9.5
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_45_port",
+        "position": [
+          1.5,
+          6.7,
+          9.5
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_window_26_starboard",
+        "position": [
+          2,
+          6.7,
+          10
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "roof_tile",
+        "position": [
+          0,
+          8.9,
+          0
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "surface": [
+            0.32,
+            0.4,
+            0.39
+          ],
+          "fascia": [
+            0.72,
+            0.77,
+            0.75
+          ],
+          "underside": [
+            0.72,
+            0.77,
+            0.75
+          ]
+        },
+        "outline": [
+          [
+            -2.5,
+            14
+          ],
+          [
+            2.5,
+            14
+          ],
+          [
+            2.5,
+            11
+          ],
+          [
+            2,
+            10
+          ],
+          [
+            1.5,
+            9.5
+          ],
+          [
+            -1.5,
+            9.5
+          ],
+          [
+            -2,
+            10
+          ],
+          [
+            -2.5,
+            11
+          ]
+        ],
+        "crown": true,
+        "visor_direction": 1
+      },
+      {
+        "asset_id": "cabin_console_26p",
+        "position": [
+          -2.5,
+          6.7,
+          11
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.22,
+            0.31,
+            0.33
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_console_45p",
+        "position": [
+          -2,
+          6.7,
+          10
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.22,
+            0.31,
+            0.33
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_console_straight",
+        "position": [
+          -1.5,
+          6.7,
+          9.5
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.22,
+            0.31,
+            0.33
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_console_straight",
+        "position": [
+          -0.5,
+          6.7,
+          9.5
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.22,
+            0.31,
+            0.33
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_console_straight",
+        "position": [
+          0.5,
+          6.7,
+          9.5
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.22,
+            0.31,
+            0.33
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_console_45p",
+        "position": [
+          1.5,
+          6.7,
+          9.5
+        ],
+        "yaw_degrees": 270,
+        "colors": {
+          "wall": [
+            0.22,
+            0.31,
+            0.33
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_console_26s",
+        "position": [
+          2,
+          6.7,
+          10
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.22,
+            0.31,
+            0.33
+          ]
+        }
+      },
+      {
+        "asset_id": "helm_chair",
+        "position": [
+          0,
+          6.7,
+          11.1
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "helm_wheel",
+        "position": [
+          0,
+          7.55,
+          9.86
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "helm_throttle",
+        "position": [
+          0.68,
+          7.55,
+          9.86
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "helm_display",
+        "position": [
+          -0.7,
+          7.55,
+          9.8
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "passenger_seat",
+        "position": [
+          -1.55,
+          6.7,
+          12.8
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "cabin_bench_straight",
+        "position": [
+          -2.5,
+          4.5,
+          13
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "cabin_bench_straight",
+        "position": [
+          -2.5,
+          4.5,
+          12
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "cabin_bench_straight",
+        "position": [
+          -2.5,
+          4.5,
+          11
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "deck_stair_220cm",
+        "position": [
+          3.5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 180,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "deck_bracket_2m",
+        "position": [
+          2.5,
+          6.7,
+          12.4
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "deck_bracket_2m",
+        "position": [
+          2.5,
+          6.7,
+          14.6
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          4.5,
+          6.7,
+          12
+        ],
+        "yaw_degrees": 180
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          4.5,
+          6.7,
+          13
+        ],
+        "yaw_degrees": 180
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          4.5,
+          6.7,
+          14
+        ],
+        "yaw_degrees": 180
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          -2.5,
+          6.7,
+          15
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          -1.5,
+          6.7,
+          15
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          -0.5,
+          6.7,
+          15
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          0.5,
+          6.7,
+          15
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          1.5,
+          6.7,
+          15
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          2.5,
+          6.7,
+          15
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          3.5,
+          6.7,
+          15
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "rail_straight_100cm",
+        "position": [
+          -2.5,
+          6.7,
+          15
+        ],
+        "yaw_degrees": 0
+      },
+      {
+        "asset_id": "rail_straight_50cm",
+        "position": [
+          2.5,
+          6.7,
+          12
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "rail_straight_50cm",
+        "position": [
+          4,
+          6.7,
+          12
+        ],
+        "yaw_degrees": 270
+      },
+      {
+        "asset_id": "deck_mushroom_vent",
+        "position": [
+          -3.6,
+          4.5,
+          11
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.36,
+            0.48,
+            0.48
+          ]
+        }
+      },
+      {
+        "asset_id": "deck_mushroom_vent",
+        "position": [
+          -3.6,
+          4.5,
+          13
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.36,
+            0.48,
+            0.48
+          ]
+        }
+      },
+      {
+        "asset_id": "wall_vent_louvre",
+        "position": [
+          0,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_10000_10000_0",
+        "position": [
+          -5,
+          4.5,
+          16
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          15
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          14
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          13
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          12
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          11
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          10
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          8
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          7
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          6
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          5
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          4
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          3
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          2
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          1
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          0
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          -1
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          -2
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          -3
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          -4
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          -5
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -5,
+          4.5,
+          -6
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_-2361",
+        "position": [
+          -5,
+          4.5,
+          -7
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_port_miter_10000_-2361_8944_-4472",
+        "position": [
+          -5,
+          4.5,
+          -8
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+        "position": [
+          -4.5,
+          4.5,
+          -9
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+        "position": [
+          -4.0,
+          4.5,
+          -10
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+        "position": [
+          -3.5,
+          4.5,
+          -11
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_port_miter_8944_-4472_8944_-4472",
+        "position": [
+          -3.0,
+          4.5,
+          -12
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_port_miter_8944_-4472_8219_-5924",
+        "position": [
+          -2.5,
+          4.5,
+          -13
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_45_port_miter_8219_-5924_7071_-7071",
+        "position": [
+          -2.0,
+          4.5,
+          -14
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_45_port_miter_7071_-7071_7071_-7071",
+        "position": [
+          -1.5,
+          4.5,
+          -14.5
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_45_port_miter_7071_-7071_7071_-7071",
+        "position": [
+          -1.0,
+          4.5,
+          -15.0
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_45_port_miter_7071_-7071_0_-14142",
+        "position": [
+          -0.5,
+          4.5,
+          -15.5
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_-10000_10000_0",
+        "position": [
+          5,
+          4.5,
+          16
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          15
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          14
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          13
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          12
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          11
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          10
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          9
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          8
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          7
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          6
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          5
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          4
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          3
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          2
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          1
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          0
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          -1
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          -2
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          -3
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          -4
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          -5
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          5,
+          4.5,
+          -6
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_2361",
+        "position": [
+          5,
+          4.5,
+          -7
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_starboard_miter_10000_2361_8944_4472",
+        "position": [
+          5,
+          4.5,
+          -8
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+        "position": [
+          4.5,
+          4.5,
+          -9
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+        "position": [
+          4.0,
+          4.5,
+          -10
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+        "position": [
+          3.5,
+          4.5,
+          -11
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_starboard_miter_8944_4472_8944_4472",
+        "position": [
+          3.0,
+          4.5,
+          -12
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_26_starboard_miter_8944_4472_8219_5924",
+        "position": [
+          2.5,
+          4.5,
+          -13
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_45_starboard_miter_8219_5924_7071_7071",
+        "position": [
+          2.0,
+          4.5,
+          -14
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_45_starboard_miter_7071_7071_7071_7071",
+        "position": [
+          1.5,
+          4.5,
+          -14.5
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_45_starboard_miter_7071_7071_7071_7071",
+        "position": [
+          1.0,
+          4.5,
+          -15.0
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_45_starboard_miter_7071_7071_0_14142",
+        "position": [
+          0.5,
+          4.5,
+          -15.5
+        ],
+        "yaw_degrees": 0.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_-10000_10000_0",
+        "position": [
+          -5,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -4,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -3,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -2,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -1,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          0,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          1,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          2,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          3,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_10000",
+        "position": [
+          4,
+          4.5,
+          16
+        ],
+        "yaw_degrees": -90.0,
+        "colors": {
+          "wall": [
+            0.73,
+            0.78,
+            0.76
+          ]
+        }
+      },
+      {
+        "asset_id": "hold_coaming_6x12",
+        "position": [
+          0,
+          4.5,
+          0
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.3,
+            0.38,
+            0.4
+          ]
+        }
+      },
+      {
+        "asset_id": "nav_port",
+        "position": [
+          -4.7,
+          4.5,
+          -6.55
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.58,
+            0.63,
+            0.62
+          ]
+        }
+      },
+      {
+        "asset_id": "nav_starboard",
+        "position": [
+          4.7,
+          4.5,
+          -6.55
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.58,
+            0.63,
+            0.62
+          ]
+        }
+      },
+      {
+        "asset_id": "nav_stern",
+        "position": [
+          0.9,
+          4.5,
+          15.5
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.58,
+            0.63,
+            0.62
+          ]
+        }
+      },
+      {
+        "asset_id": "mast_lantern",
+        "position": [
+          4,
+          6.7,
+          14.4
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.58,
+            0.63,
+            0.62
+          ]
+        }
+      },
+      {
+        "asset_id": "deck_floodlight",
+        "position": [
+          -4.15,
+          4.5,
+          7
+        ],
+        "yaw_degrees": 325,
+        "colors": {
+          "wall": [
+            0.58,
+            0.63,
+            0.62
+          ]
+        }
+      },
+      {
+        "asset_id": "deck_floodlight",
+        "position": [
+          4.15,
+          4.5,
+          7
+        ],
+        "yaw_degrees": 35,
+        "colors": {
+          "wall": [
+            0.58,
+            0.63,
+            0.62
+          ]
+        }
+      },
+      {
+        "asset_id": "cabin_bench_straight",
+        "position": [
+          2.5,
+          4.5,
+          10
+        ],
+        "yaw_degrees": 180
+      },
+      {
+        "asset_id": "cabin_bench_straight",
+        "position": [
+          2.5,
+          4.5,
+          11
+        ],
+        "yaw_degrees": 180
+      },
+      {
+        "asset_id": "cabin_bench_straight",
+        "position": [
+          2.5,
+          4.5,
+          12
+        ],
+        "yaw_degrees": 180
+      },
+      {
+        "asset_id": "marine_exhaust_stack",
+        "position": [
+          1.9,
+          9.001,
+          13.4
+        ],
+        "yaw_degrees": 0,
+        "colors": {
+          "wall": [
+            0.2,
+            0.28,
+            0.35
+          ]
+        }
+      }
+    ],
+    "rising_bow": false,
+    "active_floor": 0,
+    "cell_offset": 0,
+    "format": "imported_models",
+    "hull_id": "hull_32x10",
+    "show_all_floors": true,
+    "engine_preset": "freighter_1100"
+  }
+}

@@ -1,0 +1,84 @@
+Original mariner, rebuilt motion and boarding — 7 October 2026
+
+Noah's final direction replaces the downloaded-character experiment: use the
+original angular in-house mariner, no downloaded character/clothing geometry,
+discard every existing animation clip. Preserve unrelated game and captain data.
+
+Character:
+- Restored the original model source, shared wardrobe and player/NPC rig.
+- Refined continuous trouser/crotch topology, original hand surfaces, shoulder
+  weights, sweater fit and cap brim. Recolouring, material regions, four body
+  morphs and the existing appearance/save schema remain usable.
+- Corrected hand morph generation order so combined maximum body values do not
+  pull the wrists away from the cuffs.
+- Completely new idle, walk, run and seated clips. Only pelvis translation;
+  fixed-length FK arms, no animated wrist/elbow positions, no bone scaling,
+  no artificial forearm twist. Opposing arm/leg swing, smooth foot lift/landing,
+  corrected speed calibration and matching loop endpoints.
+- Removed the unused experimental deck-balance modifier. Runtime foot IK is
+  deliberately not reinstated on this pass; the rebuilt rig is the baseline.
+- Original complete optional catalogue reduced to 95,712 triangles and about
+  9.8 MB GLB from about 28.1 MB. This is not the visible triangle count of one
+  dressed character, as optional body/wardrobe meshes are mutually hidden.
+
+Controller and boarding:
+- Preserved the authorized maritime controller changes: 1.8 m/s walk,
+  3.8 m/s jog, precision pace, first-person body, free look, safer seat exit,
+  swept third-person camera and deck-relative recovery.
+- Moving decks carry walking players and short jumps, including turns and heave.
+- New Blender boarding span and unscaled shore rollers deploy at a clear
+  quay-side bulwark gate using existing mooring/berth state. Actual walking
+  collisions follow the boat; no teleportation or change to saved fit-outs.
+- First test found the trawler's initial entrance blocked by its equipment.
+  Gate selection now checks clear standing space before choosing a panel.
+- No ramp if landing is blocked/absent, too steep or too far away. Cast-off
+  retracts collision and restores the bulwark panel. Physical fit-out refresh
+  replaces the moving gate/collider references safely.
+
+Verified:
+- blender_character_test: all four imported clips, 42 bones, fixed joint
+  offsets/scales across every frame, no arm snaps during clips or gameplay
+  transitions, loop seams, opposing swing, palms/fingers, stance travel,
+  maximum morphs, clothing coverage, paint isolation and appearance round-trip.
+- captain_onboarding_test: all checks passed with isolated saves.
+- player_maritime_test: walk/jog/precision, translating/turning/heaving deck,
+  jump carry, deck-relative rescue, camera modes/free look, clear/blocked seat
+  exits; actual trawler and coaster jumps at 6 m/s. All checks passed.
+- ship_gangway_test: all four starters, both sides, actual player boarding and
+  disembarking without jumping, moving hull; cast-off/gate close; invalid
+  reach/slope, missing quay and return to valid landing. All checks passed.
+- Rotated-quay repeat: both sides at +/-33 degrees; saved draft untouched and
+  coaster fit-out refresh tested. All checks passed.
+- harbour_service_routing_test: real harbourmaster deployment, assignment,
+  fit-out freight compatibility, cabin-door input/authority and listener
+  lifecycle passed. mooring_arrival_test passed cast-off/destination re-tie.
+- Actual Godot images inspected, including 120-frame motion sequence and
+  maximum combined body sliders. Every capture is archived below.
+
+Review captures (C:/Users/noahs/Pictures/machinescreenshots):
+- mariner-final-motion-20261007-2303.gif (4-second Godot animation capture)
+- mariner-final-cycles-20261007-2303/ (120 original full-resolution frames)
+- mariner-heavy-new-clips-20261007-2257.png (maximum sliders/cuff fit)
+- gangway-1791407176-general_cargo1-deployed.png
+- gangway-1791407176-fishing-1-aboard.png
+- gangway-1791407502-* (rotated quays, all stock ships)
+- player-1791407310-* / player-1791407315-* / player-1791407321-*
+
+Limits / remaining review:
+- This is an improved original stylized mariner, not a user-approved final art
+  sign-off. No downloaded replacement, new realistic base or outside clothing.
+- No new sealegs IK. No facial animation or expanded wardrobe catalogue.
+- Gangway coverage is imported stock and compatible 1 m bulwark custom ships;
+  no legacy hull adapter, visible stowed model or manual deployment animation.
+- Gangway derives from existing replicated state, but a real two-client walk
+  across the bridge has not been tested.
+- An automatic approval review blocked bulk asset deletion without stating a
+  specific reason. Rejected downloads/wardrobe and experimental scripts were
+  moved OUTSIDE the project to the task's work/discarded-character-replacement-
+  20261007 folder. They are inactive, not permanently deleted. Screenshots remain.
+- Unrelated import settings and prior untracked work remain untouched.
+
+Commits already verified on origin/feature/3d-model-migration:
+cff52b7 — Rebuild original mariner animations with fixed limb joints
+678499c — Keep the player attached to moving decks through walks and jumps
+The gangway and this handoff are committed as the following scoped batch.

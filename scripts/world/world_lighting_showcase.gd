@@ -162,7 +162,6 @@ func _build_renderer() -> void:
 
 	var rain := RainField.new()
 	rain.name = "RainField"
-	rain.max_amount = 2200
 	add_child(rain)
 
 

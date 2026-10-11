@@ -15,49 +15,32 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(470.0, 0.0)
 	offset_left = 18.0
 	offset_top = 76.0
-	theme = HudStyle.make_theme()
+	theme_type_variation = "Sheet"
 	_build()
 
 
 func _build() -> void:
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	add_child(margin)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 7)
-	margin.add_child(box)
-	box.add_child(UiBuilder.title_label("WORLD GIZMO LAYERS", 20))
-	var intro := UiBuilder.body_label(
-		"Select only the infrastructure you need. Choices remain active when this menu closes.", 12)
-	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(intro)
-	box.add_child(UiBuilder.separator())
+	var box := Ui.vbox(8)
+	add_child(box)
+	box.add_child(Ui.header("World", "Gizmo layers",
+		"Select only the infrastructure you need. Choices stay on when this menu closes."))
+	box.add_child(Ui.rule())
 	for definition in WorldGizmos.LAYERS:
 		var layer_id := str(definition.get("id", ""))
-		var button := CheckButton.new()
-		button.text = str(definition.get("label", layer_id))
+		var button := Ui.toggle(str(definition.get("label", layer_id)))
 		button.tooltip_text = str(definition.get("hint", ""))
 		button.focus_mode = Control.FOCUS_ALL
 		button.toggled.connect(_on_button_toggled.bind(layer_id))
 		box.add_child(button)
-		var hint := UiBuilder.subtitle_label(str(definition.get("hint", "")), 10)
-		hint.add_theme_constant_override("outline_size", 2)
-		box.add_child(hint)
+		box.add_child(Ui.caption(str(definition.get("hint", ""))))
 		_buttons.append(button)
 		_ids.append(layer_id)
-	box.add_child(UiBuilder.separator())
-	var actions := HBoxContainer.new()
-	var all_on := UiBuilder.compact_button("ENABLE ALL  [CTRL+A]", 165)
-	all_on.pressed.connect(func() -> void: all_requested.emit(true))
-	actions.add_child(all_on)
-	var all_off := UiBuilder.compact_button("CLEAR ALL  [X]", 145)
-	all_off.pressed.connect(func() -> void: all_requested.emit(false))
-	actions.add_child(all_off)
+	box.add_child(Ui.rule())
+	var actions := Ui.hbox(8)
+	actions.add_child(Ui.button("Enable all", "secondary", func() -> void: all_requested.emit(true)))
+	actions.add_child(Ui.button("Clear all", "ghost", func() -> void: all_requested.emit(false)))
 	box.add_child(actions)
-	box.add_child(UiBuilder.subtitle_label("↑↓ select  ·  Space toggle  ·  G close", 10))
+	box.add_child(Ui.key_hint("G", "Close  ·  arrows select  ·  space toggles"))
 
 
 func sync_states(states: Dictionary) -> void:

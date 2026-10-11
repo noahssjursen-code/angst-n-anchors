@@ -1,4 +1,6 @@
 shader_type sky;
+render_mode use_half_res_pass;
+uniform sampler3D cloud_volume : filter_linear_mipmap, repeat_enable;
 
 // --- Time ---
 uniform float sky_time = 0.0;
@@ -13,23 +15,24 @@ uniform float sky_zenith_mix   : hint_range(0.0, 1.0) = 0.38;
 
 // --- Sun disk (world-space direction TO the sun, passed from GDScript each frame) ---
 uniform vec3  sun_direction = vec3(0.0, 1.0, 0.0);
-uniform float sun_size      : hint_range(0.0, 0.02) = 0.0008;
+// Angular radius in radians (about half a degree across).
+uniform float sun_size      : hint_range(0.001, 0.02) = 0.00465;
 uniform float sun_bloom     : hint_range(0.0, 5.0) = 1.8;
 uniform vec3  sun_color     : source_color          = vec3(1.0, 0.94, 0.82);
 
 // --- Moon disk (world-space direction TO the moon, passed from GDScript each frame) ---
 uniform vec3  moon_direction = vec3(0.0, -1.0, 0.0);
-uniform float moon_size      : hint_range(0.0, 0.1) = 0.004;
+uniform float moon_size      : hint_range(0.001, 0.02) = 0.0045;
 uniform vec3  moon_color     : source_color          = vec3(0.82, 0.86, 0.96);
 
 // --- Cloud layer ---
 uniform float cloud_coverage  : hint_range(0.0, 1.0) = 0.0;
-uniform float cloud_sharpness : hint_range(0.5, 8.0) = 1.8;
 uniform float cloud_speed     : hint_range(0.0, 0.5) = 0.04;
 uniform vec3  cloud_light     : source_color          = vec3(1.00, 0.98, 0.96);
 uniform vec3  cloud_dark      : source_color          = vec3(0.44, 0.46, 0.52);
 uniform float cloud_altitude  : hint_range(0.0, 1.0) = 0.28;
 uniform float cloud_thickness : hint_range(0.0, 1.0) = 0.22;
+uniform float rain_amount : hint_range(0.0, 1.0) = 0.0;
 
 // --- Storm darkening ---
 uniform float storm_intensity : hint_range(0.0, 1.0) = 0.0;
@@ -44,34 +47,10 @@ uniform float daylight_factor : hint_range(0.0, 1.0) = 1.0;
 // ---------------------------------------------------------------------------
 
 float hash(vec2 p) {
-	p = fract(p * vec2(127.1, 311.7));
-	p += dot(p, p + 19.19);
-	return fract(p.x * p.y);
+	vec3 q = fract(vec3(p.xyx) * 0.1031);
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.x + q.y) * q.z);
 }
-
-float noise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	vec2 u = f * f * (3.0 - 2.0 * f);
-	return mix(
-		mix(hash(i),                hash(i + vec2(1.0, 0.0)), u.x),
-		mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
-		u.y
-	);
-}
-
-// Fractional Brownian Motion — 4 octaves for performance.
-float fbm(vec2 p) {
-	float v = 0.0;
-	float a = 0.5;
-	for (int i = 0; i < 4; i++) {
-		v += a * noise(p);
-		p  = p * 2.1 + vec2(1.7, 9.2);
-		a *= 0.5;
-	}
-	return v;
-}
-
 
 // ---------------------------------------------------------------------------
 // Sky gradient (+ cheap aerial perspective — no bland white dome)
@@ -125,41 +104,67 @@ vec3 sky_gradient(vec3 dir) {
 // Cloud density and volume
 // ---------------------------------------------------------------------------
 
-float get_cloud_shape(vec3 dir) {
-	if (dir.y < 0.0) return 0.0;
-	// Project onto a flat sky plane. A lower addition stretches clouds towards the horizon.
-	float h = dir.y + 0.15; 
-	vec2 uv = dir.xz / h;
-	
-	// Drift
-	uv += vec2(sky_time * cloud_speed, sky_time * cloud_speed * 0.45);
-	
-	// Layered noise for puffy shapes
-	float shape = fbm(uv * 1.8) * 0.55
-	            + fbm(uv * 3.8) * 0.30
-	            + fbm(uv * 7.5) * 0.15;
-	            
-	// Carve out deep structural valleys so high-coverage never turns into a flat monotone blanket
-	float valleys = fbm(uv * 2.5 + vec2(12.3, 4.5));
-	shape -= pow(valleys, 2.5) * 0.5;
-	            
-	return shape;
+// Kilometre-space shallow cloud volume, integrated at half resolution.
+// The immutable 64^3 field is baked offline; no runtime noise generation.
+float volume_density(vec3 p, float footprint) {
+    float base = mix(0.8, 1.8, cloud_altitude);
+    float thickness = mix(0.4, 1.1, cloud_thickness);
+    float h = (p.y - base) / thickness;
+    if (h <= 0.0 || h >= 1.0) return 0.0;
+    vec3 drift = vec3(sky_time * cloud_speed * .025, 0.0, sky_time * cloud_speed * .011);
+    float broad = textureLod(cloud_volume, p * .28 + drift, max(log2(footprint*.28*64.0),0.0)).r;
+    float detail = textureLod(cloud_volume, p * .95 + drift * 2.0 + vec3(.37,.19,.53), max(log2(footprint*.95*64.0),0.0)).r;
+    float coverage = clamp(cloud_coverage + storm_intensity * .15, 0.0, 1.0);
+    float threshold = mix(.77, .20, coverage);
+    float rounded_top = h * h * .12;
+    float shape = broad - detail * .20 - rounded_top;
+    float envelope = smoothstep(0.0,.12,h) * (1.0-smoothstep(.7,1.0,h));
+    float cumulus = smoothstep(threshold, threshold+.11, shape);
+    // Steady precipitation has a connected lower cloud deck, not isolated
+    // fair-weather puffs. Keep broad density variation within the rain bank.
+    float rain_deck = smoothstep(.10, .55, rain_amount) * (.035 + .22 * smoothstep(.38,.68,broad));
+    return max(cumulus, rain_deck) * envelope;
 }
 
-float cloud_density(vec3 dir, float shape) {
-	if (dir.y < 0.0) return 0.0;
-	
-	float horizon_fade = smoothstep(0.02, 0.12, dir.y);
-	
-	// Storms increase overall cloud coverage and thickness
-	float coverage = clamp(cloud_coverage * 1.3 + storm_intensity * 0.2, 0.0, 1.0);
-	float threshold = 1.0 - coverage;
-	
-	// Sharpness controls how fluffy vs hard-edged the clouds are.
-	// As coverage increases, we keep a wider gradient so the contours remain visible!
-	float edge_softness = max(0.15, (1.0 - coverage) * 0.5) / cloud_sharpness;
-	float density = smoothstep(threshold, threshold + edge_softness, shape);
-	return clamp(density * horizon_fade, 0.0, 1.0);
+vec4 cloud_layer(vec3 dir, vec2 screen_uv) {
+    if (dir.y <= .008 || cloud_coverage <= .001) return vec4(0.0);
+    vec3 origin = vec3(POSITION.x, min(POSITION.y, 500.0), POSITION.z) * .001;
+    float base = mix(.8,1.8,cloud_altitude);
+    float top = base + mix(.4,1.1,cloud_thickness);
+    float start = max((base-origin.y)/dir.y,0.0);
+    float end = min((top-origin.y)/dir.y, 28.0);
+    if (end <= start) return vec4(0.0);
+    float step_length = (end-start)/64.0;
+    float sample_offset = mix(.15,.85,hash(screen_uv*vec2(1536.0,864.0)));
+    vec3 light_dir = normalize(mix(moon_direction,sun_direction,daylight_factor));
+    vec3 radiance = vec3(0.0);
+    float transmission = 1.0;
+    float sun_facing = pow(max(dot(dir,light_dir),0.0),8.0);
+    for (int i=0;i<64;i++) {
+        float distance = start+(float(i)+sample_offset)*step_length;
+        vec3 p = origin + dir*distance;
+        float density = volume_density(p,step_length);
+        if (density>.001) {
+            float shade = volume_density(p+light_dir*.08,max(step_length,.08*.5))*.08
+                        + volume_density(p+light_dir*.18,max(step_length,.18*.5))*.10
+                        + volume_density(p+light_dir*.36,max(step_length,.36*.5))*.18
+                        + volume_density(p+light_dir*.70,max(step_length,.70*.5))*.34;
+            float illumination = exp(-shade*15.0);
+            float opacity = 1.0-exp(-density*step_length*18.0);
+            float h = clamp((p.y-base)/(top-base),0.0,1.0);
+            vec3 ambient = mix(cloud_dark,cloud_light,.08+h*.3);
+            vec3 direct = mix(moon_color*.045, sun_color*.65,daylight_factor) * mix(1.0,.4,rain_amount);
+            vec3 light = ambient*.65 + direct*illumination*(.65+sun_facing*.6);
+            // Aerial perspective softens remote banks without outlining them.
+            light = mix(light,sky_gradient(dir),1.0-exp(-max(distance-3.0,0.0)*.13));
+            opacity *= 1.0-smoothstep(18.0,28.0,distance);
+            radiance += transmission*opacity*light;
+            transmission *= 1.0-opacity;
+            if (transmission<.015) break;
+        }
+    }
+    float horizon_fade = smoothstep(.008,.04,dir.y);
+    return vec4(radiance*horizon_fade,(1.0-transmission)*horizon_fade);
 }
 
 
@@ -171,8 +176,10 @@ vec3 sun_contribution(vec3 dir) {
 	float cos_angle = dot(dir, sun_direction);
 	// Antialiased HDR core. Environment glow now owns bloom; the sky shader
 	// provides a controlled source instead of a clipped white step.
-	float disk_edge = max(sun_size * 0.18, 0.00008);
-	float disk   = smoothstep(1.0 - sun_size - disk_edge, 1.0 - sun_size + disk_edge, cos_angle) * 8.0;
+	float disk_edge = 0.0003;
+	float separation = length(dir - sun_direction);
+	float radius = 2.0 * sin(sun_size * 0.5);
+	float disk = (1.0 - smoothstep(radius - disk_edge, radius + disk_edge, separation)) * 8.0;
 	float corona = pow(max(cos_angle, 0.0), 512.0) * sun_bloom * 1.8;
 	// Wide atmospheric glow keeps the sun findable without whitening the dome.
 	float glow   = pow(max(cos_angle, 0.0), 8.0) * sun_bloom * 0.15;
@@ -185,15 +192,17 @@ vec3 sun_contribution(vec3 dir) {
 
 
 // ---------------------------------------------------------------------------
-// Moon — cool silver disk, no wide haze (moon doesn't scatter atmosphere)
+// Moon — finite angular disk with restrained atmospheric corona.
 // ---------------------------------------------------------------------------
 
 vec3 moon_contribution(vec3 dir) {
 	float cos_angle = dot(dir, moon_direction);
 	// Disk — visually present but not bright enough to bathe the scene in light.
-	float disk   = step(1.0 - moon_size, cos_angle) * 0.65;
+	float separation = length(dir - moon_direction);
+	float radius = 2.0 * sin(moon_size * 0.5);
+	float disk = (1.0 - smoothstep(radius - 0.0003, radius + 0.0003, separation)) * 0.65;
 	// Very faint soft corona
-	float corona = pow(max(cos_angle, 0.0), 256.0) * 0.18;
+	float corona = pow(max(cos_angle, 0.0), 4096.0) * 0.025;
 	// Fade out when moon is below the horizon
 	float elev_fade = smoothstep(-0.08, 0.04, moon_direction.y);
 	return moon_color * (disk + corona) * elev_fade;
@@ -309,70 +318,20 @@ vec3 stars_contribution(vec3 dir, float clouds, float storms) {
 // ---------------------------------------------------------------------------
 
 void sky() {
-	vec3 dir = EYEDIR;
-
-	vec3 col = sky_gradient(dir);
-
-	if (dir.y > -0.02) {
-		col += stars_contribution(dir, cloud_coverage, storm_intensity);
-		col += sun_contribution(dir) * (1.0 - cloud_coverage * 0.85);
-		col += moon_contribution(dir) * (1.0 - cloud_coverage * 0.75);
-	}
-
-	// Clouds — Pseudo-volumetric shading
-	float base_shape = get_cloud_shape(dir);
-	float clouds = cloud_density(dir, base_shape);
-	
-	if (clouds > 0.001) {
-		// Cast shadow needs a second cloud shape sample toward the sun — a full
-		// 4-octave FBM. Skip it when the sun is below the horizon: the whole
-		// cloud column is dimmed to ~4.5% at night via day_cloud_lit anyway,
-		// and the moon doesn't cast cloud shadows. Saves the second FBM call
-		// (4 noise samples × 4 octaves) for ~half the day cycle.
-		float cast_shadow = 0.0;
-		if (sun_direction.y > -0.05) {
-			vec3 offset_dir = normalize(dir + sun_direction * 0.15);
-			float sun_shape = get_cloud_shape(offset_dir);
-			float sun_density_val = cloud_density(offset_dir, sun_shape);
-			cast_shadow = clamp((sun_density_val - clouds) * 2.5, 0.0, 1.0);
-		}
-
-		// Structural shadow from the deep valleys of the base shape — runs
-		// regardless of sun position so cloud volume reads correctly day & night.
-		float structural_shadow = 1.0 - clamp(base_shape * 1.2, 0.0, 1.0);
-		float shadow = clamp(cast_shadow + structural_shadow * 0.8, 0.0, 1.0);
-		
-		// 2. Base Color (Thicker/shadowed = darker bellies)
-		// The presentation layer supplies time-aware cloud colours. Coverage
-		// thickens the layer without turning the whole vault into black cardboard.
-		vec3 base_lit = mix(cloud_light, cloud_dark, cloud_coverage * 0.48);
-		vec3 base_dark = mix(cloud_dark, cloud_dark * 0.34, cloud_coverage);
-		
-		// Storm bellies remain heavy, while their lit crowns retain enough value
-		// separation to show cloud volume against a dark harbour.
-		base_lit = mix(base_lit, vec3(0.11, 0.13, 0.16), storm_intensity * 0.72);
-		base_dark = mix(base_dark, vec3(0.028, 0.034, 0.045), storm_intensity * 0.82);
-		
-		vec3 ambient = mix(base_lit, base_dark, shadow);
-		
-		// 3. Sunlight Illumination (Light hits the unshadowed parts)
-		float direct_light = 1.0 - shadow;
-		vec3 cloud_col = ambient + sun_color * direct_light * 0.25 * (1.0 - storm_intensity * 0.85);
-		
-		// 4. Silver Linings (Forward scattering through thin cloud edges)
-		float sun_dot = max(dot(dir, sun_direction), 0.0);
-		float silver_lining = pow(sun_dot, 16.0) * smoothstep(0.0, 0.4, clouds) * smoothstep(1.0, 0.5, clouds);
-		cloud_col += sun_color * silver_lining * 1.5 * (1.0 - storm_intensity * 0.8);
-		
-		// 5. Day/Night Cycle Dimming
-		float day_cloud_lit = daylight_factor;
-		cloud_col *= mix(0.045, 1.0, day_cloud_lit);
-		
-		float moon_up = max(moon_direction.y, 0.0);
-		cloud_col *= mix(1.0, 1.0 + moon_up * 0.26, 1.0 - day_cloud_lit);
-
-		col = mix(col, cloud_col, clouds * 0.95);
-	}
-
-	COLOR = col;
+    vec3 dir = EYEDIR;
+    if (AT_HALF_RES_PASS) {
+        vec4 clouds = cloud_layer(dir, SCREEN_UV);
+        COLOR = clouds.rgb;
+        ALPHA = clouds.a;
+    } else {
+        vec3 col = sky_gradient(dir);
+        if (dir.y > -.02) {
+            col += stars_contribution(dir,0.0,0.0);
+            col += sun_contribution(dir);
+            col += moon_contribution(dir);
+        }
+        // Cloud radiance is premultiplied; the same opacity occludes celestial
+        // disks, stars and sky, and is included in the reflection cubemap.
+        COLOR = col*(1.0-HALF_RES_COLOR.a)+HALF_RES_COLOR.rgb;
+    }
 }

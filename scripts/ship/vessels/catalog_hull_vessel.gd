@@ -67,6 +67,8 @@ static func make_physics_profile(config: Dictionary) -> HullPhysicsProfile:
 	var profile := HullPhysicsProfile.new()
 	profile.length_m = loa_m
 	profile.beam_m = beam_m
+	profile.demihull_beam_m = float(config.get("demihull_beam_m", 0.0))
+	profile.demihull_spacing_m = float(config.get("demihull_spacing_m", 0.0))
 	profile.depth_m = depth_m
 	profile.design_draft_m = draft_m
 	profile.design_displacement_t = displacement_t
@@ -78,6 +80,9 @@ static func make_physics_profile(config: Dictionary) -> HullPhysicsProfile:
 		if raw_form is Dictionary
 		else HullFormProfile.resolve(str(config.get("form", HullFormProfile.DEFAULT_ID)))
 	)
+	if profile.demihull_beam_m > 0.0:
+		profile.hull_form = HullFormProfile.resolve("catamaran_demihull")
+		profile.station_count = 20
 	profile.hull_center_of_mass = Vector3(0.0, depth_m * 0.14, loa_m * bow_frac * 0.12)
 	profile.engine_mass_kg = displacement_t * 8.5
 	profile.engine_position = Vector3(0.0, depth_m * 0.16, loa_m * 0.30)
@@ -157,7 +162,8 @@ func _apply_pending_or_default_fitout() -> void:
 
 
 func _apply_layout_dict(layout_dict: Dictionary) -> void:
-	DeckFitout.apply_any(self, layout_dict, make_grid(_hull_id))
+	var layout := BrickLayout.from_dict(layout_dict)
+	DeckFitout.apply(self, layout, make_grid(_hull_id))
 	set_meta("fitout_applied", true)
 
 
@@ -238,31 +244,11 @@ func _clear_generated() -> void:
 		remove_meta("loadout_applied")
 
 
-func _build_lofted_hull_visual(
-	stations: HullStations,
-	loa_m: float,
-	beam_m: float,
-	bow_frac: float,
-) -> void:
+func _build_lofted_hull_visual(_stations: HullStations, _loa_m: float, _beam_m: float, _bow_frac: float) -> void:
+	# Empty anchor retained for assembly lifecycle; old mesh generation is deleted.
 	var root := Node3D.new()
 	root.name = "HullVisual"
 	add_child(root)
-	var hull := MeshBuilder.lofted_hull_shell(
-		stations, Color(0.14, 0.16, 0.18), 0.9, 0.05
-	)
-	hull.name = "HullShell"
-	root.add_child(hull)
-	var deck := MeshBuilder.pointed_deck_plate(
-		loa_m,
-		beam_m,
-		stations.deck_y + 0.1,
-		0.1,
-		bow_frac,
-		Color(0.38, 0.34, 0.28),
-		0.95
-	)
-	deck.name = "Deck"
-	root.add_child(deck)
 
 
 func _build_lofted_hull_collision(stations: HullStations, loa_m: float) -> void:
@@ -301,6 +287,8 @@ func _add_systems(
 	hydro.hull_speed_fn = profile.hull_speed_fn
 	hydro.lateral_drag_coeff = profile.lateral_drag_coeff
 	hydro.yaw_drag_coeff = profile.yaw_drag_coeff
+	hydro.harbour_drag_rate = profile.harbour_drag_rate
+	hydro.astern_drag_multiplier = profile.astern_drag_multiplier
 	hydro.wind_frontal_area = profile.wind_frontal_area_m2
 	hydro.wind_lateral_area = profile.wind_lateral_area_m2
 	hydro.wind_drag_coeff = profile.wind_drag_coeff

@@ -9,7 +9,7 @@ extends NpcBase
 ## Inherits NpcBase (Node3D — no collider, no physics overhead), so the
 ## player passes straight through. Configure via port_seed / npc_index /
 ## port_radius before adding to the tree; _process polls AmbientPopulation
-## each frame and drives the WalkAnimator from cumulative distance walked.
+## each frame and reports cumulative distance to the animation-state boundary.
 
 @export var port_seed:    int   = 0
 @export var npc_index:    int   = 0

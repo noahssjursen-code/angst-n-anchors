@@ -846,6 +846,9 @@ static func from_data(
 	if mesh == null:
 		var built := _from_data_uncached(vertices, indices, uvs)
 		mesh = built.mesh as ArrayMesh
+		# Retain the mesh resource, not its temporary off-tree instance. Harbour
+		# crane reloads otherwise leak one renderer instance for every cache miss.
+		built.free()
 		if mesh != null:
 			_geometry_cache[geometry_key] = mesh
 	var mi := MeshInstance3D.new()

@@ -1,0 +1,43 @@
+SOLAR MOTION AND COASTAL SHADOWS - 7 October 2026
+
+Root causes:
+WeatherLighting compared time-of-day to the preceding frame before overwriting
+it. At normal frame rates each step was below the notification threshold, so
+sun lighting waited for unrelated weather events while the sky disk moved.
+Terrain LOD >= 1 explicitly disabled shadow casting. The sun also covered only
+180 metres, excluding the landscape from coastal shadow reception.
+
+Changes:
+Accumulate time against the last published value (including midnight wrapping).
+Update celestial light directions and ocean solar direction each frame.
+Retain throttled colour/environment updates, without forcing FFT weather work
+for every clock frame. Restore shadow casting on all streamed terrain LODs.
+Four cascades cover 6 km, with splits at 90/360/1500 metres and blended borders.
+Water shading, wave simulation, world geography and saves are unchanged.
+
+Checks:
+solar_coast_review: rendered A/B with a 400 m high occluder 1.5 km away.
+Bright direct reflection disappears in its shadow; sky illumination remains.
+240 small clock steps followed by the actual light; 48 lighting notifications.
+world_lighting_grade_test: passed all presentation checks.
+live_lighting_review: full seeded world, public spawn and owned vessel deck at
+night/dawn/noon, plus sun/moon skies. No logged engine errors. Boot ~10 seconds.
+1280x720 RTX 5070 local performance sample, vsync off: 180m two-cascade mean
+8.86ms / 2041 draws; 6km four-cascade mean 7.43ms / 3043 draws. Sequential
+samples contain warm-up/streaming noise; this is NOT a speedup claim. Long range
+adds shadow draws and needs profiling on lower-end hardware.
+
+Captures archived:
+C:/Users/noahs/Pictures/machinescreenshots/solar-coast-3462584/
+C:/Users/noahs/Pictures/machinescreenshots/live-lighting-1791394100-507/
+C:/Users/noahs/Pictures/machinescreenshots/live-lighting-1791394204-723/
+
+Limits:
+Shadow reception is finite at 6 km; this is not planetary horizon shadowing.
+Only loaded terrain geometry can cast. A separate existing streaming issue
+appears as distant forest without terrain in the early live capture; it is not
+certified by these lighting tests.
+Terrain material audit: TerrainSurfaceMaps still synthesizes 256px noise maps;
+terrain.gdshader tints those channels instead of using sourced ground materials.
+The farthest LOD uses vertex colours plus canopy. Real rock/soil/heath textures,
+metre scale and near/far material consistency remain a distinct material pass.

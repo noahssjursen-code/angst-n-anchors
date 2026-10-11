@@ -1,0 +1,105 @@
+9 October 2026 — natural walking / IK research checkpoint
+
+Scope
+Noah reports all land movement looks wrong. Research supersedes further blind
+parameter tuning. Use the original in-house mariner and clear plane fixture.
+Existing land/deck work is experimental; passing contact checks is not visual
+acceptance. Do not restore discarded clips or download replacement people.
+
+Primary sources reviewed
+
+1. Daniel Holden — Inverse Kinematics and Foot Locking (2026)
+https://theorangeduck.com/page/inverse-kinematics-foot-locking
+Read the technical article. Preserve the character of an incoming pose while
+correcting contacts; reconcile root and foot velocity. Allow heel movement
+around forefoot support. Excessive pelvis lowering to enforce contact damages
+the gait. His athletic toe-contact observation is not a universal rule that
+ordinary walking must land toe-first.
+
+2. Rune Skovbo Johansen — Dynamic Walking with Semi-Procedural Animation,
+GDC 2009 slides
+https://runevision.com/tech/locomotion/Dynamic_Walking_GDC_2009.pdf
+Read the slide text (not the complete thesis). A footbase supports heel/toe roll;
+phase events distinguish lift, flight and landing. Predict footprints from
+linear AND angular motion. Adapt curved swing paths while retaining reference
+motion. Grounded feet drive support height more than airborne feet. Independent
+leg cycles help start and stop without freezing a foot mid-flight.
+
+3. Adamczyk & Kuo — Redirection of center-of-mass velocity during the
+step-to-step transition of human walking (2009)
+https://pubmed.ncbi.nlm.nih.gov/19648412/
+Read the abstract and accessible article extracts. In ten participants, body
+velocity redirection was spread around double support rather than occurring
+instantaneously at a contact switch. The reported timing is evidence for a
+continuous transfer, not a universal timing constant for our character.
+
+4. Xu, Carlton & Rosengren — Anticipatory postural adjustments for altering
+direction during walking (2004)
+https://pubmed.ncbi.nlm.nih.gov/15262627/
+Read the primary abstract. Eight participants adjusted posture before a turn;
+turn angle, pivot foot and speed affected the preparation. This supports looking
+ahead when planning a step, rather than correcting crossed legs afterwards.
+
+5. Roche & Torres-Cros (Ubisoft) — Fitting the World: A Biomechanical Approach
+to Foot IK, GDC 2016
+https://gdcvault.com/play/1023009/Fitting-the-World-A-Biomechanical
+Read the session overview only; did not watch the full talk. It identifies
+reactive correction as a source of jerky knees and procedural-looking motion,
+and describes a predictive approach that preserves animation.
+
+Diagnosis from our code and captures (our assessment, not source claims)
+
+- CharacterLegIK reconstructs from bind and synthesizes the leg, pelvis and arm
+  motions separately. Reconstructing from rest avoids numerical drift, but we
+  have no complete reference gait whose full-body timing and posture is accepted.
+- _update_drop primarily solves a reach constraint. Adding a permanent walking
+  crouch can hide reach errors while creating the wrong silhouette.
+- _ankle uses a constant offset from a ground point. Heel peel is added later;
+  it does not represent the whole boot rolling through contact and swing.
+- Foot targets follow linear travel. Turn handling is mostly lane clamps,
+  recovery checks and a new body-yaw limit; it does not predict angular travel.
+- A single swing arc and carry easing cannot express all of forward, backward,
+  lateral and turning foot paths convincingly.
+- Existing metrics detect some slips/crossings/length changes, not believable
+  weight transfer. They cannot certify art quality.
+
+Next implementation, in order
+
+1. Establish new reference motion on this rig: forward, backward and lateral
+   walking, with coherent pelvis, knees, ankles, torso and arm timing. Reference
+   curves may be procedural; they still need deliberate full-body poses. Match
+   their stride and cadence to actual controller displacement. Review on land.
+2. Represent boot heel and forefoot contact explicitly. Roll the boot through
+   loading, stance and push-off; retain natural ankle rotation during swing.
+   Apply bounded two-bone correction with stable knee direction and soft reach.
+   Keep bone lengths fixed. Do not chase a bad target by sinking the whole body.
+3. Plan steps through acceleration and yaw. Reversal/stop completes a reachable
+   placement with a continuous trajectory; the following placement redirects.
+   Separate the immediate input/camera response from visual body reorientation.
+4. Blend body support continuously across contact phases. Avoid a square-wave
+   weight shift triggered solely by the other foot's swing boolean.
+5. Reapply the existing support-frame and wave adaptation to the accepted gait.
+   Deck carry and speed modulation are retained, then checked for regressions.
+
+Keep this small: no physics-driven whole-body simulator, motion-matching
+framework or unrelated model/controller rewrite is required for this pass.
+
+Review sequence
+Normal-speed clips on the plain plane: start/walk/stop; reverse; left/right;
+diagonal; gradual and abrupt turns; contradictory WASD; jump/landing. Review
+front and side evidence for loading, push-off, clearance, knee alignment and
+body continuity. Numerical checks remain guards, not the acceptance decision.
+After land acceptance, repeat on the moving plane. Archive every capture.
+
+Research-time verification boundary (superseded by the implementation log)
+The pre-research grounded-turn experiment compiles and passes the rendered
+land mixed-input regression (gait-research-grounded-turn-rendered.log): zero
+crossing frames, 120 airborne samples, ~19.5 cm maximum per-frame foot motion
+at 60 Hz. This does not establish natural gait or deck acceptance. A headless
+attempt did not exercise motion/jumps and was rejected by the test; it is not
+valid animation evidence. Ordinary land tests passed before the final turn
+guard. Experimental motion changes remain uncommitted pending visual work.
+
+Implementation checkpoint: docs/player-ik-sealegs-pass.txt, 9 October longer
+strides/planted turns/upper-body momentum. Includes final evidence and remaining
+limits; the pre-implementation observations above are historical diagnosis.

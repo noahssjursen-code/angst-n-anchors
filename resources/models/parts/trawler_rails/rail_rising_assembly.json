@@ -1,0 +1,676 @@
+{
+  "style": "rail",
+  "rising": true,
+  "panel_count": 37,
+  "joint_count": 37,
+  "max_endpoint_gap_m": 0,
+  "verified_matching_miter_profiles": 0,
+  "placements": [
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        -1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        -2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        -2.5,
+        2.92,
+        -3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_26_port_rise_1",
+      "position": [
+        -2.5,
+        2.92,
+        -3.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_26_port_rise_2",
+      "position": [
+        -2.0,
+        2.92,
+        -4.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_45_port_rise_3",
+      "position": [
+        -1.5,
+        2.92,
+        -5.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_45_port_rise_4",
+      "position": [
+        -1.0,
+        2.92,
+        -6.0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_45_port_rise_5",
+      "position": [
+        -0.5,
+        2.92,
+        -6.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        6
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        4
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        -1
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        2.5,
+        2.92,
+        -2
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_50cm",
+      "position": [
+        2.5,
+        2.92,
+        -3
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_26_starboard_rise_1",
+      "position": [
+        2.5,
+        2.92,
+        -3.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_26_starboard_rise_2",
+      "position": [
+        2.0,
+        2.92,
+        -4.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_45_starboard_rise_3",
+      "position": [
+        1.5,
+        2.92,
+        -5.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_45_starboard_rise_4",
+      "position": [
+        1.0,
+        2.92,
+        -6.0
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_45_starboard_rise_5",
+      "position": [
+        0.5,
+        2.92,
+        -6.5
+      ],
+      "yaw_degrees": 0.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -2.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -1.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        -0.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        0.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_straight_100cm",
+      "position": [
+        1.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": -90.0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        6
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        4
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        2
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        0
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        -1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        -2
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        -3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -2.5,
+        2.92,
+        -3.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_1",
+      "position": [
+        -2.0,
+        2.92,
+        -4.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_2",
+      "position": [
+        -1.5,
+        2.92,
+        -5.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_3",
+      "position": [
+        -1.0,
+        2.92,
+        -6.0
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_4",
+      "position": [
+        -0.5,
+        2.92,
+        -6.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_5",
+      "position": [
+        0.0,
+        2.92,
+        -7.0
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        6
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        4
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        2
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        0
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        -1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        -2
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        -3
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        2.5,
+        2.92,
+        -3.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_1",
+      "position": [
+        2.0,
+        2.92,
+        -4.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_2",
+      "position": [
+        1.5,
+        2.92,
+        -5.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_3",
+      "position": [
+        1.0,
+        2.92,
+        -6.0
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_4",
+      "position": [
+        0.5,
+        2.92,
+        -6.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -1.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        -0.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        0.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_joint_0",
+      "position": [
+        1.5,
+        2.92,
+        7
+      ],
+      "yaw_degrees": 0
+    }
+  ]
+}

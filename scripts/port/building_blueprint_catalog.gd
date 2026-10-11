@@ -14,6 +14,8 @@ static func all() -> Array[BuildingLayout]:
 
 
 static func ids() -> Array[String]:
+	# Only root-level JSON files are active. archive/ preserves retired layouts
+	# whose brick library was removed; they must not enter port or editor lists.
 	var out: Array[String] = []
 	for filename in DirAccess.get_files_at(BLUEPRINT_DIR):
 		if filename.get_extension().to_lower() != "json":
@@ -29,19 +31,11 @@ static func path_for(blueprint_id: String) -> String:
 
 static func by_id(blueprint_id: String) -> BuildingLayout:
 	var trimmed := blueprint_id.strip_edges()
-	if trimmed.is_empty():
+	if trimmed.is_empty() or trimmed.contains("/") or trimmed.contains("\\"):
 		return null
-	var direct := load_path(path_for(trimmed))
-	if direct != null:
-		return direct
-	# Legacy: internal JSON id may differ from filename.
-	for filename in DirAccess.get_files_at(BLUEPRINT_DIR):
-		if filename.get_extension().to_lower() != "json":
-			continue
-		var layout := load_path(BLUEPRINT_DIR + filename)
-		if layout != null and layout.blueprint_id == trimmed:
-			return layout
-	return null
+	# The filename is the public ID. A missing or invalid file must not trigger
+	# another load of every blueprint (including the failed file itself).
+	return load_path(path_for(trimmed))
 
 
 static func load_path(path: String) -> BuildingLayout:

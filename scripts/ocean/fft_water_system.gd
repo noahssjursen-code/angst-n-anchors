@@ -15,6 +15,7 @@ const FFT_OCEAN_FFT_X = preload("res://resources/shaders/fft_ocean_fft_x.glsl")
 const FFT_OCEAN_FFT_Y = preload("res://resources/shaders/fft_ocean_fft_y.glsl")
 const FFT_OCEAN_ASSEMBLE = preload("res://resources/shaders/fft_ocean_assemble.glsl")
 const FFT_OCEAN_PHYSICS_QUERY = preload("res://resources/shaders/fft_ocean_physics_query.glsl")
+const FFT_OCEAN_SLOPE_MIP = preload("res://resources/shaders/fft_ocean_slope_mip.glsl")
 
 ## How many compute frames between buoyancy readback requests.
 ## Readback is async (non-blocking) — this only caps request rate.
@@ -30,10 +31,19 @@ var pipeline_fft_x: RID
 var pipeline_fft_y: RID
 var pipeline_assemble: RID
 var pipeline_physics_query: RID
+var pipeline_slope_mip: RID
+var slope_mip_shader: RID
+var _slope_mip_views: Array[RID] = []
+var _slope_mip_sets: Array[RID] = []
 var main_shader: RID
 var physics_query_shader: RID
 var _shader_rids: Array[RID] = []
 
+var target_spectrum_tex: RID
+var _spectrum_initialized := false
+var applied_wave_intensity := 1.0
+var wave_intensity_velocity := 0.0
+const SPECTRUM_RESPONSE_SECONDS := 1.5
 var initial_spectrum_tex: RID
 var spectrum_tex: RID
 var displacement_tex: RID
@@ -51,7 +61,9 @@ var time: float = 0.0
 var _last_wind := -1.0
 var _last_storm := -1.0
 var _last_short_wave := -1.0
-@export var length_scales := Vector4(256.0, 64.0, 16.0, 4.0)
+## A 256 m swell patch undersamples the rough-weather spectral peak, allowing
+## one lattice mode to dominate. Keep the three detail patches unchanged.
+@export var length_scales := Vector4(1024.0, 64.0, 16.0, 4.0)
 @export var depth: float = 100.0
 @export var repeat_time: float = 200.0
 @export var low_cutoff: float = 0.0001
@@ -61,6 +73,7 @@ var _last_short_wave := -1.0
 # bias 1.0 + tiny threshold = foam only where waves actually break.
 # (bias 2.0 made biasedJacobian ~1 EVERYWHERE -> uniform foam wash.)
 @export var foam_bias: float = 1.0
+## Legacy tuning is per nominal 60 Hz tick; assemble integrates elapsed time.
 @export var foam_decay_rate: float = 0.08
 @export var foam_add: float = 1.0
 @export var foam_threshold: float = 0.05
@@ -94,6 +107,7 @@ const SIM_TICK_RATE: float = 60.0
 const SIM_STEP: float = 1.0 / SIM_TICK_RATE
 
 func _ready() -> void:
+	applied_wave_intensity = WaveSurface.wave_intensity
 	add_to_group("fft_water_system")
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null and telemetry.has_method("register_provider"):
@@ -134,6 +148,8 @@ func _exit_tree() -> void:
 		buoyancy_map_rd.texture_rd_rid = RID()
 	for rid in [uniform_set, _physics_query_uniform_set]:
 		_free_rd_rid(rid)
+	for rid in _slope_mip_sets: _free_rd_rid(rid)
+	for rid in _slope_mip_views: _free_rd_rid(rid)
 	for rid in [
 		pipeline_init,
 		pipeline_pack,
@@ -142,9 +158,11 @@ func _exit_tree() -> void:
 		pipeline_fft_y,
 		pipeline_assemble,
 		pipeline_physics_query,
+		pipeline_slope_mip,
 	]:
 		_free_rd_rid(rid)
 	for rid in [
+		target_spectrum_tex,
 		initial_spectrum_tex,
 		spectrum_tex,
 		displacement_tex,
@@ -175,6 +193,9 @@ func _process(delta: float) -> void:
 	var sim_delta = minf(_sim_timer, 0.1)
 	_sim_timer = 0.0
 	
+	var previous_intensity := applied_wave_intensity
+	applied_wave_intensity = lerpf(applied_wave_intensity, WaveSurface.wave_intensity, 1.0 - exp(-sim_delta / SPECTRUM_RESPONSE_SECONDS))
+	wave_intensity_velocity = (applied_wave_intensity - previous_intensity) / sim_delta
 	time += sim_delta
 	_run_update_fft_assemble(sim_delta)
 
@@ -217,12 +238,14 @@ func _on_buoyancy_async(bytes: PackedByteArray, layer: int) -> void:
 func get_debug_stats() -> Dictionary:
 	var resolution_f := float(RESOLUTION)
 	# Persistent GPU textures:
-	# initial/displacement: 4×RGBA32F each; spectrum: 8×RGBA32F;
+	# target/initial/displacement: 4×RGBA32F each; spectrum: 8×RGBA32F;
 	# slope: 4×RG32F; buoyancy: 4×R32F.
 	var texture_bytes := resolution_f * resolution_f * (
-		4.0 * 16.0 + 8.0 * 16.0 + 4.0 * 16.0 + 4.0 * 8.0 + 4.0 * 4.0
+		8.0 * 16.0 + 8.0 * 16.0 + 4.0 * 16.0 + 4.0 * 8.0 + 4.0 * 4.0
 	)
 	var query_resolution_f := float(PHYSICS_QUERY_RESOLUTION)
+	# Signed-slope mip chain adds one third of the base 4 x RG32F array.
+	texture_bytes += resolution_f * resolution_f * 4.0 * 8.0 / 3.0
 	var readback_mb_s := (
 		query_resolution_f * query_resolution_f * 16.0 * 4.0
 		* (SIM_TICK_RATE / float(BUOYANCY_READBACK_INTERVAL))
@@ -230,13 +253,17 @@ func get_debug_stats() -> Dictionary:
 	)
 	var tile_dispatches := 2 * (RESOLUTION / 8) * (RESOLUTION / 8)
 	var fft_dispatches := 2 * RESOLUTION
+	var mip_workgroups := 0
+	for mip in range(1, RESOLUTION_LOG2 + 1):
+		var groups := maxi(1, (RESOLUTION >> mip) / 8)
+		mip_workgroups += groups * groups * MAX_WAVES
 	return {
 		"resolution": RESOLUTION,
 		"cascades": MAX_WAVES,
 		"sim_hz": SIM_TICK_RATE,
 		"gpu_fft_ms": _gpu_fft_ms,
 		"cpu_submit_ms": _cpu_submit_ms,
-		"workgroups_per_tick": tile_dispatches + fft_dispatches,
+		"workgroups_per_tick": tile_dispatches + fft_dispatches + mip_workgroups + 4 * (PHYSICS_QUERY_RESOLUTION/8) * (PHYSICS_QUERY_RESOLUTION/8),
 		"texture_mb": texture_bytes / (1024.0 * 1024.0),
 		"readback_mb_s": readback_mb_s,
 		"readback_hz": SIM_TICK_RATE / float(BUOYANCY_READBACK_INTERVAL),
@@ -294,6 +321,8 @@ func _compile_shaders() -> void:
 	physics_query_shader = rd.shader_create_from_spirv(query_spirv)
 	_shader_rids.append(physics_query_shader)
 	pipeline_physics_query = rd.compute_pipeline_create(physics_query_shader)
+	pipeline_slope_mip = _load_shader_pipeline(FFT_OCEAN_SLOPE_MIP)
+	slope_mip_shader = _shader_rids[-1]
 
 func _load_shader_pipeline(shader_file: RDShaderFile) -> RID:
 	if shader_file == null:
@@ -345,6 +374,7 @@ func _create_buffers_and_textures() -> void:
 	fmt_rgba32_8.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
 	fmt_rgba32_8.array_layers = 8
 	
+	target_spectrum_tex = rd.texture_create(fmt_rgba32, RDTextureView.new())
 	initial_spectrum_tex = rd.texture_create(fmt_rgba32, RDTextureView.new())
 	spectrum_tex = rd.texture_create(fmt_rgba32_8, RDTextureView.new())
 	displacement_tex = rd.texture_create(fmt_rgba32, RDTextureView.new())
@@ -353,12 +383,13 @@ func _create_buffers_and_textures() -> void:
 	fmt_rg32.width = RESOLUTION
 	fmt_rg32.height = RESOLUTION
 	fmt_rg32.depth = 1
-	fmt_rg32.mipmaps = 1
+	fmt_rg32.mipmaps = RESOLUTION_LOG2 + 1
 	fmt_rg32.format = RenderingDevice.DATA_FORMAT_R32G32_SFLOAT
 	fmt_rg32.usage_bits = common_usage
 	fmt_rg32.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
 	fmt_rg32.array_layers = 4
 	slope_tex = rd.texture_create(fmt_rg32, RDTextureView.new())
+	_create_slope_mip_sets()
 	
 	var fmt_r32 = RDTextureFormat.new()
 	fmt_r32.width = RESOLUTION
@@ -392,6 +423,26 @@ func _create_buffers_and_textures() -> void:
 	
 	buoyancy_map_rd = Texture2DArrayRD.new()
 	buoyancy_map_rd.texture_rd_rid = buoyancy_tex
+
+func _create_slope_mip_sets() -> void:
+	# Separate 2D views avoid changing the shared FFT storage-image layout.
+	# Sets are level-major so one barrier suffices between downsample levels.
+	for mip in range(RESOLUTION_LOG2 + 1):
+		for layer in MAX_WAVES:
+			_slope_mip_views.append(rd.texture_create_shared_from_slice(
+				RDTextureView.new(), slope_tex, layer, mip, 1,
+				RenderingDevice.TEXTURE_SLICE_2D))
+	for mip in range(1, RESOLUTION_LOG2 + 1):
+		for layer in MAX_WAVES:
+			var uniforms: Array[RDUniform] = []
+			for binding in 2:
+				var uniform := RDUniform.new()
+				uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_IMAGE
+				uniform.binding = binding
+				uniform.add_id(_slope_mip_views[(mip-1+binding)*MAX_WAVES+layer])
+				uniforms.append(uniform)
+			_slope_mip_sets.append(rd.uniform_set_create(uniforms, slope_mip_shader, 0))
+
 
 func _create_uniform_set() -> void:
 	var uniforms: Array[RDUniform] = []
@@ -438,6 +489,12 @@ func _create_uniform_set() -> void:
 	u_fourier.add_id(spectrum_tex)
 	uniforms.append(u_fourier)
 	
+	var u_target := RDUniform.new()
+	u_target.uniform_type = RenderingDevice.UNIFORM_TYPE_IMAGE
+	u_target.binding = 7
+	u_target.add_id(target_spectrum_tex)
+	uniforms.append(u_target)
+
 	# Any pipeline is fine to query the set layout, as they all share set 0
 	uniform_set = rd.uniform_set_create(uniforms, main_shader, 0)
 
@@ -542,7 +599,7 @@ func _update_push_constants(delta_time: float) -> void:
 	push_constant_params.encode_u32(64, int(length_scales.y))
 	push_constant_params.encode_u32(68, int(length_scales.z))
 	push_constant_params.encode_u32(72, int(length_scales.w))
-	push_constant_params.encode_float(76, 0.0) # pad
+	push_constant_params.encode_float(76, 1.0 if not _spectrum_initialized else 1.0 - exp(-delta_time / SPECTRUM_RESPONSE_SECONDS))
 
 func _run_init_pack() -> void:
 	_update_push_constants(0.0)
@@ -572,6 +629,7 @@ func _run_update_fft_assemble(delta: float) -> void:
 	if profile:
 		rd.capture_timestamp("WaterFFT.Begin")
 	_update_push_constants(delta)
+	_spectrum_initialized = true
 	var compute_list = rd.compute_list_begin()
 	
 	# UPDATE
@@ -623,8 +681,23 @@ func _run_update_fft_assemble(delta: float) -> void:
 	_physics_query_has_previous = true
 	
 	rd.compute_list_end()
+	_run_slope_mips()
 	if profile:
 		rd.capture_timestamp("WaterFFT.End")
 	var cpu_sample_ms := float(Time.get_ticks_usec() - cpu_begin) / 1000.0
 	_cpu_submit_ms = lerpf(_cpu_submit_ms, cpu_sample_ms, 0.2)
 	# rd.submit() and rd.sync() removed because we are on the global RenderingDevice
+
+
+func _run_slope_mips() -> void:
+	# Separate list: this pass has no push constants. Keeping it with the FFT
+	# passes lets D3D12 barrier replay reuse their incompatible 80-byte block.
+	var compute_list := rd.compute_list_begin()
+	rd.compute_list_bind_compute_pipeline(compute_list, pipeline_slope_mip)
+	for mip in range(1, RESOLUTION_LOG2 + 1):
+		var groups := maxi(1, (RESOLUTION >> mip) / 8)
+		for layer in MAX_WAVES:
+			rd.compute_list_bind_uniform_set(compute_list, _slope_mip_sets[(mip-1)*MAX_WAVES+layer], 0)
+			rd.compute_list_dispatch(compute_list, groups, groups, 1)
+		rd.compute_list_add_barrier(compute_list)
+	rd.compute_list_end()

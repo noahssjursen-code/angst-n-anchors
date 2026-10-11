@@ -15,6 +15,7 @@ const MAX_RASTER := 513
 ## Preset ids → world_size_m (loaded from JSON, with fallbacks).
 const FALLBACK_PRESETS := {
 	"small": 15000.0,
+	"compact": 30000.0,
 	"standard": 40000.0,
 	"large": 100000.0,
 }

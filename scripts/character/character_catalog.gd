@@ -1,98 +1,64 @@
 class_name CharacterCatalog
 extends RefCounted
 
-const PATH := "res://resources/data/characters/catalog.json"
-
-static var _data: Dictionary = {}
-
-
+## Only Blender-authored assets are registered here. Unknown legacy IDs are inert.
+const SLOTS := {
+	"body_presets": {"mariner": "Mariner"},
+	"hair": {"none": "Bald", "crop": "Short crop"},
+	"tops": {"none": "None", "sweater": "Work sweater"},
+	"outerwear": {"none": "None", "vest": "Work vest"},
+	"trousers": {"none": "Base layer", "work": "Work trousers"},
+	"footwear": {"none": "Barefoot", "boots": "Deck boots"},
+	"headwear": {"none": "None", "cap": "Sailor cap", "hardhat": "Hard hat"},
+	"facial_hair": {"none": "None", "moustache": "Moustache"},
+	"eyewear": {"none": "None", "glasses": "Glasses"},
+	"face_accessories": {"none": "None", "pipe": "Pipe"},
+	"utility_accessories": {"none": "None", "belt": "Belt and pouch"},
+}
 static func data() -> Dictionary:
-	if _data.is_empty():
-		_data = JsonUtil.load(PATH)
-	return _data
-
-
+	return SLOTS.duplicate(true)
 static func options(slot: StringName) -> Array:
-	var value: Variant = data().get(String(slot), [])
-	return value if typeof(value) == TYPE_ARRAY else []
-
-
+	var result: Array = []
+	for id in SLOTS.get(str(slot), {}): result.append(option(slot, id))
+	return result
 static func ids(slot: StringName) -> PackedStringArray:
-	var result := PackedStringArray()
-	for option in options(slot):
-		if typeof(option) == TYPE_DICTIONARY:
-			result.append(str(option.get("id", "")))
-	return result
-
-
+	return PackedStringArray(SLOTS.get(str(slot), {}).keys())
 static func is_valid(slot: StringName, id: String) -> bool:
-	return id in ids(slot)
-
-
-static func normalized_id(slot: StringName, id: String, fallback: String) -> String:
-	return id if is_valid(slot, id) else fallback
-
-
+	return SLOTS.get(str(slot), {}).has(id)
+static func normalized_id(_slot: StringName, id: String, fallback: String) -> String:
+	return id if not id.is_empty() else fallback
 static func option(slot: StringName, id: String) -> Dictionary:
-	for entry in options(slot):
-		if typeof(entry) == TYPE_DICTIONARY and str(entry.get("id", "")) == id:
-			return (entry as Dictionary).duplicate(true)
-	return {}
-
-
+	return {"id": id, "label": SLOTS[str(slot)][id]} if is_valid(slot,id) else {}
 static func outfit_presets() -> Array:
-	var value: Variant = data().get("outfit_presets", [])
-	return value if typeof(value) == TYPE_ARRAY else []
-
-
+	return [{"id":"sailor","label":"Sailor"},{"id":"dock_worker","label":"Deck crew"},{"id":"harbour_master","label":"Harbour master"}]
 static func outfit_preset(id: String) -> Dictionary:
-	for entry in outfit_presets():
-		if typeof(entry) == TYPE_DICTIONARY and str(entry.get("id", "")) == id:
-			return (entry as Dictionary).duplicate(true)
+	for preset in outfit_presets():
+		if preset.id == id: return preset
 	return {}
-
-
 static func appearance_preset(id: String) -> CharacterAppearance:
-	var preset := outfit_preset(id)
-	return CharacterAppearance.from_dict(preset) if not preset.is_empty() else CharacterAppearance.default_appearance()
-
-
-static func wardrobe_parts(slot: StringName, id: String) -> PackedStringArray:
-	var result := PackedStringArray()
-	for part in option(slot, id).get("parts", []):
-		result.append(str(part))
+	var result := CharacterAppearance.default_appearance()
+	if id == "sailor":
+		result.headwear_id = "cap"
+		result.facial_hair_id = "moustache"
+		result.face_accessory_id = "pipe"
+		result.age = 45
+	if id in ["dock_worker", "harbour_mechanic"]:
+		result.outerwear_id = "vest"
+		result.utility_id = "belt"
+		result.headwear_id = "hardhat"
+		result.eyewear_id = "glasses"
+		result.accent_color = Color(.95,.76,.055)
+		result.top_color = Color(.18,.27,.32)
+	if id == "harbour_master":
+		result.age = 58
+		result.belly = .3
+		result.top_color = Color(.12,.18,.24)
 	return result
-
-
-static func all_wardrobe_parts(slot: StringName) -> PackedStringArray:
-	var result := PackedStringArray()
-	for entry in options(slot):
-		if typeof(entry) != TYPE_DICTIONARY:
-			continue
-		for part in entry.get("parts", []):
-			var part_name := str(part)
-			if not part_name in result:
-				result.append(part_name)
-	return result
-
-
+static func wardrobe_parts(_slot: StringName, _id: String) -> PackedStringArray:
+	return PackedStringArray()
+static func all_wardrobe_parts(_slot: StringName) -> PackedStringArray:
+	return PackedStringArray()
 static func wardrobe_model_path(slot: StringName, id: String) -> String:
-	var entry := option(slot, id)
-	if entry.is_empty() or (entry.get("parts", []) as Array).is_empty():
-		return ""
-	return "res://resources/data/models/characters/wardrobe/%s/%s.json" % [String(slot), id]
-
-
-## Stable inventory metadata for a future server/Steam inventory seam. The
-## appearance record stores only the equipped id; ownership is deliberately
-## validated elsewhere so a client cannot grant itself cosmetics through JSON.
+	return "res://resources/models/characters/mariner.glb" if is_valid(slot,id) and id != "none" else ""
 static func cosmetic_metadata(slot: StringName, id: String) -> Dictionary:
-	var entry := option(slot, id)
-	if entry.is_empty() or id == "none":
-		return {}
-	return {
-		"inventory_key": str(entry.get("inventory_key", "character.%s.%s" % [String(slot), id])),
-		"collection": str(entry.get("collection", "core_workwear")),
-		"rarity": str(entry.get("rarity", "standard")),
-		"trade_policy": str(entry.get("trade_policy", "game_owned")),
-	}
+	return option(slot,id)

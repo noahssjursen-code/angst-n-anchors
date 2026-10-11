@@ -63,10 +63,12 @@ func _physics_process(_delta: float) -> void:
 		_body.global_transform.basis.inverse() * (point_velocity - water.velocity)
 	)
 	var propulsion := _body.get_node_or_null("PropulsionComponent") as PropulsionComponent
-	var prop_throttle := propulsion.throttle if propulsion != null else 0.0
+	var prop_throttle := propulsion.throttle if propulsion != null and propulsion.engine_running else 0.0
+	# Wash velocity follows sqrt(thrust). Multiplying by throttle again made
+	# slow-ahead wash fall below the flow gate and removed harbour steering.
 	var ahead_flow := (
 		-local_flow.z
-		+ (-prop_throttle) * prop_wash_speed_ms * sqrt(absf(prop_throttle))
+		+ signf(-prop_throttle) * prop_wash_speed_ms * sqrt(absf(prop_throttle))
 	)
 	inflow_speed_ms = sqrt(
 		ahead_flow * ahead_flow

@@ -5,6 +5,7 @@ extends Node3D
 
 const DEFAULT_MODEL := "res://resources/data/models/dockyard/bulk_crane.json"
 const ASSEMBLER_SCRIPT := preload("res://scripts/core/model_assembler.gd")
+const IMPORTED_RIG := preload("res://scripts/port/blender_bulk_crane_rig.gd")
 
 ## Per-shell jaw angles (degrees X). Open = spread; closed = lips meet.
 const RIGHT_CLOSED_DEG := 6.0
@@ -15,8 +16,8 @@ const WIRE_REST_LENGTH_M := 10.0
 const HOIST_CABIN_CLEARANCE_M := 0.35
 const PICKUP_RADIUS_BASE_M := 8.0
 const PICKUP_HEIGHT_TOLERANCE_BASE_M := 4.0
-const PICKUP_OPEN_THRESHOLD := 0.55
-const DROP_CLOSE_THRESHOLD := 0.12
+const PICKUP_CLOSED_THRESHOLD := 0.12
+const DROP_OPEN_THRESHOLD := 0.55
 const BUCKET_MOUTH_OFFSET_Y_M := -1.6
 
 signal bucket_fill_changed(lot: BulkCargoLot, capacity_tonnes_t: float)
@@ -60,7 +61,7 @@ signal bucket_changed(open_amount: float)
 @export var boom_min_deg: float = 8.0
 @export var boom_max_deg: float = 72.0
 @export var hoist_min_m: float = 3.0
-@export var hoist_max_m: float = 28.0
+@export var hoist_max_m: float = 40.0
 @export var slew_speed_deg: float = 55.0
 @export var boom_speed_deg: float = 28.0
 @export var hoist_speed_m: float = 8.0
@@ -92,7 +93,6 @@ var _wire_rest_length := WIRE_REST_LENGTH_M
 var _cabin_top_y_global := 0.0
 var _bucket_open_target := 0.0
 var _space_held := false
-var _drop_armed := false
 
 
 func _ready() -> void:
@@ -112,6 +112,12 @@ func reload_model() -> void:
 	if _assembler != null and is_instance_valid(_assembler):
 		_assembler.queue_free()
 		_assembler = null
+	if model_path == DEFAULT_MODEL:
+		_assembler = IMPORTED_RIG.new()
+		_assembler.name = "Model"
+		add_child(_assembler)
+		call_deferred("_bind_rig")
+		return
 	if model_path.is_empty() or not ResourceLoader.exists(model_path):
 		push_warning("BulkCrane: missing model %s" % model_path)
 		return
@@ -189,7 +195,8 @@ func _rig_hoist_parts() -> void:
 		_wire_mesh_base_scale = _wire_mesh.scale
 	if _bucket != null and is_instance_valid(_bucket):
 		## Bucket must not inherit wire scale — only the cable mesh stretches.
-		_bucket.reparent(_boom, false)
+		if _bucket.get_parent() != _boom:
+			_bucket.reparent(_boom, false)
 		call_deferred("_bind_shells")
 
 
@@ -233,7 +240,13 @@ func _max_hoist_for_cabin_m() -> float:
 	if not is_inside_tree():
 		return hoist_max_m
 	var origin := _boom.to_global(_wire.position)
-	var down := (_boom.global_basis * _wire.basis * Vector3.DOWN).normalized()
+	# Cabin clearance only applies directly above the machinery. A grab working
+	# outboard must be able to reach a ship's hatch below the crane cab height.
+	var cab := get_slew_pivot_global()
+	if Vector2(origin.x - cab.x, origin.z - cab.z).length() > 5.0 * model_scale:
+		return hoist_max_m
+	# Hoist length is in rig-local metres; the basis includes model scale.
+	var down := _boom.global_basis * _wire.basis * Vector3.DOWN
 	if down.y >= -0.001:
 		return hoist_max_m
 	var limit_y := _cabin_top_y_global + HOIST_CABIN_CLEARANCE_M
@@ -285,20 +298,8 @@ func _add_seat() -> void:
 func _pose_operator_seated() -> void:
 	if _operator == null or not is_instance_valid(_operator):
 		return
-	if _operator.assembler == null:
-		call_deferred("_pose_operator_seated")
-		return
-	_set_part_rotation(_operator, "leg_left", Vector3(78.0, 0.0, 0.0))
-	_set_part_rotation(_operator, "leg_right", Vector3(78.0, 0.0, 0.0))
-	_set_part_rotation(_operator, "arm_left", Vector3(40.0, 0.0, 12.0))
-	_set_part_rotation(_operator, "arm_right", Vector3(40.0, 0.0, -12.0))
-
-
-func _set_part_rotation(npc: NpcBase, part_name: String, degrees: Vector3) -> void:
-	var part := npc.assembler.get_part(part_name) as Node3D
-	if part == null:
-		return
-	part.rotation_degrees = degrees
+	if _operator.animator != null:
+		_operator.animator.set_preview_motion(&"seated")
 
 
 func _part(name_or_role: String) -> Node3D:
@@ -328,6 +329,8 @@ func _apply_boom() -> void:
 	var r := _boom.rotation_degrees
 	r.x = boom_angle_deg
 	_boom.rotation_degrees = r
+	if _assembler is BlenderBulkCraneRig:
+		(_assembler as BlenderBulkCraneRig).update_luff_cylinder()
 	if _wire != null and is_instance_valid(_wire):
 		var wr := _wire.rotation_degrees
 		wr.x = -boom_angle_deg
@@ -388,6 +391,8 @@ func _apply_bucket_scale() -> void:
 	_bucket.scale = Vector3.ONE
 	if _bucket is ModelAssembler:
 		(_bucket as ModelAssembler).absolute_scale = bucket_scale
+	elif _assembler is BlenderBulkCraneRig:
+		(_assembler as BlenderBulkCraneRig).set_grab_scale(bucket_scale)
 	call_deferred("_bind_shells")
 
 
@@ -449,7 +454,7 @@ func ik_bucket_to(delta: float, target: Vector3, hoist_mode: String = "track") -
 	var slew_err_deg := 0.0
 	if bucket_az.length() > 0.3 and target_az.length() > 0.3:
 		slew_err_deg = rad_to_deg(bucket_az.angle_to(target_az))
-		if absf(slew_err_deg) > 2.0:
+		if absf(slew_err_deg) > 0.2:
 			var slew_step := slew_speed_deg * delta
 			slew_degrees -= clampf(slew_err_deg, -slew_step, slew_step)
 
@@ -457,7 +462,7 @@ func ik_bucket_to(delta: float, target: Vector3, hoist_mode: String = "track") -
 	var bucket_reach := Vector2(bucket.x - hinge.x, bucket.z - hinge.z).length()
 	var target_reach := Vector2(target.x - hinge.x, target.z - hinge.z).length()
 	var reach_err := target_reach - bucket_reach
-	if absf(slew_err_deg) < 12.0 and absf(reach_err) > 1.25:
+	if absf(slew_err_deg) < 12.0 and absf(reach_err) > 0.15:
 		var boom_step := boom_speed_deg * delta * 0.55
 		var soft := clampf(absf(reach_err) / 8.0, 0.15, 1.0)
 		boom_angle_deg += clampf(-reach_err * 1.1 * soft, -boom_step, boom_step)
@@ -470,12 +475,16 @@ func ik_bucket_to(delta: float, target: Vector3, hoist_mode: String = "track") -
 			hoist_length_m = move_toward(hoist_length_m, raised, hoist_step)
 		"track":
 			var y_err := target.y - bucket.y
-			if y_err < -0.35:
-				hoist_length_m += hoist_step
-			elif y_err > 0.35:
-				hoist_length_m -= hoist_step
+			var world_per_m := absf((_boom.global_basis * _wire.basis * Vector3.DOWN).y)
+			if world_per_m > 0.001:
+				hoist_length_m = move_toward(hoist_length_m, hoist_length_m - y_err / world_per_m, hoist_step)
 		_:
 			pass
+
+
+## Cargo targets refer to the cutting mouth, not the suspension point above it.
+func ik_mouth_to(delta: float, target: Vector3, hoist_mode: String = "track") -> void:
+	ik_bucket_to(delta, target + get_bucket_global() - get_bucket_mouth_global(), hoist_mode)
 
 
 func bucket_distance_to(target: Vector3) -> float:
@@ -500,6 +509,12 @@ func horizontal_reach_limits_m() -> Vector2:
 	var boom_len := maxf(get_boom_length_m(), 8.0)
 	var r_min := boom_len * cos(deg_to_rad(boom_max_deg))
 	var r_max := boom_len * cos(deg_to_rad(boom_min_deg))
+	if is_instance_valid(_boom) and is_instance_valid(_cabin):
+		# The offset boom hinge rotates with the cab. Reach must be measured
+		# from the slew pivot, independent of where the crane currently points.
+		var offset := _cabin.to_local(_boom.global_position) * model_scale
+		r_min = Vector2(offset.x, offset.z - r_min).length()
+		r_max = Vector2(offset.x, offset.z - r_max).length()
 	if r_min > r_max:
 		var swap := r_min
 		r_min = r_max
@@ -508,8 +523,8 @@ func horizontal_reach_limits_m() -> Vector2:
 
 
 ## True when the grab can plumb over `target` within boom angle limits.
-func can_reach_point(target: Vector3, margin_m: float = 2.0) -> bool:
-	var hinge := get_boom_hinge_global()
+func can_reach_point(target: Vector3, margin_m: float = 0.25) -> bool:
+	var hinge := get_slew_pivot_global()
 	var horiz := Vector2(target.x - hinge.x, target.z - hinge.z).length()
 	var limits := horizontal_reach_limits_m()
 	return horiz >= limits.x - margin_m and horiz <= limits.y + margin_m
@@ -558,6 +573,8 @@ func find_nearest_ore_mound(commodity_id: String = "") -> OreMound:
 		var mound := node as OreMound
 		if not cid.is_empty() and mound.commodity_id != cid:
 			continue
+		if not can_reach_point(mound.pickup_global()):
+			continue
 		var dist := origin.distance_to(mound.global_position)
 		if dist < best_dist:
 			best_dist = dist
@@ -577,19 +594,70 @@ func is_bucket_at_target(tolerance: float = 0.04) -> bool:
 	return absf(bucket_open - _bucket_open_target) <= tolerance
 
 
+var _crane_slew_audio: AudioStreamPlayer3D
+var _crane_boom_audio: AudioStreamPlayer3D
+var _crane_hoist_audio: AudioStreamPlayer3D
+var _audio_slew := 0.0
+var _audio_boom := 0.0
+var _audio_hoist := 0.0
+var _limit_cool := 0.0
+
+
+func _process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
+	_limit_cool = maxf(_limit_cool - delta, 0.0)
+	if _crane_slew_audio == null:
+		_crane_slew_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/slew_1.wav", "SlewAudio")
+		_crane_boom_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/trolley_1.wav", "BoomAudio")
+		_crane_hoist_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/hoist_1.wav", "HoistAudio")
+	_crane_slew_audio.global_position = get_slew_pivot_global()
+	_crane_boom_audio.global_position = get_boom_hinge_global()
+	_crane_hoist_audio.global_position = get_boom_tip_global()
+	var step_s := maxf(delta, 0.001)
+	WorldSound.drive(_crane_slew_audio, clampf(absf(angle_difference(_audio_slew, slew_degrees)) / step_s / slew_speed_deg, 0.0, 1.0), -8.0)
+	WorldSound.drive(_crane_boom_audio, clampf(absf(boom_angle_deg - _audio_boom) / step_s / boom_speed_deg, 0.0, 1.0), -10.0)
+	WorldSound.drive(_crane_hoist_audio, clampf(absf(hoist_length_m - _audio_hoist) / step_s / hoist_speed_m, 0.0, 1.0), -8.0)
+	_audio_slew = slew_degrees
+	_audio_boom = boom_angle_deg
+	_audio_hoist = hoist_length_m
+
+
 func step(delta: float, command: BulkCraneCommand = null) -> void:
+	if is_auto_active():
+		return
 	if command == null:
 		command = BulkCraneCommand.new()
+	var boom_before := boom_angle_deg
+	var hoist_before := hoist_length_m
 	if not is_zero_approx(command.slew_rate):
 		slew_degrees = slew_degrees + command.slew_rate * slew_speed_deg * delta
 	if not is_zero_approx(command.boom_rate):
 		boom_angle_deg = boom_angle_deg + command.boom_rate * boom_speed_deg * delta
+		_clang_if_held(boom_before, boom_angle_deg, boom_min_deg, boom_max_deg)
 	if not is_zero_approx(command.hoist_rate):
 		hoist_length_m = hoist_length_m + command.hoist_rate * hoist_speed_m * delta
+		_clang_if_held(hoist_before, hoist_length_m, hoist_min_m, get_effective_hoist_max_m())
 	if command.bucket_target >= 0.0:
 		_bucket_open_target = clampf(command.bucket_target, 0.0, 1.0)
+	var previous_open := bucket_open
 	step_jaws(delta)
-	_tick_bulk_material(delta)
+	if previous_open <= 0.08 and bucket_open > 0.08:
+		WorldSound.play("res://resources/audio/world/crane/grab_open_1.wav", global_position, -6.0)
+	elif previous_open > 0.08 and bucket_open <= 0.08:
+		WorldSound.play("res://resources/audio/world/crane/grab_close_1.wav", global_position, -6.0)
+	_tick_bulk_material(previous_open)
+
+
+func _clang_if_held(before: float, after: float, low: float, high: float) -> void:
+	if not is_equal_approx(before, after):
+		return
+	if before > low + 0.08 and before < high - 0.08:
+		return
+	if _limit_cool > 0.0:
+		return
+	_limit_cool = 0.8
+	WorldSound.play("res://resources/audio/world/crane/hook_stop_1.wav", get_bucket_mouth_global(), -8.0)
 
 
 func step_jaws(delta: float) -> void:
@@ -599,31 +667,43 @@ func step_jaws(delta: float) -> void:
 		bucket_open = move_toward(bucket_open, _bucket_open_target, bucket_speed * delta)
 
 
-func grab_from_mound(mound: OreMound) -> void:
-	if mound == null:
+var _payload_ship: BoatBody
+
+
+func grab_from_mound(mound: OreMound, max_tonnes_t: float = INF, ship: BoatBody = null, shipment: String = "") -> void:
+	if not is_instance_valid(mound) or not bucket_lot.is_empty():
 		return
 	var capacity_t := bucket_capacity_tonnes_t()
-	bucket_lot = BulkCargoLot.create(mound.commodity_id, capacity_t)
-	mound.take(capacity_t)
+	if is_instance_valid(ship) and FreightService.has_bulk_freight(ship):
+		bucket_lot = FreightService.issue_bulk_lot(ship, mound.commodity_id, minf(capacity_t, max_tonnes_t), shipment)
+		_payload_ship = ship
+		bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+		return
+	var taken := mound.take(minf(capacity_t, max_tonnes_t))
+	bucket_lot = BulkCargoLot.create(mound.commodity_id, taken)
+	_payload_ship = ship
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
 
 
 func grab_from_hold(hold: BulkHoldComponent) -> void:
-	if hold == null:
+	if not is_instance_valid(hold) or not bucket_lot.is_empty():
 		return
 	var capacity_t := bucket_capacity_tonnes_t()
 	var withdrawn := hold.withdraw_lot(capacity_t)
 	if withdrawn.is_empty():
 		return
 	bucket_lot = withdrawn.duplicate_lot()
+	_payload_ship = hold.get_parent() as BoatBody
+	var ancestor := hold.get_parent()
+	while ancestor != null and _payload_ship == null:
+		_payload_ship = ancestor as BoatBody
+		ancestor = ancestor.get_parent()
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
 
 
 func force_release_at(world_pos: Vector3) -> void:
 	if bucket_lot.is_empty():
-		_drop_armed = false
 		return
-	_drop_armed = true
 	var dropped := bucket_lot.duplicate_lot()
 	var drop_parent := get_parent()
 	if drop_parent == null:
@@ -635,8 +715,10 @@ func force_release_at(world_pos: Vector3) -> void:
 		Vector3.DOWN * 1.5,
 		bucket_capacity_tonnes_t(),
 		bucket_scale,
+		_payload_ship,
 	)
 	material_dropped.emit(dropped, world_pos)
+	WorldSound.play("res://resources/audio/world/cargo/bulk_pour_1.wav", world_pos, -6.0)
 	bucket_lot = BulkCargoLot.empty()
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), bucket_capacity_tonnes_t())
 
@@ -658,12 +740,16 @@ func _pickup_mound() -> OreMound:
 	return best
 
 
-func _tick_bulk_material(_delta: float) -> void:
+func _tick_bulk_material(previous_open: float) -> void:
 	if not simulate_bulk_material:
 		return
-	_try_pickup_from_mound()
-	_try_pickup_from_hold()
-	_try_drop_material()
+	# One scoop per closing stroke, one release per opening stroke. A closed
+	# grab moved through a pile cannot silently refill or replace its payload.
+	if previous_open > PICKUP_CLOSED_THRESHOLD and bucket_open <= PICKUP_CLOSED_THRESHOLD:
+		_try_pickup_from_mound()
+		_try_pickup_from_hold()
+	elif previous_open < DROP_OPEN_THRESHOLD and bucket_open >= DROP_OPEN_THRESHOLD:
+		_try_drop_material()
 
 
 func bucket_capacity_tonnes_t() -> float:
@@ -675,13 +761,7 @@ func get_bucket_lot() -> BulkCargoLot:
 
 
 func _try_pickup_from_mound() -> void:
-	var capacity_t := bucket_capacity_tonnes_t()
-	if bucket_open < PICKUP_OPEN_THRESHOLD:
-		return
-	if (
-		not bucket_lot.is_empty()
-		and bucket_lot.tonnes_t >= capacity_t - BulkCargoLot.TONNES_EPS
-	):
+	if not bucket_lot.is_empty():
 		return
 	var mound := _pickup_mound()
 	if mound == null:
@@ -692,19 +772,11 @@ func _try_pickup_from_mound() -> void:
 		return
 	if absf(mouth.y - pick.y) > PICKUP_HEIGHT_TOLERANCE_BASE_M * bucket_scale:
 		return
-	bucket_lot = BulkCargoLot.create(mound.commodity_id, capacity_t)
-	mound.take(capacity_t)
-	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+	grab_from_mound(mound)
 
 
 func _try_pickup_from_hold() -> void:
-	var capacity_t := bucket_capacity_tonnes_t()
-	if bucket_open < PICKUP_OPEN_THRESHOLD:
-		return
-	if (
-		not bucket_lot.is_empty()
-		and bucket_lot.tonnes_t >= capacity_t - BulkCargoLot.TONNES_EPS
-	):
+	if not bucket_lot.is_empty():
 		return
 	var mouth := get_bucket_mouth_global()
 	var hold := BulkHoldComponent.find_filled_hold_at(mouth)
@@ -715,27 +787,12 @@ func _try_pickup_from_hold() -> void:
 		return
 	if absf(mouth.y - aim.y) > PICKUP_HEIGHT_TOLERANCE_BASE_M * bucket_scale:
 		return
-	var need_t := capacity_t - bucket_lot.tonnes_t
-	var withdrawn := hold.withdraw_lot(need_t)
-	if withdrawn.is_empty():
-		return
-	if bucket_lot.is_empty():
-		bucket_lot = withdrawn.duplicate_lot()
-	else:
-		bucket_lot.tonnes_t += withdrawn.tonnes_t
-	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+	grab_from_hold(hold)
 
 
 func _try_drop_material() -> void:
 	if bucket_lot.is_empty():
-		_drop_armed = false
 		return
-	if bucket_open > DROP_CLOSE_THRESHOLD:
-		_drop_armed = false
-		return
-	if _drop_armed:
-		return
-	_drop_armed = true
 	var dropped := bucket_lot.duplicate_lot()
 	var mouth := get_bucket_mouth_global()
 	var drop_parent := get_parent()
@@ -749,8 +806,10 @@ func _try_drop_material() -> void:
 		drop_vel,
 		bucket_capacity_tonnes_t(),
 		bucket_scale,
+		_payload_ship,
 	)
 	material_dropped.emit(dropped, mouth)
+	WorldSound.play("res://resources/audio/world/cargo/bulk_pour_1.wav", mouth, -6.0)
 	bucket_lot = BulkCargoLot.empty()
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), bucket_capacity_tonnes_t())
 
@@ -763,6 +822,8 @@ func _apply_bucket() -> void:
 	if _shell_left != null and is_instance_valid(_shell_left):
 		_shell_left.rotation_degrees = Vector3(
 			lerpf(LEFT_CLOSED_DEG, LEFT_OPEN_DEG, t), 0.0, 0.0)
+	if _assembler is BlenderBulkCraneRig:
+		(_assembler as BlenderBulkCraneRig).update_grab_actuators()
 	bucket_changed.emit(bucket_open)
 
 

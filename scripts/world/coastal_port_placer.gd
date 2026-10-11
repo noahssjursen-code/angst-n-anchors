@@ -196,7 +196,7 @@ static func has_gentle_backshore(
 	var inland := -seaward.normalized()
 	var heights: Array[float] = []
 	for depth in BACKSHORE_SAMPLE_DEPTHS_M:
-		heights.append(layout.sample_height(world_xz + inland * float(depth)))
+		heights.append(layout.sample_port_site_height(world_xz + inland * float(depth)))
 	for i in range(1, heights.size()):
 		var run := float(BACKSHORE_SAMPLE_DEPTHS_M[i] - BACKSHORE_SAMPLE_DEPTHS_M[i - 1])
 		if run <= 0.001:

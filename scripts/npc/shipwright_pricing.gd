@@ -1,7 +1,7 @@
 class_name ShipwrightPricing
 extends RefCounted
 
-## Catalog quotes in Marks (ℳ).
+## Catalog quotes in Norwegian kroner.
 
 
 static func quote_price_marks(stations: HullStations) -> int:

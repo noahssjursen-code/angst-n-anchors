@@ -15,13 +15,13 @@ uniform vec3 coal_highlight : source_color = vec3(0.34, 0.35, 0.38);
 uniform float grain_scale : hint_range(4.0, 80.0) = 32.0;
 uniform float chunk_scale : hint_range(1.0, 24.0) = 8.0;
 
-varying vec3 world_pos;
-varying vec3 world_normal;
+varying vec3 material_pos;
+varying vec3 material_normal;
 
 float hash(vec2 p) {
-	p = fract(p * vec2(123.34, 345.45));
-	p += dot(p, p + 34.345);
-	return fract(p.x * p.y);
+	vec3 q = fract(vec3(p.xyx) * .1031);
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.x + q.y) * q.z);
 }
 
 float value_noise(vec2 p) {
@@ -36,24 +36,30 @@ float value_noise(vec2 p) {
 }
 
 float sample_grain(vec3 pos, float scale) {
-	vec3 n = abs(normalize(world_normal));
+	vec3 n = abs(normalize(material_normal));
 	n = pow(max(n, vec3(0.0001)), vec3(2.0));
 	n /= (n.x + n.y + n.z);
 	float xz = value_noise(pos.xz * scale + pos.y * 0.41);
 	float xy = value_noise(pos.xy * scale + pos.z * 0.37);
 	float yz = value_noise(pos.yz * scale + pos.x * 0.29);
-	return xz * n.y + xy * n.z + yz * n.x;
+	float grain = xz * n.y + xy * n.z + yz * n.x;
+	// Unresolved grains average out instead of sparkling at distant quays.
+	float footprint = max(length(dFdx(pos)), length(dFdy(pos))) * scale;
+	return mix(grain, .5, smoothstep(.4, 1.5, footprint));
 }
 
 void vertex() {
-	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	world_normal = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+	// Metre-scaled object coordinates retain precision at ports kilometres away.
+	// Absolute world coordinates quantized the old fine-grain hash into bands.
+	vec3 scale = vec3(length(MODEL_MATRIX[0].xyz), length(MODEL_MATRIX[1].xyz), length(MODEL_MATRIX[2].xyz));
+	material_pos = VERTEX * scale;
+	material_normal = normalize(NORMAL / max(scale, vec3(.0001)));
 }
 
 void fragment() {
-	float fine = sample_grain(world_pos, grain_scale);
-	float chunk = sample_grain(world_pos + vec3(17.3, 4.1, 9.8), chunk_scale);
-	float macro = sample_grain(world_pos + vec3(3.7, 22.0, 11.4), chunk_scale * 0.38);
+	float fine = sample_grain(material_pos, grain_scale);
+	float chunk = sample_grain(material_pos + vec3(17.3, 4.1, 9.8), chunk_scale);
+	float macro = sample_grain(material_pos + vec3(3.7, 22.0, 11.4), chunk_scale * 0.38);
 
 	if (pile_kind == 0) {
 		vec3 col = mix(iron_dark, iron_base, chunk * 0.85 + macro * 0.15);

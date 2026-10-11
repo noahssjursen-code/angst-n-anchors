@@ -50,6 +50,7 @@ const HORIZON_DISCARD_HALF : float = MID_OCEAN_SIZE * 0.5 - 15.0
 ## profiling and future quality presets.
 @export var enable_ssao := true
 @export var enable_glow := true
+@export var enable_ssil := true
 @export var enable_volumetric_fog := true
 @export var enable_weather_post_fx := true
 
@@ -81,6 +82,8 @@ var _above_water_camera_far := 0.0
 ## the ocean shader, so we re-upload exactly once when LandField finishes
 ## initialising (which happens after WorldRenderer is added).
 var _shelter_texture_bound : bool = false
+var _surface_rain := 0.0
+var _surface_weather_elapsed := 0.0
 
 
 func _ready() -> void:
@@ -109,6 +112,8 @@ func _ready() -> void:
 	_build_screen_effects()
 	_connect_weather_lighting()
 	_apply_weather_lighting()
+	# A newly entered rainy world is already damp; subsequent changes accumulate.
+	SurfaceWetness.set_amount(SurfaceWetness.target(_surface_rain))
 
 
 func get_ocean_debug_stats() -> Dictionary:
@@ -173,25 +178,39 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
+	_surface_weather_elapsed += _delta
+	if _surface_weather_elapsed >= 0.125:
+		SurfaceWetness.advance(_surface_rain, _surface_weather_elapsed)
+		_surface_weather_elapsed = 0.0
+	# Celestial direction follows the clock every frame, independent of throttled
+	# weather/color updates. Sky disk, direct shadows and water agree.
+	var sun_direction := _celestial_dir(0.0)
+	if _sun != null:
+		_sun.basis = Basis.looking_at(-sun_direction, Vector3.UP)
+	if _moon_light != null:
+		_moon_light.basis = Basis.looking_at(-_celestial_dir(0.5), Vector3.UP)
+	for material in [_ocean_shader_material, _ocean_mid_material, _ocean_far_material, _ocean_horizon_material]:
+		if material != null:
+			material.set_shader_parameter("sun_direction", sun_direction)
 	_follow_camera_xz()
 	_update_underwater_effect()
 	if _ocean_shader_material:
 		_ocean_shader_material.set_shader_parameter("wave_time",      WaveSurface.get_sim_time())
-		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_shader_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 		WaveSurface.sync_ocean_coupling_to_shader(_ocean_shader_material)
 		_sync_land_shelter()
 	if _ocean_mid_material:
 		_ocean_mid_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
-		_ocean_mid_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_mid_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_mid_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	if _ocean_far_material:
 		_ocean_far_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
-		_ocean_far_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_far_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_far_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	if _ocean_horizon_material:
 		_ocean_horizon_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
-		_ocean_horizon_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_horizon_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_horizon_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	_bind_fft_maps_once()
 	_sync_wake_field()
@@ -386,17 +405,19 @@ func _sync_wake_field() -> void:
 func _build_sky() -> void:
 	var sky_sm := ShaderMaterial.new()
 	sky_sm.shader        = SKY_SHADER
+	sky_sm.set_shader_parameter("cloud_volume", preload("res://resources/textures/sky/cloud_density.res"))
 	_sky_shader_material = sky_sm
 
 	var sky := Sky.new()
 	sky.sky_material  = sky_sm
-	sky.radiance_size = Sky.RADIANCE_SIZE_128
+	sky.radiance_size = Sky.RADIANCE_SIZE_256 # Required by realtime sky filtering.
+	sky.process_mode = Sky.PROCESS_MODE_REALTIME
 
 	var environ := Environment.new()
 	_environment = environ
 	environ.sky                  = sky
 	environ.background_mode      = Environment.BG_SKY
-	environ.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	environ.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environ.ambient_light_energy = 0.24
 
 	environ.tonemap_mode     = Environment.TONE_MAPPER_ACES
@@ -404,6 +425,9 @@ func _build_sky() -> void:
 	environ.tonemap_white    = 3.0
 
 	environ.ssao_enabled = enable_ssao
+	environ.ssil_enabled = enable_ssil
+	environ.ssil_radius = 5.0
+	environ.ssil_intensity = 0.65
 	environ.ssao_radius = 1.35
 	environ.ssao_intensity = 0.72
 	environ.ssao_power = 1.0
@@ -419,7 +443,7 @@ func _build_sky() -> void:
 
 	environ.adjustment_enabled    = true
 	environ.adjustment_brightness = 1.0
-	environ.adjustment_contrast   = 1.045
+	environ.adjustment_contrast   = 1.0
 	environ.adjustment_saturation = 1.04
 
 	environ.fog_enabled            = true
@@ -447,12 +471,13 @@ func _build_sky() -> void:
 	sun.light_color                       = Color(1.0, 0.92, 0.78)
 	sun.light_energy                      = 1.5
 	sun.shadow_enabled                    = true
-	# 2 cascades over 180 m gives a 90 m near split and 90 m far — plenty for
-	# the dock + immediate-water visible foreground. 4 cascades was rendering
-	# the shadowmap twice as often as needed for this shadow distance and was
-	# a measurable GPU chunk (~0.3-0.6 ms/frame on mid-tier).
-	sun.directional_shadow_mode           = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_max_distance   = 180.0
+	# Preserve close ship detail while allowing coastal ridges to shade the bay.
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance = 6000.0
+	sun.directional_shadow_split_1 = 0.015
+	sun.directional_shadow_split_2 = 0.06
+	sun.directional_shadow_split_3 = 0.25
+	sun.directional_shadow_blend_splits = true
 	sun.shadow_bias                       = 0.04
 	add_child(sun)
 
@@ -505,9 +530,9 @@ func _build_ocean() -> void:
 
 	var sm := _make_ocean_material(OCEAN_SHADER, 1.0)
 	_ocean_shader_material = sm
-	var sm_mid := _make_ocean_material(OCEAN_MID_SHADER, 0.72)
+	var sm_mid := _make_ocean_material(OCEAN_MID_SHADER, 1.0)
 	_ocean_mid_material = sm_mid
-	var sm_far := _make_ocean_material(OCEAN_FAR_SHADER, 0.0)
+	var sm_far := _make_ocean_material(OCEAN_FAR_SHADER, 1.0)
 	_ocean_far_material = sm_far
 	var sm_horizon := _make_horizon_material()
 	_ocean_horizon_material = sm_horizon
@@ -639,13 +664,13 @@ func _apply_weather_lighting() -> void:
 	var direct_light := float(solar["direct_light"])
 	var fog_t     := 1.0 - vis
 
-	_apply_sun(solar, daylight, direct_light, cloud, storm)
+	_apply_sun(solar, daylight, direct_light, cloud, storm, rain)
 	_apply_exposure(daylight, cloud, storm, fog_t)
 	_apply_fog(solar, fog_t, daylight, cloud, storm)
-	_apply_sky_shader(solar, daylight, cloud, storm)
+	_apply_sky_shader(solar, daylight, cloud, storm, rain)
 	_apply_ocean_shader(solar, daylight, cloud, rain, sea, air_wind, storm, fog_t)
 	_apply_screen_effects(daylight, cloud, rain, storm, fog_t)
-	Palette.set_wetness(smoothstep(0.08, 0.72, rain))
+	_surface_rain = rain
 
 	# Optional: Sync FFT parameters based on weather
 	if _fft_system:
@@ -656,16 +681,17 @@ func _apply_weather_lighting() -> void:
 		_fft_system.sync_weather(sea, storm, WaveSurface.short_wave_factor, wind_angle)
 
 
-func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: float, storm: float) -> void:
+func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: float, storm: float, rain: float = 0.0) -> void:
 	var sun_dir: Vector3 = solar["sun_direction"]
 	var moon_dir: Vector3 = solar["moon_direction"]
 	var low_sun := _low_sun_factor(solar)
-	# Overcast removes hard sunlight, but retaining a broad key keeps hulls,
-	# terrain and cranes three-dimensional instead of uniformly grey.
+	# Rain banks attenuate the hard key. The separate sky fill keeps shaded
+	# surfaces readable without casting sunny shadows through heavy overcast.
 	var sun_energy := (
 		1.70 * direct_light
 		* lerpf(1.0, 0.50, cloud)
 		* lerpf(1.0, 0.78, storm)
+		* lerpf(1.0, 0.28, smoothstep(0.05, 0.65, rain))
 	)
 	if _sun != null:
 		# Sunrise +X (east), noon +Z (south), sunset −X (west).
@@ -693,10 +719,13 @@ func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: 
 			0.16 * float(solar["moonlight"]) * lerpf(1.0, 0.38, cloud)
 		)
 	if _environment != null:
+		# A dark sky cubemap must not multiply night fill almost to zero.
+		_environment.ambient_light_sky_contribution = daylight
 		_environment.ambient_light_energy = (
-			lerpf(0.115, 0.36, daylight * daylight)
+			lerpf(0.14, 0.36, daylight * daylight)
 			* lerpf(1.0, 0.94, cloud)
 			* lerpf(1.0, 0.92, storm)
+			* lerpf(1.0, 1.40, rain * daylight)
 		)
 		_environment.ambient_light_color = (
 			Color(0.78, 0.86, 1.0)
@@ -715,6 +744,9 @@ func _apply_exposure(daylight: float, cloud: float, storm: float, fog_t: float) 
 	var night_lift := lerpf(1.12, 1.02, daylight)
 	var weather_lift := cloud * 0.012 + storm * 0.012
 	_environment.tonemap_exposure = clampf(night_lift + weather_lift, 1.0, 1.14)
+	# Materials, sky fill and ACES already provide scene contrast. Stacking an
+	# extra curve crushes shaded surfaces and makes thin metal look cut out.
+	_environment.adjustment_contrast = 1.0
 
 
 func _apply_fog(solar: Dictionary, fog_t: float, daylight: float, cloud: float, storm: float) -> void:
@@ -729,53 +761,57 @@ func _apply_fog(solar: Dictionary, fog_t: float, daylight: float, cloud: float, 
 		.lerp(Color(0.16, 0.18, 0.22), storm * 0.55)
 	)
 	
-	# Traditional Screen-Space Fog (Handles skybox blending and distant occlusion)
-	# Keep the response soft: haze should read as atmosphere, not a white wall.
+	# Clear weather still contains air. Keep a metre-scaled extinction floor:
+	# about 1% at 100 m, 39% at 5 km, 63% at 10 km. Weather visibility adds
+	# mist independently; it must not remove aerial perspective when set to 1.
+	# This uses the existing exponential fog, not another volumetric pass.
 	_environment.fog_light_color = base_fog_col
 	var distance_haze := pow(fog_t, 2.15)
-	_environment.fog_density            = 0.009 * distance_haze
-	_environment.fog_aerial_perspective = 0.24 * fog_t
+	var coastal_air := 0.00010 * (1.0 + cloud * 0.30 + storm * 0.20)
+	_environment.fog_density = coastal_air + 0.009 * distance_haze
+	# Thin air takes its colour from the actual sky in the viewing direction.
+	# Dense weather instead uses the fog colour, avoiding sky/cloud bleed-through.
+	_environment.fog_aerial_perspective = lerpf(0.82, 0.24 * fog_t, smoothstep(0.04, 0.44, fog_t))
 	_environment.fog_sky_affect = 0.30 * distance_haze
 
-	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness).
-	# Godot runs the full 64³ froxel compute every frame as long as
-	# volumetric_fog_enabled = true — density only scales the visible
-	# contribution, not the compute cost. In clear weather we'd be paying ~2-4 ms
-	# for fog with zero visible effect, so we gate the whole pass on a small
-	# density threshold. Mid fog should stay translucent; only dense bands crush.
-	const VOLUMETRIC_FOG_START := 0.44
-	var vol_amount := smoothstep(VOLUMETRIC_FOG_START, 0.94, fog_t)
-	var vol_density := 0.018 * vol_amount
-	var want_volumetric := enable_volumetric_fog and fog_t > VOLUMETRIC_FOG_START
+	# A thin clear-night medium gives nearby lamps depth without reducing the
+	# weather visibility. Dense weather adds extinction independently.
+	var night_air := (1.0 - smoothstep(0.0, 0.3, daylight)) * 0.00065
+	var vol_amount := smoothstep(0.44, 0.94, fog_t)
+	var vol_density := night_air + 0.018 * vol_amount
+	var want_volumetric := enable_volumetric_fog and vol_density > 0.00001
 	_environment.volumetric_fog_enabled = want_volumetric
+	_environment.volumetric_fog_density = vol_density if want_volumetric else 0.0
 	if want_volumetric:
-		_environment.volumetric_fog_albedo  = base_fog_col
-		_environment.volumetric_fog_density = vol_density
+		# Albedo is particle scattering efficiency, not the night sky colour.
+		_environment.volumetric_fog_albedo = Color(0.82, 0.86, 0.90)
 		_environment.volumetric_fog_emission = Color.BLACK
 		_environment.volumetric_fog_emission_energy = 0.0
-		# Keep fog farther out so near-field ships/ports stay readable.
-		_environment.volumetric_fog_length  = lerpf(560.0, 260.0, fog_t)
+		_environment.volumetric_fog_ambient_inject = 0.15
+		_environment.volumetric_fog_anisotropy = 0.25
+		_environment.volumetric_fog_length = lerpf(160.0, 260.0, vol_amount)
 
 
-func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: float) -> void:
+
+func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: float, rain: float = 0.0) -> void:
 	if _sky_shader_material == null:
 		return
 	var low_sun := _low_sun_factor(solar)
 	var top_col := (
 		Color(0.006, 0.009, 0.028)
 		.lerp(Color(0.055, 0.20, 0.48), daylight)
-		.lerp(Color(0.075, 0.095, 0.13), cloud)
+		.lerp(Color(0.010, 0.014, 0.024).lerp(Color(0.075, 0.095, 0.13), daylight), cloud)
 	)
 	var horiz := (
 		Color(0.018, 0.016, 0.028)
 		.lerp(Color(0.28, 0.43, 0.62), daylight)
-		.lerp(Color(0.20, 0.24, 0.29), cloud)
+		.lerp(Color(0.025, 0.030, 0.045).lerp(Color(0.20, 0.24, 0.29), daylight), cloud)
 		.lerp(Color(0.72, 0.31, 0.16), low_sun * lerpf(0.90, 0.28, cloud))
 	)
 	var zenith_deep := (
 		Color(0.001, 0.004, 0.022)
 		.lerp(Color(0.015, 0.08, 0.38), daylight)
-		.lerp(Color(0.05, 0.065, 0.09), storm)
+		.lerp(Color(0.004, 0.008, 0.016).lerp(Color(0.05, 0.065, 0.09), daylight), storm)
 	)
 	var ground_c := (
 		Color(0.025, 0.028, 0.04)
@@ -789,6 +825,8 @@ func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: 
 		.lerp(Color(0.78, 0.45, 0.30), low_sun * 0.30)
 	)
 	var cloud_dark := Color(0.045, 0.055, 0.075).lerp(Color(0.31, 0.34, 0.39), daylight)
+	cloud_lit = cloud_lit.lerp(Color(0.06, 0.075, 0.10).lerp(Color(0.48, 0.52, 0.56), daylight), rain * 0.70)
+	cloud_dark = cloud_dark.lerp(Color(0.025, 0.03, 0.045).lerp(Color(0.19, 0.22, 0.25), daylight), rain)
 
 	# Inverse of scripted daylight curve — brightest stars at full night; clouds/storm occlude Milky-Way fantasies cheaply.
 	var star_vis := pow(clampf(1.0 - daylight, 0.0, 1.0), 0.78)
@@ -805,6 +843,9 @@ func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: 
 	_sky_shader_material.set_shader_parameter("cloud_light",       Vector3(cloud_lit.r, cloud_lit.g, cloud_lit.b))
 	_sky_shader_material.set_shader_parameter("cloud_dark",        Vector3(cloud_dark.r, cloud_dark.g, cloud_dark.b))
 	_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
+	_sky_shader_material.set_shader_parameter("rain_amount", rain)
+	_sky_shader_material.set_shader_parameter("cloud_altitude", lerpf(0.28, 0.03, rain))
+	_sky_shader_material.set_shader_parameter("cloud_thickness", lerpf(0.22, 0.78, rain))
 	_sky_shader_material.set_shader_parameter("sun_color",         Vector3(sun_col.r,  sun_col.g,  sun_col.b))
 	_sky_shader_material.set_shader_parameter("star_visibility",   clampf(star_vis, 0.0, 1.0))
 	_sky_shader_material.set_shader_parameter("daylight_factor",   daylight)
@@ -816,14 +857,16 @@ func _apply_screen_effects(daylight: float, cloud: float, rain: float, storm: fl
 	if _screen_rect != null:
 		_screen_rect.visible = enable_weather_post_fx
 	var active := 1.0 if enable_weather_post_fx else 0.0
-	_screen_material.set_shader_parameter("outline_strength", lerpf(0.025, 0.04, daylight) * active)
-	_screen_material.set_shader_parameter("grain_strength", lerpf(0.012, 0.024, 1.0 - daylight) * active)
+	# Post-process outlines/grain run after temporal AA and reintroduce harsh,
+	# unstable pixels around the harbour's fine wires and distant silhouettes.
+	_screen_material.set_shader_parameter("outline_strength", 0.0)
+	_screen_material.set_shader_parameter("grain_strength", 0.0)
 	_screen_material.set_shader_parameter("vignette_strength", lerpf(0.045, 0.085, storm) * active)
 	_screen_material.set_shader_parameter("weather_desaturation", clampf(cloud * 0.015 + storm * 0.055 + fog_t * 0.025, 0.0, 0.085) * active)
 	_screen_material.set_shader_parameter("rain_cool_shift", rain * 0.018 * active)
 	_screen_material.set_shader_parameter("shadow_coolness", lerpf(0.035, 0.065, cloud) * active)
 	_screen_material.set_shader_parameter("highlight_warmth", lerpf(0.035, 0.012, cloud) * active)
-	_screen_material.set_shader_parameter("weather_contrast", (0.018 + storm * 0.012) * active)
+	_screen_material.set_shader_parameter("weather_contrast", 0.0)
 
 
 ## Binds LandField's baked shelter texture to the ocean shader. The texture is
@@ -935,7 +978,7 @@ func _apply_ocean_shader(
 		_ocean_mid_material.set_shader_parameter("sun_direction",      sun_dir)
 		_ocean_mid_material.set_shader_parameter("sun_color",          Vector3(sun_col.r, sun_col.g, sun_col.b))
 		_ocean_mid_material.set_shader_parameter("fresnel_sky_mix", fres_blend)
-		_ocean_mid_material.set_shader_parameter("foam_strength",    lerpf(0.55, 1.05, foam_driver) * 0.72)
+		_ocean_mid_material.set_shader_parameter("foam_strength",    lerpf(0.55, 1.05, foam_driver))
 		_ocean_mid_material.set_shader_parameter("foam_steep_start", lerpf(0.26, 0.14, steep_driver))
 		_ocean_mid_material.set_shader_parameter("foam_steep_end",   lerpf(0.70, 0.45, steep_driver))
 		_ocean_mid_material.set_shader_parameter("near_color_lift", near_lift)
@@ -943,6 +986,7 @@ func _apply_ocean_shader(
 		_ocean_mid_material.set_shader_parameter("glint_strength", glint)
 
 	if _ocean_far_material != null:
+		_ocean_far_material.set_shader_parameter("foam_strength", lerpf(0.55, 1.05, foam_driver))
 		_ocean_far_material.set_shader_parameter("shallow_albedo",     Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
 		_ocean_far_material.set_shader_parameter("deep_albedo",        Vector3(deep.r, deep.g, deep.b))
 		_ocean_far_material.set_shader_parameter("sky_top_color",      Vector3(top_col.r, top_col.g, top_col.b))
@@ -952,6 +996,7 @@ func _apply_ocean_shader(
 		_ocean_far_material.set_shader_parameter("fresnel_sky_mix",    fres_blend)
 		_ocean_far_material.set_shader_parameter("near_color_lift",    near_lift)
 		_ocean_far_material.set_shader_parameter("glint_strength",     glint * 0.55)
+		_ocean_far_material.set_shader_parameter("chop_strength", chop_val)
 
 	if _ocean_horizon_material != null:
 		_ocean_horizon_material.set_shader_parameter("shallow_albedo",    Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
@@ -963,6 +1008,7 @@ func _apply_ocean_shader(
 		_ocean_horizon_material.set_shader_parameter("fresnel_sky_mix",   fres_blend)
 		_ocean_horizon_material.set_shader_parameter("near_color_lift",   near_lift)
 		_ocean_horizon_material.set_shader_parameter("glint_strength",    glint * 0.32)
+		_ocean_horizon_material.set_shader_parameter("chop_strength", chop_val)
 
 
 func _low_sun_factor(solar: Dictionary) -> float:

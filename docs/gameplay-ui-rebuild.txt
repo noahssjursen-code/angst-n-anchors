@@ -1,0 +1,103 @@
+Gameplay UI rebuild — 9 October 2026
+
+Noah approved the gameplay storyboard and implementation after the UI teardown.
+Build one playable voyage using existing services: local captain entry, an
+in-world ship purchase, company tablet, compatible harbour deployment, cargo
+booking, equipment operations, helm/docking feedback, delivery and ledger.
+Preserve the chart/minimap and authoring editors. Do not revive the old panels.
+
+Ordered implementation:
+1. Validate and charge purchases atomically; new captains arrive without a ship.
+2. Shared UI styling, modal/input ownership, contextual prompts and notifications.
+3. Shipwright, harbourmaster, cargo agent and equipment service panels.
+4. Today/Jobs/Fleet/Account tablet and compact helm/departure state.
+5. Entry/loading, local captain resume, settings and safe exit.
+6. Isolated authority/UI regression tests, actual Godot renders and voyage checks.
+
+Acceptance: no duplicate charge/purchase; imported stock uses imported validation;
+no starter gift on the new walk-up path; no menus steering the ship; no hidden
+failure during deployment/loading; account displays the existing ledger only;
+read models through LocalPlayerView; tests cannot touch live captain saves.
+Screenshots: C:\Users\noahs\Pictures\machinescreenshots.
+Pre-existing unrelated staged and unstaged work must remain intact.
+
+Progress:
+- Assessment/storyboard approved. Implementation in progress.
+- UI-only scenes added: gameplay_ui_showcase, company_tablet_ui_showcase,
+  helm_ui_showcase and title_ui_showcase. Agent-run capture scenes, inert fixtures.
+  Same production components; no 3D world or captain writes in preview mode.
+- Local first pass wired: ship purchase, compatible deployment, booking,
+  equipment orders/status, tablet, helm/docking, settings, title/entry.
+  Walk-up opening capital provisionally 18,000 NOK (largest stock 16,500),
+  no free ship. Existing companies and legacy starter path remain unchanged.
+- Purchase resolves canonical stock/price, deduplicates requests, commits player
+  ledger before recovery archive; failed persistence rolls back in-memory debit.
+- UI input blocks ship orders and lets M/J be typed in name fields. Storage
+  requires an empty vessel alongside; refuelling resolves the quote again.
+- Noah rejected the generic/space-game direction. Revised the three UI samples:
+  practical rudder repeater and separated helm instruments; service panels at
+  right leaving the NPC visible; plain company tablet with a physical frame.
+  This is a design iteration, not art acceptance.
+- Actual Forward+ Godot captures: machinescreenshots/
+  2026-10-09T17-17-52-voyage-ui-00.png through -10.png; inspected shipwright,
+  operator, tablet and docking. Previous comparison set 17-03-25 retained.
+- Verification: voyage_ui_test 40 checks / 0 failures (all four stock purchases,
+  duplicate requests, insufficient funds, rollback, inert previews, modal input).
+  company_service_test PASS; harbour_service_routing_test PASS through actual
+  NPC deployment and authority. All runs isolated with --shipyard-playtest.
+- Remaining before calling the entire UI rebuild complete: a full generated-world
+  voyage through the new buttons, storage/refuel integration, real-render input
+  review, title/create/resume with a temporary disk slot, and user visual
+  review. Remote purchases/storage are explicitly unavailable; no pretend server
+  mutation path was added. Current game intentionally does not persist deployed
+  ship/cargo on exit; the new exit confirmation explains that existing limitation.
+- No commit made at this checkpoint: large pre-existing staged and unstaged work
+  (including the prior UI deletion) remains intact. Isolate verified changes before
+  committing; never sweep unrelated character/material work into this UI batch.
+- The same 40 UI checks also passed in a real Forward+ render at 1280x720,
+  including cursor restoration and modal engine-input protection.
+- Follow-up: J/M moved from the oversized floating action bar to small bottom-edge
+  shortcuts; helm placement reserves the minimap corner. F is a separate contextual
+  prompt and its panel is hidden when there is no target. Added walking-idle preview.
+- Tablet Jobs now offers cancellation with confirmation. Local authority rechecks
+  the current booking, rejects loaded/suspended cargo and active transfers, releases
+  only the selected booking's reserved capacity and staged quay containers, and
+  commits to captain save before physical removal. No fee or delivery payout.
+  Multiplayer cancellation remains unavailable until the server implements it.
+- freight_cancellation_test: 29 checks passed, including actual staged containers,
+  production tablet buttons, other-job isolation, bulk reservation, loaded/in-flight
+  rejection, stale/remote rejection, failed-save rollback and scratch-slot readback.
+  The deliberately blocked save path produces one expected filesystem error; no
+  live captain paths were used. Scratch data remains in a unique OS cache folder.
+
+Correction / design rejection, 9 October:
+- Noah rejected the entire cream/olive gameplay UI appearance. Behaviour tests
+  are not visual acceptance. Independent read-only review agreed: generic forms,
+  a flat helm text slab, lost menu functions and confusion of design with content.
+- Removed all preview toolbar/labels and the preview-only HUD displacement.
+  Agent runs captures; Noah does not need to operate the showcase.
+- Restored established MainMenu, ocean/trawler backdrop, local captain roster,
+  deletion, character/company creation and multiplayer server/account pages from
+  the pre-teardown backup. Replaced VoyageTitle entry and return paths. Local
+  onboarding keeps the approved shipwright purchase flow. Deletion has a named
+  confirmation; missing saves refuse to resume without replacing the document.
+- main_menu_restore_test: 23 checks passed in Forward+, including scratch-disk
+  create/resume/delete, other-captain preservation and inert preview/server paths.
+  Captures 2026-10-09T17-46-45-restored-menu-home/captains/delete-confirmation.png
+  and 2026-10-09T17-46-46-restored-menu-multiplayer.png inspected. Real remote
+  login/connection remains unverified; no server-account mutations were performed.
+- Focused helm visual proof uses actual Furuno FI-70 photos/screens:
+  https://www.furuno.com/en/products/instruments/fi-70/index.html
+  Black bezel/recessed display, compact bold numerals, thin grid rules, pale LCD
+  faces and red/green rudder scale. MarineHelmConsole consumes the same voyage
+  snapshot without adding controls, sensor values or gameplay behaviour. Research
+  images are reference only, not shipped artwork. Remaining panels are not approved.
+- Independent follow-up found small secondary text, thin housings and mixed screen
+  finishes. Increased label sizes and bezel margins, unified the pale LCD finish,
+  and separated Leave helm from the instruments. Latest native component capture:
+  2026-10-09T17-57-07-voyage-helm-detail.png. Checked bright/dark production ocean
+  backdrop captures 2026-10-09T17-56-28-restored-menu-helm-day-context.png and
+  2026-10-09T17-56-24-restored-menu-helm-night-context.png. These use inert vessel
+  readings over the staged title backdrop, not a live gameplay voyage. Main-menu
+  checks still 23/0 in that run; UI regression 40/0 after restoration. This remains
+  a focused visual proof, not acceptance of the entire gameplay UI.

@@ -269,6 +269,10 @@ var _walk_deck:   AnimatableBody3D
 
 ## Mooring positional solve runs here (inside Jolt/Godot integration), not via impulses.
 var _mooring_integrate: Callable = Callable()
+## Installed equipment can hold departure until its physical operation is safe.
+## No equipment means no restriction on existing vessels.
+signal departure_requested
+var departure_checks: Array[Callable] = []
 ## id -> {mass_kg, position, category}. Bricks and pallets register here.
 var _mass_entries: Dictionary = {}
 var _mass_breakdown: Dictionary = {}
@@ -276,6 +280,19 @@ var _physics_lod_timer: float = 0.0
 var _applied_physics_quality: int = -1
 
 signal mass_properties_changed(total_mass_kg: float, local_center_of_mass: Vector3)
+
+
+func departure_block_reason() -> String:
+	for check in departure_checks:
+		if check.is_valid():
+			var reason := str(check.call())
+			if not reason.is_empty(): return reason
+	return ""
+
+
+func prepare_departure() -> String:
+	departure_requested.emit()
+	return departure_block_reason()
 
 
 # ── Fuel API ─────────────────────────────────────────────────────────────────
@@ -320,6 +337,9 @@ func clear_mooring_integrate() -> void:
 
 
 func _ready() -> void:
+	# Deck collider and anyone standing on it must see this hull pose before they move.
+	process_priority = -20
+	process_physics_priority = -20
 	linear_damp  = linear_damp_coeff
 	angular_damp = angular_damp_coeff
 
@@ -341,6 +361,9 @@ func _ready() -> void:
 		var audio: Node = load("res://scripts/ship/boat_audio_system.gd").new()
 		audio.name = "BoatAudio"
 		add_child(audio)
+		var hull_audio: Node = load("res://scripts/ship/hull_world_audio.gd").new()
+		hull_audio.name = "HullWorldAudio"
+		add_child(hull_audio)
 
 		var lighting := ShipLighting.new()
 		lighting.name = "ShipLighting"
@@ -383,7 +406,16 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_sync_walk_deck_transform()
 
 
+func _process(_delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
+	# Give the manual player mount the same hull pose before its render update.
+	_sync_walk_deck_transform()
+
+
 func _physics_process(_delta: float) -> void:
+	if not Engine.is_editor_hint():
+		_sync_walk_deck_transform()
 	if Engine.is_editor_hint():
 		var missing_single := _transformer == null or not is_instance_valid(_transformer)
 		if _model_assembler == null and missing_single:
@@ -586,22 +618,6 @@ func _refresh_mass() -> void:
 	_refresh_center_of_mass()
 
 
-var _mass_batch_depth := 0
-
-
-## Batches many set_mass_entry calls into one mass refresh. Fit-out registers
-## hundreds of brick masses; refreshing per entry is O(n²) over the fleet-out.
-func begin_mass_batch() -> void:
-	_mass_batch_depth += 1
-
-
-func end_mass_batch() -> void:
-	_mass_batch_depth = maxi(0, _mass_batch_depth - 1)
-	if _mass_batch_depth == 0:
-		cargo_mass = _entry_category_mass("cargo")
-		_refresh_mass()
-
-
 func set_mass_entry(
 	entry_id: String,
 	entry_mass_kg: float,
@@ -619,8 +635,6 @@ func set_mass_entry(
 			"position": local_position,
 			"category": category,
 		}
-	if _mass_batch_depth > 0:
-		return
 	if category == "cargo":
 		cargo_mass = _entry_category_mass("cargo")
 	else:
@@ -968,7 +982,7 @@ func dock_at_berth(dock: Node3D, _berth_index: int = 0) -> void:
 	var xform: Transform3D
 	if dock is QuayBerthSlot:
 		var slot := dock as QuayBerthSlot
-		xform = slot.global_transform * slot.ship_dock_local(half_beam)
+		xform = slot.global_transform * slot.ship_dock_local(half_beam, length_m)
 	else:
 		var local := Vector3(0.0, 0.0, -(half_beam + 1.5))
 		## Legacy PortDock faces: offset −Z, bow along +X.

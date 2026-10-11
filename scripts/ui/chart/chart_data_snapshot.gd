@@ -30,6 +30,8 @@ var layout_checksum := ""
 var world_size_m := 40000.0
 var world_preset := "standard"
 var preview := false
+var live_world_id := 0
+var catalog_revision := -1
 
 var _port_by_id: Dictionary = {}
 
@@ -39,6 +41,7 @@ static func from_live_tree(tree: SceneTree) -> ChartDataSnapshot:
 	if tree == null:
 		return out
 	var world := tree.get_first_node_in_group("world")
+	if world != null: out.live_world_id = world.get_instance_id()
 	if world != null and world.has_method("get_world_layout"):
 		out.layout = world.call("get_world_layout") as WorldLayout
 	if world != null and world.has_method("get_shipping_lane_network"):
@@ -54,6 +57,7 @@ static func from_live_tree(tree: SceneTree) -> ChartDataSnapshot:
 		out.world_preset = str(context.get("world_preset", "standard"))
 	var registry := tree.root.get_node_or_null("PortCatalog")
 	if registry != null:
+		out.catalog_revision = int(registry.get("revision"))
 		for id_raw in registry.call("get_port_ids"):
 			var info := (registry.call("get_port_info", str(id_raw)) as Dictionary).duplicate(true)
 			out.ports.append(info)
@@ -108,6 +112,16 @@ static func for_preview(
 
 func is_valid() -> bool:
 	return layout != null and not ports.is_empty()
+
+
+func matches_live_tree(tree: SceneTree) -> bool:
+	if preview or tree == null: return false
+	var world := tree.get_first_node_in_group("world")
+	var registry := tree.root.get_node_or_null("PortCatalog")
+	if world == null or registry == null or world.get_instance_id() != live_world_id:
+		return false
+	if int(registry.get("revision")) != catalog_revision: return false
+	return world.has_method("get_world_layout") and world.call("get_world_layout") == layout
 
 
 func port_ids() -> PackedStringArray:

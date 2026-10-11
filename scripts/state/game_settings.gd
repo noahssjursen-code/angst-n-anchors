@@ -73,6 +73,8 @@ func apply_world_size_preset(preset_id: String) -> void:
 
 func _ready() -> void:
 	load_settings()
+	if ShipyardPlaytestMode.active():
+		window_mode = WindowMode.WINDOWED
 	apply_all()
 
 
@@ -111,6 +113,8 @@ func load_settings(path: String = CFG_PATH) -> void:
 
 
 func save_settings(path: String = CFG_PATH) -> void:
+	if ShipyardPlaytestMode.active():
+		return
 	var cfg := ConfigFile.new()
 	cfg.set_value("audio",    "master",         master_volume)
 	cfg.set_value("audio",    "sfx",            sfx_volume)
