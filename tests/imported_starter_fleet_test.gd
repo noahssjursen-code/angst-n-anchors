@@ -36,7 +36,7 @@ func _ready() -> void:
 		check(boat.find_children("SeatInteraction", "Node", true, false).size() >= 2, "F helm and crew seats")
 		var drive := boat.get_node("HullVisual/DriveGear") as ShipDriveVisual
 		drive.local_boat = null
-		drive.apply_snapshot({"throttle":.6,"steering":.5,"powered":true},1)
+		check(drive.apply_snapshot({"throttle":.6,"steering":.5,"powered":true},drive.revision + 1), "Fresh authority drive snapshot accepted")
 		var rotation := drive.propeller.rotation.z
 		drive._process(.1)
 		check(not is_equal_approx(rotation, drive.propeller.rotation.z), "Starter propeller responds")
