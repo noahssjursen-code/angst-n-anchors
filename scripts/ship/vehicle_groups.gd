@@ -18,7 +18,7 @@ extends RefCounted
 ##         add_to_group(VehicleGroups.SHIP_OWNER_ONLY)
 
 ## Tag any node that should be removed from a remote (non-owner) visual.
-## Use for cameras, input controllers, engine audio, board prompts — anything
+## Use for cameras, input controllers, board prompts — anything
 ## that only makes sense for the local player who actually owns or pilots the vehicle.
 const SHIP_OWNER_ONLY := "ship_owner_only"
 

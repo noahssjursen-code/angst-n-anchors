@@ -744,7 +744,9 @@ func _apply_exposure(daylight: float, cloud: float, storm: float, fog_t: float) 
 	var night_lift := lerpf(1.12, 1.02, daylight)
 	var weather_lift := cloud * 0.012 + storm * 0.012
 	_environment.tonemap_exposure = clampf(night_lift + weather_lift, 1.0, 1.14)
-	_environment.adjustment_contrast = lerpf(1.0, 1.045, daylight)
+	# Materials, sky fill and ACES already provide scene contrast. Stacking an
+	# extra curve crushes shaded surfaces and makes thin metal look cut out.
+	_environment.adjustment_contrast = 1.0
 
 
 func _apply_fog(solar: Dictionary, fog_t: float, daylight: float, cloud: float, storm: float) -> void:
@@ -855,14 +857,16 @@ func _apply_screen_effects(daylight: float, cloud: float, rain: float, storm: fl
 	if _screen_rect != null:
 		_screen_rect.visible = enable_weather_post_fx
 	var active := 1.0 if enable_weather_post_fx else 0.0
-	_screen_material.set_shader_parameter("outline_strength", lerpf(0.025, 0.04, daylight) * active)
-	_screen_material.set_shader_parameter("grain_strength", lerpf(0.012, 0.024, 1.0 - daylight) * active)
+	# Post-process outlines/grain run after temporal AA and reintroduce harsh,
+	# unstable pixels around the harbour's fine wires and distant silhouettes.
+	_screen_material.set_shader_parameter("outline_strength", 0.0)
+	_screen_material.set_shader_parameter("grain_strength", 0.0)
 	_screen_material.set_shader_parameter("vignette_strength", lerpf(0.045, 0.085, storm) * active)
 	_screen_material.set_shader_parameter("weather_desaturation", clampf(cloud * 0.015 + storm * 0.055 + fog_t * 0.025, 0.0, 0.085) * active)
 	_screen_material.set_shader_parameter("rain_cool_shift", rain * 0.018 * active)
 	_screen_material.set_shader_parameter("shadow_coolness", lerpf(0.035, 0.065, cloud) * active)
 	_screen_material.set_shader_parameter("highlight_warmth", lerpf(0.035, 0.012, cloud) * active)
-	_screen_material.set_shader_parameter("weather_contrast", (0.018 + storm * 0.012) * active)
+	_screen_material.set_shader_parameter("weather_contrast", 0.0)
 
 
 ## Binds LandField's baked shelter texture to the ocean shader. The texture is

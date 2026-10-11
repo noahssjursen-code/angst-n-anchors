@@ -1,13 +1,15 @@
 # Imported 3D models
 
-## Coastal Express passenger ferry — construction in progress (9 October 2026)
+## Coastal Express passenger ferry (9–10 October 2026)
 
-`examples/coastal_express_recipe.json` is the editable first construction of a
+`resources/data/vessels/prebuilt/coastal_express.json` is official editable stock:
 36.5 × 11 m catamaran, with 240 authored passenger-seat sockets, raised bridge,
 glazed saloon, bow ramp, luggage racks and two shaft/rudder assemblies. It is
-**not yet sale-ready stock or integrated with production passenger routes**. A
-two-terminal service slice is now verified in isolation. The research and
-remaining build order are in `docs/passenger-ferry-research-2026-10-09.txt` and
+sold through the shipwright for 78,000 NOK and included in the development fleet.
+Production passenger booking, boarding, cancellation and destination settlement
+are integrated. `examples/coastal_express_recipe.json` remains the source recipe.
+Research and the detailed acceptance/remaining gaps are recorded in
+`docs/passenger-ferry-research-2026-10-09.txt` and
 `docs/overnight-gameplay-2026-10-09.txt`. This is an original arrangement, not a
 claim to reproduce Fjordbris's exact machinery or certified passenger capacity.
 
@@ -15,7 +17,7 @@ claim to reproduce Fjordbris's exact machinery or certified passenger capacity.
 `build_boarding_gear.py` and `arrangement.py`
 produce separate `.blend`/`.glb` modules and the recipe. The terminal is an
 isolated pile-supported pier with an 18 × 9 m waiting room, canopy, seating and
-information pylons; generated ports are unchanged. All surfaces reuse approved
+information pylons; eligible generated ports receive dedicated terminals. All surfaces reuse approved
 maps. The new `composite_enamel` finish uses Paint004 without steel corrosion.
 Cabin paint, hull regions and seat upholstery remain independently recolourable.
 
@@ -29,8 +31,9 @@ walkable collision. Occupancy prevents lifting someone; casting off first reques
 stow and keeps the lines, then a second order releases after the ramp is secured.
 Propulsion and thruster forces remain blocked until then. `request_boarding()`
 reopens boarding at a valid secured landing. The L-shaped support quay reuses
-the existing pier modules and harbour occupancy/line system. Generated ports are
-still unchanged; `PassengerTerminal.register_berth()` is explicit opt-in.
+the existing pier modules and harbour occupancy/line system. PassengerOperations
+registers generated terminal metadata without constructing distant port models;
+the streamed terminal uses `PassengerTerminal.register_berth()` for its live berth.
 
 The imported physics profile now supports two offset buoyancy strips with a
 matching aggregate displacement table for spawn/equilibrium. Split convex hull
@@ -45,7 +48,7 @@ Review: `scenes/showcases/coastal_express_showcase.tscn -- --shipyard-playtest
 checks the recipe, twin-hull volume/collision, flat-water handling and retained
 monohull contract. Add `--editor-roundtrip` for actual Shipyard save/reload;
 add `--access` in a rendered run for real-player pier/ramp/door/aisle/stair access.
-Use isolated runs; do not overwrite captain data or add this to stock prematurely.
+Use isolated runs; do not overwrite captain data when reviewing stock.
 
 `tests/ferry_boarding_test.tscn -- --shipyard-playtest` uses actual player collision
 to cross in both directions under bounded scripted heave/pitch/roll, then checks
@@ -83,9 +86,19 @@ and are instanced without per-passenger controllers or skeletons. Near detail is
 used below 80 m; cabin occupants are omitted beyond 450 m. The manifest and ship
 mass remain active independently. See that asset directory for provenance/cost.
 
-Outstanding: production passenger NPC/booking UI, generated-port and stock-sale
-integration, autonomous bow approach, walking boarding queues, side boarding,
-toilets/kiosk and final interior detail, and nighttime fixture acceptance.
+`tests/passenger_live_loop_test.tscn` verifies the actual generated-terminal agent
+and booking controls, cancellation/rebooking, 240 passengers, scratch world reload,
+destination unloading and exact-once payment. Travel is teleported in this fixture.
+`tests/passenger_passage_test.tscn` covers stock purchase/retry, deployment, booked
+navigation targets, ramp/line/heading guards and a short real underway segment.
+The existing autopilot handles passage after manually backing clear 120 m and
+facing outbound; it hands back 200 m before the destination for manual berthing.
+Only a short underway segment was observed, not a full continuous crossing.
+
+Outstanding: full continuous passage review, mid-passage coordinate restoration,
+autonomous bow approach, walking boarding queues, side boarding, toilets/kiosk,
+final interior detail and nighttime fixture acceptance. Passenger UI hooks were
+tested in the current working UI; some coexist with its unrelated pending rebuild.
 
 ## Northline 40 container feeder (9 October 2026)
 

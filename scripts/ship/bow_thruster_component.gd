@@ -27,6 +27,10 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if _body != null:
+		var engine := _body.get_node_or_null("PropulsionComponent") as PropulsionComponent
+		if engine != null and not engine.engine_running:
+			return
 	if _body is BoatBody and not is_zero_approx(lateral_input) and not (_body as BoatBody).departure_block_reason().is_empty():
 		lateral_input = 0.0
 	if Engine.is_editor_hint() or _body == null or is_zero_approx(lateral_input):

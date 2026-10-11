@@ -156,6 +156,7 @@ static func needs(profile: PortTradeProfile, size: int, berths: Dictionary) -> A
 	if profile==null: return jobs
 	var groups := {}
 	for cid in profile.export_slots+profile.import_slots:
+		if not CommodityCatalog.generates_port_facility(cid): continue
 		var family := CommodityCatalog.commodity_terminal_family(cid)
 		# Keep incompatible liquid products in separate facilities.
 		var kind := cid if family=="liquid" else family

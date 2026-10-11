@@ -48,6 +48,8 @@ func run() -> void:
 	if not check(DevelopmentFleet.is_development(dev), "menu creates development captain"):
 		finish(); return
 	var dev_id := dev.account_id
+	var dev_seed := int(dev.world_context.get("seed", 0))
+	check(dev_seed > 0 and dev_seed != 42, "development captain receives a generated world seed")
 	var count := DevelopmentFleet.catalog_entries().size()
 	check(dev_id != normal_id, "development captain uses a separate save slot")
 	check(dev.owned_vessels.size() == count and count >= 6, "all catalog vessels owned, including Northline and ferry")
@@ -58,6 +60,7 @@ func run() -> void:
 	check(bool(dev.company.get("tablet_received", false)), "company tablet unlocked")
 	check(FileAccess.get_sha256(normal_path) == normal_hash, "creating development fleet preserves ordinary captain bytes")
 	var saved := PlayerSaveStore.load_player()
+	check(int(saved.world_context.get("seed", 0)) == dev_seed, "generated seed survives disk roundtrip")
 	check(saved.owned_vessels.size() == count and DevelopmentFleet.is_development(saved), "fleet and opt-in marker survive disk roundtrip")
 	# Model an older development save from before the latest stock was added.
 	var first: Dictionary = dev.owned_vessels[0].duplicate(true)
@@ -82,6 +85,7 @@ func run() -> void:
 	action.pressed.emit()
 	check(PlayerSession.data.account_id == dev_id and LocalCaptainStore.list_captains().size() == 2, "repeated button reuses development captain")
 	check(JSON.stringify(PlayerSession.data.owned_vessels) == fleet_before, "repeated load does not duplicate or reset ships")
+	check(int(PlayerSession.data.world_context.get("seed", 0)) == dev_seed, "resume preserves the development captain's world seed")
 	check(FileAccess.get_sha256(normal_path) == normal_hash, "all development operations leave normal save unchanged")
 	for frame in 80:
 		await get_tree().process_frame

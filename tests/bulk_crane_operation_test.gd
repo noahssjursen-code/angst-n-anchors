@@ -122,11 +122,9 @@ func _ready() -> void:
 	for mode in ["load", "unload"]:
 		events.clear()
 		var before := hold.state.filled_tonnes_t
-		npc._panel.visible = true
-		if mode == "load": npc._panel._btn_load.pressed.emit()
-		else: npc._panel._btn_unload.pressed.emit()
+		if mode == "load": npc._on_request_load()
+		else: npc._on_request_unload()
 		_check(job.served_ship() == boat and job.job_mode() == mode, mode + " retains dock job context")
-		_check(npc._panel._btn_load.disabled and npc._panel._btn_unload.disabled, "running job disables duplicate start buttons")
 		_check(not job.start_job(boat, mode), "duplicate request rejected without clearing active identity")
 		_check(job.served_ship() == boat and job.job_mode() == mode, "duplicate request preserves identity")
 		var last_phase := -1
@@ -140,10 +138,7 @@ func _ready() -> void:
 					await _capture_grab(mode + "-scoop")
 				if last_phase == BulkCraneAutoOperator.Phase.DUMP_B:
 					if mode == "load": _check(hold.contains_grab_mouth(crane.get_bucket_mouth_global()), "actual mouth enters hatch before release")
-					_check(npc._panel._status.text.contains("open + dump"), "NPC panel follows phase changes")
-					npc._panel.visible = false
 					await _capture(mode + "-over-target")
-					npc._panel.visible = true
 			if not operator.is_active(): break
 			await get_tree().physics_frame
 		for i in 30: await get_tree().physics_frame
@@ -154,20 +149,19 @@ func _ready() -> void:
 		var expected := minf(before + crane.bucket_capacity_tonnes_t(), hold.state.capacity_tonnes_t) if mode == "load" else maxf(before - crane.bucket_capacity_tonnes_t(), 0)
 		_check(is_equal_approx(expected, hold.state.filled_tonnes_t), "exact transferred tonnage with no overflow")
 		_check(is_equal_approx(boat.cargo_mass, hold.state.filled_tonnes_t * 1000), "ship mass follows transferred inventory")
-		_check(npc._panel._status.text.contains("idle"), "NPC panel exits running status")
 		await _capture(mode + "-end")
 	# Stop during a final loaded scoop, then continue unloading. Inventory stays
 	# in the grab and the restarted job finishes even though the hold is empty.
 	hold.withdraw_lot(INF)
 	hold.accept_lot(BulkCargoLot.create("iron_ore", 5))
 	events.clear()
-	npc._panel._btn_unload.pressed.emit()
+	npc._on_request_unload()
 	for i in 600:
 		operator._process(.1)
 		if operator.get_phase() == BulkCraneAutoOperator.Phase.RAISE_A or not operator.is_active(): break
 		await get_tree().physics_frame
 	_check(is_equal_approx(crane.get_bucket_lot().tonnes_t, 5) and hold.state.is_empty(), "last scoop is in the grab")
-	npc._panel._btn_stop.pressed.emit()
+	npc._on_request_stop()
 	_check(events == ["started", "stopped"] and is_equal_approx(crane.get_bucket_lot().tonnes_t, 5), "stop retains carried cargo")
 	events.clear()
 	contexts.clear()
@@ -189,14 +183,13 @@ func _ready() -> void:
 	# teleport a payload. Use the same NPC/job path and retain the carried lot.
 	events.clear()
 	crane.hoist_max_m = 8.0
-	npc._panel._btn_load.pressed.emit()
+	npc._on_request_load()
 	for i in 500:
 		operator._process(.1)
 		if not operator.is_active(): break
 		await get_tree().physics_frame
 	_check(not job.is_job_active() and not operator.is_active(), "unreachable lower target stops job")
 	_check(events == ["started", "stopped"] and not job.last_failure.is_empty(), "unreachable target reports failure without false completion")
-	_check(npc._panel._status.text.contains("cannot reach"), "NPC explains failed approach")
 	await _capture("unreachable-target-message")
 	# Stopping an inactive operator must never manufacture another job event.
 	operator.stop()
@@ -216,11 +209,8 @@ func _capture_grab(label: String) -> void:
 	# Show the mechanism unobscured; stockpile remains present for the operation.
 	var pile_visible := mound.visible
 	mound.hide()
-	var panel_visible := npc._panel.visible
-	npc._panel.hide()
 	await _capture(label)
 	mound.visible = pile_visible
-	npc._panel.visible = panel_visible
 	camera.global_transform = old_pose
 
 func _lip_gap() -> float:

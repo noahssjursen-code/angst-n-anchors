@@ -1,308 +1,171 @@
 extends Node
 
 const HelmMinimapScript := preload("res://scripts/ui/chart/helm_minimap.gd")
-const WorldBootstrapScript := preload("res://scripts/world/world_bootstrap.gd")
-
-## Autoload — manages all non-ship UI: pause menu (ESC), sea chart (M),
-## and the persistent walking HUD.
-##
-## Layer 5  — WalkingHud (always on during gameplay)
-## Layer 20 — Pause / Map modal screens
-
-enum Screen { NONE, PAUSE, MAP, COMPANY, SETTINGS }
-
-var _screen:          Screen     = Screen.NONE
-var _prev_mouse_mode: int        = Input.MOUSE_MODE_VISIBLE
-var _helm_active:     bool       = false
-var _helm_cursor_released: bool  = false
-var _hud_layer:   CanvasLayer
-var _menu_layer:  CanvasLayer
-var _walking_hud: WalkingHud
-var _hints:       HintOverlay
-var _bg:          ColorRect
-var _pause_root:  Control
-var _map:         MapOverlay
+enum Screen { NONE, MAP, PANEL }
+var _screen: Screen = Screen.NONE
+var _prev_mouse_mode := Input.MOUSE_MODE_VISIBLE
+var _helm_active := false
+var _helm_cursor_released := false
+var _gameplay := false
+var _hud_layer: CanvasLayer
+var _menu_layer: CanvasLayer
+var _map: MapOverlay
 var _minimap
-var _settings:    SettingsPanel
-var _company:     CompanyPanel
-
+var _panel: VoyagePanel
+var _hud: VoyageHud
+var _loading: Label
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	# ── Walking HUD layer (persistent) ────────────────────────────────────────
-	_hud_layer       = CanvasLayer.new()
-	_hud_layer.layer = 5
+	_hud_layer = CanvasLayer.new()
+	_hud_layer.layer=5
 	add_child(_hud_layer)
-
-	_walking_hud = WalkingHud.new()
-	_hud_layer.add_child(_walking_hud)
-
-	_hints = HintOverlay.new()
-	_hud_layer.add_child(_hints)
-
-	# ── Modal menu layer ───────────────────────────────────────────────────────
-	_menu_layer              = CanvasLayer.new()
-	_menu_layer.layer        = 20
-	_menu_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	_menu_layer = CanvasLayer.new()
+	_menu_layer.layer=20
 	add_child(_menu_layer)
-
-	_bg              = ColorRect.new()
-	_bg.color        = Color(0.02, 0.03, 0.08, 0.86)
-	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_menu_layer.add_child(_bg)
-
-	_pause_root              = _build_pause()
-	_pause_root.process_mode = Node.PROCESS_MODE_ALWAYS
-	_menu_layer.add_child(_pause_root)
-
-	_map              = MapOverlay.new()
-	_map.process_mode = Node.PROCESS_MODE_ALWAYS
-	_map.close_requested.connect(func() -> void: _set_screen(Screen.NONE))
+	_map = MapOverlay.new()
+	_map.close_requested.connect(func():_set_screen(Screen.NONE))
 	_menu_layer.add_child(_map)
-
-	_company = CompanyPanel.new()
-	_company.process_mode = Node.PROCESS_MODE_ALWAYS
-	_company.close_requested.connect(func() -> void: _set_screen(Screen.PAUSE))
-	_menu_layer.add_child(_company)
-
 	_minimap = HelmMinimapScript.new()
-	_minimap.name = "HelmMinimap"
+	_minimap.name="HelmMinimap"
 	_minimap.setup(_map)
 	_hud_layer.add_child(_minimap)
-
-	_settings              = SettingsPanel.new()
-	_settings.process_mode = Node.PROCESS_MODE_ALWAYS
-	_settings.close_requested.connect(func() -> void: _set_screen(Screen.PAUSE))
-	_menu_layer.add_child(_settings)
-
-	_set_screen(Screen.NONE)
-
-	# Watch for boat controllers spawned at any point
+	# LocalPlayerView loads after this autoload.
+	call_deferred("_build_voyage_ui")
 	get_tree().node_added.connect(_on_node_added)
-	for n in get_tree().root.find_children("*", "BoatController", true, false):
-		_connect_controller(n as BoatController)
-
-	var scene := get_tree().current_scene
-	if scene != null and String(scene.scene_file_path).ends_with("main_menu.tscn"):
-		set_gameplay_hud_visible(false)
-
-
-func set_gameplay_hud_visible(visible: bool) -> void:
-	if _hud_layer != null:
-		_hud_layer.visible = visible
-
-
-## Pause the game when the window loses focus. Skip if we're already in
-## a modal screen (paused already) or sitting on the main menu (no game).
-func _on_window_focus_exited() -> void:
-	if _screen != Screen.NONE:
-		return
-	# `current_scene` is the main menu before the world boots — don't pause it.
-	var scene := get_tree().current_scene
-	if scene == null or String(scene.scene_file_path).ends_with("main_menu.tscn"):
-		return
-	_set_screen(Screen.PAUSE)
-
-
-# ── Input ─────────────────────────────────────────────────────────────────────
-
-func _unhandled_input(event: InputEvent) -> void:
-	if (
-		event is InputEventKey
-		and event.pressed
-		and not event.echo
-		and event.keycode == KEY_C
-		and _helm_active
-		and _screen == Screen.NONE
-	):
-		_toggle_helm_cursor()
-		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("ui_cancel"):
-		if _screen == Screen.SETTINGS or _screen == Screen.COMPANY:
-			_set_screen(Screen.PAUSE)
-			get_viewport().set_input_as_handled()
-		elif _screen != Screen.NONE:
-			_set_screen(Screen.NONE)
-			get_viewport().set_input_as_handled()
-		elif not _helm_active:
-			# Helm exit is handled by CaptainsChair. NPC dialogs consume ESC while open.
-			_set_screen(Screen.PAUSE)
-			get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("open_map") and _screen != Screen.PAUSE:
-		# Main menu hosts its own chart for home-port pick; don't open the
-		# empty gameplay overlay over the title screen.
-		var scene := get_tree().current_scene
-		if scene != null and String(scene.scene_file_path).ends_with("main_menu.tscn"):
-			return
-		_set_screen(Screen.MAP if _screen != Screen.MAP else Screen.NONE)
-		get_viewport().set_input_as_handled()
-
-
-# ── Screen switching ──────────────────────────────────────────────────────────
-
-func _set_screen(s: Screen) -> void:
-	var was_modal        := _screen != Screen.NONE
-	_screen              = s
-	var modal            := s != Screen.NONE
-	if modal and not was_modal:
-		_prev_mouse_mode = Input.mouse_mode
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	elif not modal and was_modal:
-		Input.mouse_mode = _prev_mouse_mode
-	_menu_layer.visible  = modal
-	_bg.visible          = modal
-	_pause_root.visible  = s == Screen.PAUSE
-	_map.visible         = s == Screen.MAP
-	_company.visible     = s == Screen.COMPANY
-	## The sea chart is opaque and simulation stays live, including in MP. Do
-	## not spend a full 3D frame rendering a world the chart completely covers.
-	var viewport := get_viewport()
-	if viewport != null:
-		RenderingServer.viewport_set_disable_3d(viewport.get_viewport_rid(), s == Screen.MAP)
-	if s == Screen.MAP:
-		_map.open_navigation()
-	_settings.visible    = s == Screen.SETTINGS
-	if _minimap != null:
-		_minimap.set_modal_hidden(modal)
-	# Pause while on Pause OR Settings — both are reached from the pause menu
-	# and a moving world behind the settings panel is jarring.
-	# However, in multiplayer mode, we must never pause the tree!
-	var config := get_node_or_null("/root/ServerConfig")
-	var is_mp := false
-	if config != null:
-		is_mp = bool(config.get("is_multiplayer_mode"))
-		
-	get_tree().paused    = (s == Screen.PAUSE or s == Screen.COMPANY or s == Screen.SETTINGS) and not is_mp
-
-
-# ── Pause panel ───────────────────────────────────────────────────────────────
-
-func _build_pause() -> Control:
-	var root      := Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	var panel := UiBuilder.panel()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left   = -170.0
-	panel.offset_right  =  170.0
-	panel.offset_top    = -190.0
-	panel.offset_bottom =  190.0
-	root.add_child(panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 14)
-	panel.add_child(vbox)
-
-	vbox.add_child(UiBuilder.title_label("ANGST 'N ANCHORS"))
-	vbox.add_child(UiBuilder.subtitle_label("— PAUSED —"))
-	vbox.add_child(UiBuilder.separator())
-
-	# Marks display.
-	var marks_label := Label.new()
-	marks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	marks_label.add_theme_font_size_override("font_size", 15)
-	marks_label.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	marks_label.name = "MarksLabel"
-	vbox.add_child(marks_label)
-	_update_marks_label(marks_label)
-	var session := get_node_or_null("/root/PlayerSession")
-	if session != null:
-		session.marks_changed.connect(func(bal: int) -> void:
-			marks_label.text = PlayerSession.format_money(bal)
-		)
-
-	vbox.add_child(UiBuilder.separator())
-
-	var resume := UiBuilder.button("RESUME  [ ESC ]")
-	resume.pressed.connect(func() -> void: _set_screen(Screen.NONE))
-	vbox.add_child(resume)
-
-	var map_btn := UiBuilder.button("SEA CHART  [ M ]")
-	map_btn.pressed.connect(func() -> void: _set_screen(Screen.MAP))
-	vbox.add_child(map_btn)
-
-	var company_btn := UiBuilder.button("COMPANY")
-	company_btn.pressed.connect(func() -> void: _set_screen(Screen.COMPANY))
-	vbox.add_child(company_btn)
-
-	var settings_btn := UiBuilder.button("SETTINGS")
-	settings_btn.pressed.connect(func() -> void: _set_screen(Screen.SETTINGS))
-	vbox.add_child(settings_btn)
-
-	var quit := UiBuilder.button("QUIT TO DESKTOP")
-	quit.pressed.connect(_quit_to_desktop)
-	vbox.add_child(quit)
-
-	var title_btn := UiBuilder.button("RETURN TO BUILDER" if ShipyardPlaytestMode.active() else "RETURN TO TITLE")
-	title_btn.pressed.connect(_return_to_title)
-	vbox.add_child(title_btn)
-
-	return root
-
-
-func _update_marks_label(lbl: Label) -> void:
-	var session := get_node_or_null("/root/PlayerSession")
-	lbl.text = PlayerSession.format_money(session.get_marks() if session != null else 0)
-
-
-# ── Boat controller wiring ────────────────────────────────────────────────────
-
-func _on_node_added(node: Node) -> void:
-	if node is BoatController:
-		_connect_controller(node as BoatController)
-
-
-func _connect_controller(bc: BoatController) -> void:
-	if not bc.helm_activated.is_connected(_on_helm_on):
-		bc.helm_activated.connect(_on_helm_on)
-	if not bc.helm_deactivated.is_connected(_on_helm_off):
-		bc.helm_deactivated.connect(_on_helm_off)
-
-
-func _on_helm_on() -> void:
-	_walking_hud.visible = false
-	_helm_active = true
-	_helm_cursor_released = Input.mouse_mode == Input.MOUSE_MODE_VISIBLE
-	if _minimap != null:
-		_minimap.set_helm_active(true)
-
-
-func _on_helm_off() -> void:
-	_walking_hud.visible = true
-	_helm_active = false
-	if _helm_cursor_released and _screen == Screen.NONE:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	_helm_cursor_released = false
-	if _minimap != null:
-		_minimap.set_helm_active(false)
-
-
-func _toggle_helm_cursor() -> void:
-	_helm_cursor_released = Input.mouse_mode != Input.MOUSE_MODE_VISIBLE
-	Input.mouse_mode = (
-		Input.MOUSE_MODE_VISIBLE
-		if _helm_cursor_released
-		else Input.MOUSE_MODE_CAPTURED
-	)
-
-
-func _quit_to_desktop() -> void:
-	var session := get_node_or_null("/root/PlayerSession")
-	if session != null and session.has_method("save_now"):
-		session.call("save_now")
-	get_tree().quit()
-
-
-func _return_to_title() -> void:
-	if ShipyardPlaytestMode.active():
-		get_tree().quit()
-		return
 	_set_screen(Screen.NONE)
-	get_tree().paused = false
-	WorldBootstrapScript.return_to_title(get_tree())
+	set_gameplay_hud_visible(false)
 
+func _build_voyage_ui() -> void:
+	_hud = VoyageHud.new()
+	_hud_layer.add_child(_hud)
+	_panel = VoyagePanel.new()
+	_panel.close_requested.connect(func():_set_screen(Screen.NONE))
+	_panel.chart_requested.connect(func():_set_screen(Screen.MAP))
+	_panel.message_requested.connect(notify)
+	_menu_layer.add_child(_panel)
+	PlayerSession.marks_changed.connect(_account_updated)
+
+func _account_updated(_balance: int) -> void:
+	var ledger: Array = LocalPlayerView.get_company_summary().get("recent_transactions",[])
+	if not ledger.is_empty():
+		notify(str(ledger[0].get("description","Account updated"))+" · "+PlayerData.format_money(int(ledger[0].get("amount_marks",0))))
 
 func is_modal_open() -> bool:
 	return _screen != Screen.NONE or get_tree().get_first_node_in_group("passenger_terminal_panel") != null
+
+func set_gameplay_hud_visible(value: bool) -> void:
+	_gameplay = value
+	if is_instance_valid(_hud_layer): _hud_layer.visible=value
+
+func open_service(npc: NpcInteractable) -> void:
+	if not is_instance_valid(_panel): return
+	_set_screen(Screen.PANEL)
+	_panel.selected=""
+	_panel.show_service(npc)
+
+func open_tablet() -> void:
+	_set_screen(Screen.PANEL)
+	_panel.show_tablet()
+
+func _input(event: InputEvent) -> void:
+	if event.is_echo(): return
+	var focused := get_viewport().gui_get_focus_owner()
+	if (focused is LineEdit or focused is TextEdit) and not event.is_action_pressed("ui_cancel"):
+		return
+	if event.is_action_pressed("ui_cancel"):
+		if is_modal_open(): _set_screen(Screen.NONE)
+		elif _gameplay:
+			_set_screen(Screen.PANEL)
+			_panel.show_pause()
+		else: return
+	elif event.is_action_pressed("open_map") and (_gameplay or _screen == Screen.MAP):
+		_set_screen(Screen.MAP if _screen!=Screen.MAP else Screen.NONE)
+	elif event.is_action_pressed("open_journal") and _gameplay:
+		if _screen==Screen.PANEL: _set_screen(Screen.NONE)
+		else: open_tablet()
+	elif event is InputEventKey and event.pressed and event.keycode==KEY_C and _helm_active and not is_modal_open():
+		_toggle_helm_cursor()
+	else: return
+	get_viewport().set_input_as_handled()
+
+func _unhandled_input(_event: InputEvent) -> void:
+	if is_modal_open(): get_viewport().set_input_as_handled()
+
+func _set_screen(screen: Screen) -> void:
+	var was_modal := is_modal_open()
+	_screen=screen
+	var modal := is_modal_open()
+	if modal and not was_modal:
+		_prev_mouse_mode=Input.mouse_mode
+		Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
+	elif not modal and was_modal:
+		Input.mouse_mode=_prev_mouse_mode
+	_menu_layer.visible=modal
+	_map.visible=screen==Screen.MAP
+	if is_instance_valid(_panel):
+		_panel.visible=screen==Screen.PANEL
+		if screen!=Screen.PANEL:
+			_panel.npc=null
+			_panel.page=""
+			VoyageStyle.clear(_panel._body)
+	RenderingServer.viewport_set_disable_3d(get_viewport().get_viewport_rid(), screen==Screen.MAP)
+	if screen==Screen.MAP: _map.open_navigation()
+	_minimap.set_modal_hidden(modal)
+	if is_instance_valid(_hud):
+		_hud.modal=modal
+		_hud.present(LocalPlayerView.get_voyage_snapshot())
+
+func notify(text: String) -> void:
+	if is_instance_valid(_hud): _hud.notify(text)
+	if _screen==Screen.PANEL and is_instance_valid(_panel): _panel._feedback.text=text
+
+func _on_node_added(node: Node) -> void:
+	if node is BoatController:
+		if not node.helm_activated.is_connected(_on_helm_on): node.helm_activated.connect(_on_helm_on)
+		if not node.helm_deactivated.is_connected(_on_helm_off): node.helm_deactivated.connect(_on_helm_off)
+	if node is HarbourMasterNpc:
+		node.deployment_finished.connect(func(_ok: bool,message: String):
+			if is_instance_valid(_panel) and _panel.visible and _panel.npc == node:
+				_panel.show_service(node)
+			notify(message))
+	if node is QuayEquipmentJob:
+		node.job_completed.connect(func(_context: Dictionary,_report: Dictionary):notify("Cargo operation complete. Check your manifest and account."))
+		node.job_stopped.connect(func(_context: Dictionary):
+			var text := "Transfer stopped. Cargo already moved stays transferred."
+			if node is BulkCraneEquipmentJob or node is ProvisionCraneEquipmentJob:
+				if not str(node.last_failure).is_empty(): text="Transfer stopped: "+str(node.last_failure)
+			notify(text))
+	if node.has_signal("boot_finished"):
+		node.connect("boot_finished",_world_ready,CONNECT_ONE_SHOT)
+
+func show_loading() -> void:
+	if is_instance_valid(_loading): _loading.queue_free()
+	_loading=VoyageStyle.label("Preparing the coast…\nBuilding nearby terrain, harbour and vessel services.",28,VoyageStyle.LIGHT)
+	_loading.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_loading.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+	_loading.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+	_loading.add_theme_stylebox_override("normal",VoyageStyle.box(VoyageStyle.DARK))
+	_hud_layer.add_child(_loading)
+	set_gameplay_hud_visible(true)
+
+func _world_ready() -> void:
+	if is_instance_valid(_loading): _loading.queue_free()
+	_loading=null
+	set_gameplay_hud_visible(true)
+	Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
+
+func _on_helm_on() -> void:
+	_helm_active=true
+	_helm_cursor_released=Input.mouse_mode==Input.MOUSE_MODE_VISIBLE
+	_minimap.set_helm_active(true)
+
+func _on_helm_off() -> void:
+	_helm_active=false
+	if _helm_cursor_released and not is_modal_open(): Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
+	_helm_cursor_released=false
+	_minimap.set_helm_active(false)
+
+func _toggle_helm_cursor() -> void:
+	_helm_cursor_released=Input.mouse_mode!=Input.MOUSE_MODE_VISIBLE
+	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if _helm_cursor_released else Input.MOUSE_MODE_CAPTURED

@@ -2,23 +2,11 @@ extends Node
 
 ## Shared runtime interaction for imported vessels, including editor sea trials.
 var boat: ImportedDraftVessel
-var prompt: Label
 var bindings: Dictionary = {}
 var binding_scan := 0.0
 
 func _ready() -> void:
 	boat = get_parent() as ImportedDraftVessel
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	prompt = Label.new()
-	layer.add_child(prompt)
-	prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	prompt.offset_left = -180
-	prompt.offset_right = 180
-	prompt.offset_top = -92
-	prompt.offset_bottom = -48
-	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt.add_theme_font_size_override("font_size", 22)
 
 func _process(delta: float) -> void:
 	# Identity can arrive after assembly. Bind all doors for remote replay too.
@@ -30,9 +18,6 @@ func _process(delta: float) -> void:
 		for part in boat.part_roots:
 			if BrickCatalog.get_entry(str(part.get_meta("asset_id", ""))).get("style", "") == "door":
 				ensure_binding(part.get_node("PartState"))
-	var player := local_player()
-	var door := looked_at_door(player)
-	prompt.text = "" if door == null else ("Press F to close door" if door.state.door_open else "Press F to open door")
 
 func local_player() -> CharacterBody3D:
 	var view := get_viewport().get_camera_3d()
@@ -108,3 +93,8 @@ func interact(state: ShipPartState, actor_position: Vector3) -> void:
 		if not pivots.is_empty(): swing = 1.0 if pivots[0].to_local(actor_position).x >= 0 else -1.0
 	var opened := not bool(state.state.door_open)
 	binding.request("open" if opened else "close", {"open":opened,"swing":swing})
+	WorldSound.play(
+		"res://resources/audio/world/doors/door_%s_1.wav" % ("open" if opened else "close"),
+		actor_position, -8.0)
+	if not opened:
+		WorldSound.play("res://resources/audio/world/doors/door_latch_1.wav", actor_position, -10.0)

@@ -66,8 +66,6 @@ var _helm_gizmo_on: bool = true
 var _occupied: bool = false
 var _player: CharacterBody3D = null
 var _interaction_area: Area3D
-var _prompt_layer: CanvasLayer
-var _prompt_label: Label
 
 var _boat_cam: Camera3D = null
 var _boat_controller: BoatController = null
@@ -80,7 +78,6 @@ func _ready() -> void:
 		return
 	_ensure_interaction_area()
 	_cache_boat_nodes()
-	_ensure_prompt_ui()
 
 
 func _schedule_editor_gizmo_refresh() -> void:
@@ -117,12 +114,6 @@ func _refresh_editor_interact_gizmo() -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	add_child(mi)
-
-
-func _process(_delta: float) -> void:
-	if Engine.is_editor_hint():
-		return
-	_update_prompt()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -255,43 +246,12 @@ func _ensure_interaction_area() -> void:
 	shape.size = interaction_volume_size
 
 
-func _ensure_prompt_ui() -> void:
-	if _prompt_layer != null:
-		return
-
-	_prompt_layer = CanvasLayer.new()
-	_prompt_layer.name = "BoardPromptLayer"
-	add_child(_prompt_layer)
-
-	_prompt_label = Label.new()
-	_prompt_label.name = "BoardPrompt"
-	_prompt_label.text = prompt_text
-	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_prompt_label.visible = false
-	_prompt_label.add_theme_font_size_override("font_size", 22)
-	_prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt_label.offset_left = -180.0
-	_prompt_label.offset_right = 180.0
-	_prompt_label.offset_top = -92.0
-	_prompt_label.offset_bottom = -48.0
-	_prompt_layer.add_child(_prompt_label)
-
-
-func _update_prompt() -> void:
-	if _prompt_label == null:
-		return
-	_prompt_label.visible = not _occupied and _boarding_player() != null
-
-
 func _board() -> void:
 	_player = _boarding_player()
 	if _player == null:
 		return
 
 	_occupied = true
-	if _prompt_label != null:
-		_prompt_label.visible = false
 
 	_player.set_physics_process(false)
 	_player.set_process_unhandled_input(false)

@@ -86,7 +86,7 @@ func run() -> void:
 		for commodity in berth.commodities:
 			if not live_commodities.has(commodity): live_commodities.append(commodity)
 	for commodity: Dictionary in CommodityCatalog.COMMODITIES:
-		check(live_commodities.has(str(commodity.id)), "live berth exists for " + str(commodity.id))
+		check(live_commodities.has(str(commodity.id)) == CommodityCatalog.generates_port_facility(str(commodity.id)), "live berth generation policy for " + str(commodity.id))
 	await capture("whole-harbour", plot.to_global(Vector3(250, 470, -840)), plot.to_global(Vector3(100, 0, -90)))
 	var npc: HarbourMasterNpc
 	for child in plot.get_children():
@@ -136,7 +136,7 @@ func run() -> void:
 func validate_geometry(data: PortData, layout: WorldLayout) -> void:
 	var plan: Dictionary = data.layout_graph.initial_attributes.berth_plan
 	var quays: Array = plan.quay_stations
-	check(quays.size() == CommodityCatalog.COMMODITIES.size(), "one dedicated quay per commodity")
+	check(quays.size() == CommodityCatalog.GENERATED_PORT_COMMODITIES.size(), "one dedicated quay per implemented commodity")
 	var frame := Transform3D(Basis(Vector3.UP, data.rotation_y), data.world_position)
 	for q: Dictionary in quays:
 		check(PortBerthPlan._loading_face_gap(q, quays, q.berth_side) >= 29, "clear loading pocket " + str(q.id))

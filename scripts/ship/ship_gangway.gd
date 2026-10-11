@@ -1,7 +1,7 @@
 class_name ShipGangway
 extends Node3D
 
-## Boarding is derived from replicated mooring, not a second ownership/save state.
+## Boarding stays down while both helm-ordered lines are fast. Cast-off stows it.
 ## Authored ship-end hinge follows the hull; shore rollers land on actual quay physics.
 const SPAN_MODEL := "res://resources/models/parts/gangway/boarding_gangway_4m.glb"
 const ROLLER_MODEL := "res://resources/models/parts/gangway/gangway_landing_rollers.glb"
@@ -26,6 +26,7 @@ var _probe_time := 0.0
 var _shore_valid := false
 var _berth: QuayBerthSlot
 var _side := 0
+var _heard_deployed := false
 
 func _ready() -> void:
 	process_physics_priority = -5
@@ -86,11 +87,10 @@ func _physics_process(delta: float) -> void:
 	if not is_instance_valid(boat) or _walk == null: return
 	var mooring := boat.get_node_or_null("ShipGameplay/MooringComponent") as MooringComponent
 	var berth := boat.get_moored_berth() as QuayBerthSlot
-	if mooring == null or not mooring.is_moored or berth == null:
+	# Both lines, ordered from the helm. A single bollard toggle must not
+	# drop the span out from under someone crossing to the quay.
+	if mooring == null or not mooring.bow_line_tied or not mooring.stern_line_tied or berth == null:
 		_stow("Not moored")
-		return
-	if Vector2(boat.linear_velocity.x,boat.linear_velocity.z).length() > .8:
-		_stow("Vessel moving")
 		return
 	var toward := boat.to_local(berth.global_position)
 	var side := -1 if toward.x < 0 else 1
@@ -145,6 +145,11 @@ func _physics_process(delta: float) -> void:
 		guard.position.z = -length*.5
 	_walk.collision_layer = BoatBody.LAYER_BOAT_WALK
 	_walk.show()
+	if not _heard_deployed:
+		WorldSound.play(
+			"res://resources/audio/world/gangway/gangway_lower_1.wav",
+			(ship_end + shore_end) * 0.5, -6.0)
+	_heard_deployed = true
 	deployed = true
 	status = "Gangway deployed"
 
@@ -196,6 +201,9 @@ func _close_gate() -> void:
 	_active_gate = null
 
 func _stow(reason: String, clear_berth := true) -> void:
+	if _heard_deployed:
+		WorldSound.play("res://resources/audio/world/gangway/gangway_raise_1.wav", ship_end, -8.0)
+	_heard_deployed = false
 	deployed = false
 	status = reason
 	_close_gate()

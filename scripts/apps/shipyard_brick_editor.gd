@@ -730,7 +730,7 @@ func _build_ship_dialog() -> void:
 	_name_edit.max_length = MAX_VESSEL_NAME_LEN
 	_name_edit.text_changed.connect(func(_text: String) -> void: _refresh_ship_summary())
 	col.add_child(_name_edit)
-	var price_header := UiBuilder.section_header("PRICE (MARKS)")
+	var price_header := UiBuilder.section_header("PRICE (NOK)")
 	price_header.name = "PriceHeader"
 	price_header.visible = false
 	col.add_child(price_header)
@@ -1112,7 +1112,7 @@ func _build_legacy_chrome() -> void:
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(_name_edit)
 	var price_lbl := Label.new()
-	price_lbl.text = "Shipwright price (marks) — 0 = free"
+	price_lbl.text = "Shipwright price (NOK) — 0 = free"
 	price_lbl.add_theme_font_size_override("font_size", 12)
 	price_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
 	col.add_child(price_lbl)
@@ -2981,7 +2981,7 @@ func _on_dev_save_prebuilt() -> void:
 		)
 		print("[Shipyard] Saved draft prebuilt preset: %s" % ProjectSettings.globalize_path(path))
 	else:
-		_show_dev_save_result("SAVED · %s marks · %s" % [saved_price, path], false)
+		_show_dev_save_result("SAVED · %s · %s" % [PlayerData.format_money(saved_price), path], false)
 		print("[Shipyard] Saved official prebuilt preset: %s (price_marks=%d)" % [
 			ProjectSettings.globalize_path(path),
 			saved_price,

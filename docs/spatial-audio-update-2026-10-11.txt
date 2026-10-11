@@ -1,0 +1,22 @@
+Spatial audio update — 11 October 2026
+
+Boat machinery now uses one spatial mix. Engine idle/load/start/stop follow InstalledEngine; controls use the bridge station, bow thruster uses a hull-relative bow position, and structural creaks originate within the hull. No helm-only direct audio or duplicate world engine remains. Other vessels retain the same spatial machinery component.
+Hull water and bridge alarms now inherit vessel movement. Crane motors follow their machinery; mooring lines emit at their cleats. Harbour water is selected relative to the current camera and stays at sea level. Thunder retains the lightning event's bearing/location through the propagation delay.
+Shared world emitters apply a smoothed 7 dB obstruction reduction and lower the native high-frequency filter cutoff when world/deck collision blocks the active camera-to-source ray. Ray checks run at 4 Hz, staggered by emitter. This is basic obstruction, not material transmission or room-acoustic simulation. The enclosing hull collider is excluded; separate cabin/deck colliders participate.
+
+Listening showcase: scenes/showcases/spatial_audio_showcase.tscn
+1 First person; 2 Third person; 3 Helm; 4 Vehicle orbit.
+WASD moves on foot. Hold right mouse to look. Mouse wheel zooms the vehicle view.
+M moves/rotates the source boat. B toggles the wall. Escape releases mouse.
+The showcase never opens captain saves.
+
+Verification:
+598 existing audio-library checks passed.
+17 spatial checks passed, including engine/water attachment, moving ignition, camera switching, obstruction and delayed thunder position.
+The rendered test measured actual mixed left/right output: rotating the camera reversed the dominant channel; moving away reduced output.
+Weather's eight audio-state checks passed in audio-only mode.
+Rendered showcase captures archived for all four camera modes in Pictures/machinescreenshots and inspected.
+
+Remaining tuning limits:
+Broad wind/rain/ocean and roof-rain beds remain ambient; local hull/quay sounds provide spatial detail. Thruster and hull creak locations use hull-relative fallbacks; engine and helm prefer authored machinery/stations. This pass adds no room reverb or binaural HRTF. Perceived realism still needs listening in gameplay.
+No recordings regenerated or ElevenLabs credits spent.

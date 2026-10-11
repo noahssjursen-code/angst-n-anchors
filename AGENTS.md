@@ -78,6 +78,8 @@ Current demos:
 - `scenes/showcases/character_customization_showcase.tscn` — imported character and wardrobe
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
 - `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
+- `scenes/showcases/audio_library_showcase.tscn` — plays the sound library with a label and explanation per clip; new wavs under resources/audio appear on their own
+- `scenes/showcases/spatial_audio_showcase.tscn` — production spatial machinery, four camera views, moving sources and a toggleable obstruction wall; isolated from captain saves
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
 
 ---
@@ -421,6 +423,7 @@ Actions registered in `project.godot` that gameplay code reads via `Input.is_act
 | `boat_horn_press` | E | Foghorn |
 | `boat_docking_thrusters` | T | Bow thruster mode |
 | `boat_autopilot_toggle` | P | Engage/disengage active freight route autopilot |
+| `boat_engine_toggle` | I | Start/stop machinery at the helm; leaving the helm keeps the engine running |
 
 Add new actions to `project.godot` directly; there is no separate input-map JSON.
 
@@ -451,6 +454,30 @@ slope, recovering as it levels. Keep the clear plane in tests/player_gait_test.t
 for visual motion review (Noah explicitly prefers it to obstructed ship views).
 Archive captures without blocking the main thread on bulk PNG writes.
 Verify animated poses and maximum morphs in Godot.
-Run tests/blender_character_test.tscn and tests/captain_onboarding_test.tscn to
-verify the imported character and identity flow; use the existing
+Run tests/blender_character_test.tscn to verify the imported character; use the existing
 --shipyard-playtest isolation flag when running these scenes to avoid live saves.
+
+## Gameplay UI rebuild (2026-10-09)
+
+After the game UI teardown, Noah approved rebuilding the first-voyage flow.
+Preserve the marine chart/minimap and all authoring editors. Runtime UI lives
+in VoyagePanel, VoyageHud and GameMenu. Noah rejected this gameplay UI visual pass;
+it is unfinished, not a shipping design. He explicitly requested the established
+main menu back: preserve MainMenu, its ocean/vessel backdrop, local captain
+selection/deletion, character/company creation and multiplayer server/account flow.
+Do not replace or remove those entry features as part of gameplay HUD changes.
+Per-player reads go through LocalPlayerView and commands through existing authority.
+Noah rejected a space-game/general-dashboard visual direction. Aim for practical
+marine instruments, ordinary company software on a tablet and NPC conversations
+that leave the person and workplace visible. The current look is under review.
+
+UI-only previews are agent-run review/capture scenes, using the production
+components and inert sample data: gameplay_ui_showcase, company_tablet_ui_showcase,
+helm_ui_showcase and title_ui_showcase under scenes/showcases. They must never
+open or change captain saves. Do not add preview banners, selectors or other
+controls over the UI, or move production widgets to accommodate test controls.
+Run and inspect the captures yourself; do not hand this work to Noah.
+Run tests/voyage_ui_test.tscn with --shipyard-playtest.
+The earlier game_ui_removal_test described the teardown checkpoint and is not
+acceptance for the now-authorized rebuild. See docs/gameplay-ui-rebuild.txt for
+verified work and unfinished integration checks.

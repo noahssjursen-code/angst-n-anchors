@@ -444,15 +444,64 @@ func _find_wire_mesh(wire_node: Node3D) -> MeshInstance3D:
 	return null
 
 
+var _crane_slew_audio: AudioStreamPlayer3D
+var _crane_trolley_audio: AudioStreamPlayer3D
+var _crane_hoist_audio: AudioStreamPlayer3D
+var _audio_slew := 0.0
+var _audio_trolley := 0.0
+var _audio_hoist := 0.0
+var _limit_cool := 0.0
+
+
+func _process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
+	_limit_cool = maxf(_limit_cool - delta, 0.0)
+	_drive_crane_audio(delta, absf(angle_difference(_audio_slew, slew_degrees)), absf(trolley_z_m - _audio_trolley), absf(hoist_length_m - _audio_hoist))
+	_audio_slew = slew_degrees
+	_audio_trolley = trolley_z_m
+	_audio_hoist = hoist_length_m
+
+
+func _drive_crane_audio(delta: float, slew_delta: float, travel_delta: float, hoist_delta: float) -> void:
+	if _crane_slew_audio == null:
+		_crane_slew_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/slew_1.wav", "SlewAudio")
+		_crane_trolley_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/trolley_1.wav", "TrolleyAudio")
+		_crane_hoist_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/hoist_1.wav", "HoistAudio")
+	if is_instance_valid(_engine): _crane_slew_audio.global_position = _engine.global_position
+	if is_instance_valid(_talje):
+		_crane_trolley_audio.global_position = _talje.global_position
+		_crane_hoist_audio.global_position = _talje.global_position
+	var step_s := maxf(delta, 0.001)
+	WorldSound.drive(_crane_slew_audio, clampf(slew_delta / step_s / slew_speed_deg, 0.0, 1.0), -8.0)
+	WorldSound.drive(_crane_trolley_audio, clampf(travel_delta / step_s / trolley_speed_m, 0.0, 1.0), -10.0)
+	WorldSound.drive(_crane_hoist_audio, clampf(hoist_delta / step_s / hoist_speed_m, 0.0, 1.0), -8.0)
+
+
 func step(delta: float, command: ProvisionCraneCommand = null) -> void:
 	if command == null:
 		command = ProvisionCraneCommand.new()
+	var hoist_before := hoist_length_m
+	var trolley_before := trolley_z_m
 	if not is_zero_approx(command.slew_rate):
 		slew_degrees = slew_degrees + command.slew_rate * slew_speed_deg * delta
 	if not is_zero_approx(command.trolley_rate):
 		trolley_z_m = trolley_z_m + command.trolley_rate * trolley_speed_m * delta
+		_clang_if_held(trolley_before, trolley_z_m, trolley_min_z_m, trolley_max_z_m)
 	if not is_zero_approx(command.hoist_rate):
 		hoist_length_m = hoist_length_m + command.hoist_rate * hoist_speed_m * delta
+		_clang_if_held(hoist_before, hoist_length_m, hoist_min_m, hoist_max_m)
+
+
+func _clang_if_held(before: float, after: float, low: float, high: float) -> void:
+	if not is_equal_approx(before, after):
+		return
+	if before > low + 0.08 and before < high - 0.08:
+		return
+	if _limit_cool > 0.0:
+		return
+	_limit_cool = 0.8
+	WorldSound.play("res://resources/audio/world/crane/hook_stop_1.wav", get_hook_global(), -8.0)
 
 
 func playtest_input(delta: float) -> void:
@@ -577,6 +626,7 @@ func attach_container(node: ContainerNode) -> bool:
 	_attached_container = node
 	_tick_attached_container()
 	node.notify_grabbed()
+	WorldSound.play("res://resources/audio/world/cargo/container_lift_1.wav", get_hook_global(), -6.0)
 	## Floor halo is pad-selection only — hide while airborne under the hook.
 	node.set_highlighted(false)
 	return true
@@ -609,6 +659,7 @@ func release_container_on_pad(pad: CargoSlotPadComponent, world_hint: Vector3 = 
 			_attached_container = null
 			node.set_highlighted(false)
 			node.notify_released()
+			WorldSound.play("res://resources/audio/world/cargo/container_land_1.wav", node.global_position, -4.0)
 			return node
 	return null
 

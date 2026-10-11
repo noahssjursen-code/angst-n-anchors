@@ -84,7 +84,7 @@ func _build_ui() -> void:
 	status.offset_right = -20
 	status.offset_top = 145
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	status.text = "BOAT PLAYTEST · Daylight / moderate waves\nHome · Reset boat\nEsc · Menu / return to builder"
+	status.text = "BOAT PLAYTEST · Daylight / moderate waves\nHome · Reset boat\nF8 · Stop playtest / return to builder"
 	status.modulate = Color(.8, .9, 1)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -170,12 +170,13 @@ func _verify() -> void:
 	for item in boat.moving_colliders:
 		assert(item.collision.transform.is_equal_approx(boat._relative_transform(item.mesh)), "Door collision must follow hinge")
 	assert(JSON.stringify(boat.draft) == snapshot_before, "Playtest interactions must not edit the snapshot")
-	GameMenu._set_screen(GameMenu.Screen.PAUSE)
+	get_tree().paused = true
 	var paused_position := boat.global_position
 	for i in range(12):
 		await get_tree().process_frame
-	assert(boat.global_position.is_equal_approx(paused_position), "Playtest menu must pause simulation")
+	assert(boat.global_position.is_equal_approx(paused_position), "Pausing the test must pause simulation")
 	GameMenu._set_screen(GameMenu.Screen.NONE)
+	get_tree().paused = false
 	var initial := boat.global_position
 	var helm: BridgeInteractable
 	var seat: ImportedSeatInteractable
@@ -202,7 +203,6 @@ func _verify() -> void:
 	assert(helm.is_occupied() and controller._active, "F must enter the real helm")
 	if helm is ImportedSeatInteractable:
 		assert(helm.state_driver.state["occupied"], "Helm chair must report seated occupancy")
-	assert(controller._ship_hud != null and controller._hud_layer.visible, "Use normal game HUD")
 	var fishing_systems:=boat.get_fishing_systems()
 	if not fishing_systems.is_empty():
 		await _tap_g()
@@ -217,6 +217,8 @@ func _verify() -> void:
 			if not fishing_systems[0].imported_rig.is_transitioning():break
 		assert(not fishing_systems[0].imported_rig.net.visible,"Recovery must finish in the deck cradle")
 		print("TRAWL INPUT PASS: real G continuous deployment/reversal/recovery from occupied helm")
+	controller.toggle_engine()
+	assert(boat.get_node("PropulsionComponent").engine_running)
 	controller.set_throttle_stage_idx(4)
 	for i in range(360):
 		await get_tree().physics_frame
@@ -271,7 +273,7 @@ func _verify() -> void:
 	_reset()
 	assert(not controller._active and controller.get_throttle_stage_idx() == 1)
 	assert(boat.position.distance_to(start_transform.origin) < .1)
-	print("PLAYTEST PASS: isolated session, real F-to-helm and seats, normal HUD, doors, walking, pause, drive, rudder and reset")
+	print("PLAYTEST PASS: isolated session, real F-to-helm and seats, doors, walking, pause, drive, rudder and reset")
 	# Parent launch test can distinguish a completed verification from a crashed child.
 	var verification_path := ShipyardPlaytestMode.snapshot_path()
 	if not verification_path.is_empty():

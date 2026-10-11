@@ -32,7 +32,7 @@ func _run() -> void:
 	var second := FreightOfferGenerator.generate("origin", ports, 4, 0)
 	assert(first == second, "same port and day must generate identical freight")
 	assert(first.size() == 4, "container routes plus standard and small bulk loads become offers")
-	assert(FreightOfferGenerator.generate("origin", ports, 4).size() == 3, "board remains bounded")
+	assert(FreightOfferGenerator.generate("origin", ports, 4, 3).size() == 3, "board respects requested bound")
 	assert(_offer_to(first, "liquid").is_empty(), "unfinished liquid handling stays filtered")
 	var near_offer := _offer_to(first, "near")
 	var far_offer := _offer_to(first, "far")

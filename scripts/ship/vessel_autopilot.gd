@@ -50,6 +50,9 @@ func engage(
 	if _body == null or _propulsion == null or _rudder == null \
 			or next_route == null or not next_route.is_valid():
 		return false
+	if not _propulsion.engine_running:
+		if _body.is_in_group(PlayerVessel.GROUP) or not _propulsion.set_engine_running(true):
+			return false
 	route = next_route
 	arrival_stop_m = maxf(stop_distance_m, 1.0)
 	var position := Vector2(_body.global_position.x, _body.global_position.z)
@@ -99,6 +102,9 @@ func voyage_snapshot() -> Dictionary:
 
 func _physics_process(delta: float) -> void:
 	if not active or route == null or _body == null:
+		return
+	if _propulsion == null or not _propulsion.engine_running:
+		disengage("engine_stopped")
 		return
 	var position := Vector2(_body.global_position.x, _body.global_position.z)
 	var next_progress := route.nearest_progress_m(position, progress_m)

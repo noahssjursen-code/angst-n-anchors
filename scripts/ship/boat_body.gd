@@ -361,6 +361,9 @@ func _ready() -> void:
 		var audio: Node = load("res://scripts/ship/boat_audio_system.gd").new()
 		audio.name = "BoatAudio"
 		add_child(audio)
+		var hull_audio: Node = load("res://scripts/ship/hull_world_audio.gd").new()
+		hull_audio.name = "HullWorldAudio"
+		add_child(hull_audio)
 
 		var lighting := ShipLighting.new()
 		lighting.name = "ShipLighting"

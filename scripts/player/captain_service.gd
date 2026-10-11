@@ -204,7 +204,7 @@ func create_development_local() -> PlayerData:
 		refresh()
 		return session.data
 	var player := create_local("Development Captain", CharacterAppearance.default_appearance(),
-		"port-home", 424242, "Development Shipping", Color("d78b37"), "general_cargo")
+		"port-home", WorldBootstrap.roll_seed(), "Development Shipping", Color("d78b37"), "general_cargo")
 	if player == null:
 		return null
 	player.company["development_captain"] = true

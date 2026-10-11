@@ -87,10 +87,7 @@ func set_appearance(value: CharacterAppearance) -> void:
 	if is_node_ready(): refresh()
 
 func _heading(text: String) -> void:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_color_override("font_color", Color(.9,.51,.23))
-	add_child(label)
+	add_child(Ui.eyebrow(text))
 
 func _row(title: String) -> HBoxContainer:
 	var row := HBoxContainer.new()

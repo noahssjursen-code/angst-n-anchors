@@ -63,8 +63,8 @@ func verify() -> void:
 	for mode in ["load", "unload"]:
 		events.clear()
 		var before := boat.cargo_mass
-		if mode == "load": npc._panel._btn_load.pressed.emit()
-		else: npc._panel._btn_unload.pressed.emit()
+		if mode == "load": npc._on_request_load()
+		else: npc._on_request_unload()
 		var last_phase := -1
 		for i in 6400:
 			auto._process(.1)

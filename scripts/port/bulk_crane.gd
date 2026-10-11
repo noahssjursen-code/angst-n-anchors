@@ -594,22 +594,70 @@ func is_bucket_at_target(tolerance: float = 0.04) -> bool:
 	return absf(bucket_open - _bucket_open_target) <= tolerance
 
 
+var _crane_slew_audio: AudioStreamPlayer3D
+var _crane_boom_audio: AudioStreamPlayer3D
+var _crane_hoist_audio: AudioStreamPlayer3D
+var _audio_slew := 0.0
+var _audio_boom := 0.0
+var _audio_hoist := 0.0
+var _limit_cool := 0.0
+
+
+func _process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
+	_limit_cool = maxf(_limit_cool - delta, 0.0)
+	if _crane_slew_audio == null:
+		_crane_slew_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/slew_1.wav", "SlewAudio")
+		_crane_boom_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/trolley_1.wav", "BoomAudio")
+		_crane_hoist_audio = WorldSound.loop_on(self, "res://resources/audio/world/crane/hoist_1.wav", "HoistAudio")
+	_crane_slew_audio.global_position = get_slew_pivot_global()
+	_crane_boom_audio.global_position = get_boom_hinge_global()
+	_crane_hoist_audio.global_position = get_boom_tip_global()
+	var step_s := maxf(delta, 0.001)
+	WorldSound.drive(_crane_slew_audio, clampf(absf(angle_difference(_audio_slew, slew_degrees)) / step_s / slew_speed_deg, 0.0, 1.0), -8.0)
+	WorldSound.drive(_crane_boom_audio, clampf(absf(boom_angle_deg - _audio_boom) / step_s / boom_speed_deg, 0.0, 1.0), -10.0)
+	WorldSound.drive(_crane_hoist_audio, clampf(absf(hoist_length_m - _audio_hoist) / step_s / hoist_speed_m, 0.0, 1.0), -8.0)
+	_audio_slew = slew_degrees
+	_audio_boom = boom_angle_deg
+	_audio_hoist = hoist_length_m
+
+
 func step(delta: float, command: BulkCraneCommand = null) -> void:
 	if is_auto_active():
 		return
 	if command == null:
 		command = BulkCraneCommand.new()
+	var boom_before := boom_angle_deg
+	var hoist_before := hoist_length_m
 	if not is_zero_approx(command.slew_rate):
 		slew_degrees = slew_degrees + command.slew_rate * slew_speed_deg * delta
 	if not is_zero_approx(command.boom_rate):
 		boom_angle_deg = boom_angle_deg + command.boom_rate * boom_speed_deg * delta
+		_clang_if_held(boom_before, boom_angle_deg, boom_min_deg, boom_max_deg)
 	if not is_zero_approx(command.hoist_rate):
 		hoist_length_m = hoist_length_m + command.hoist_rate * hoist_speed_m * delta
+		_clang_if_held(hoist_before, hoist_length_m, hoist_min_m, get_effective_hoist_max_m())
 	if command.bucket_target >= 0.0:
 		_bucket_open_target = clampf(command.bucket_target, 0.0, 1.0)
 	var previous_open := bucket_open
 	step_jaws(delta)
+	if previous_open <= 0.08 and bucket_open > 0.08:
+		WorldSound.play("res://resources/audio/world/crane/grab_open_1.wav", global_position, -6.0)
+	elif previous_open > 0.08 and bucket_open <= 0.08:
+		WorldSound.play("res://resources/audio/world/crane/grab_close_1.wav", global_position, -6.0)
 	_tick_bulk_material(previous_open)
+
+
+func _clang_if_held(before: float, after: float, low: float, high: float) -> void:
+	if not is_equal_approx(before, after):
+		return
+	if before > low + 0.08 and before < high - 0.08:
+		return
+	if _limit_cool > 0.0:
+		return
+	_limit_cool = 0.8
+	WorldSound.play("res://resources/audio/world/crane/hook_stop_1.wav", get_bucket_mouth_global(), -8.0)
 
 
 func step_jaws(delta: float) -> void:
@@ -670,6 +718,7 @@ func force_release_at(world_pos: Vector3) -> void:
 		_payload_ship,
 	)
 	material_dropped.emit(dropped, world_pos)
+	WorldSound.play("res://resources/audio/world/cargo/bulk_pour_1.wav", world_pos, -6.0)
 	bucket_lot = BulkCargoLot.empty()
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), bucket_capacity_tonnes_t())
 
@@ -760,6 +809,7 @@ func _try_drop_material() -> void:
 		_payload_ship,
 	)
 	material_dropped.emit(dropped, mouth)
+	WorldSound.play("res://resources/audio/world/cargo/bulk_pour_1.wav", mouth, -6.0)
 	bucket_lot = BulkCargoLot.empty()
 	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), bucket_capacity_tonnes_t())
 

@@ -2,6 +2,8 @@
 class_name FishingSystem
 extends Node3D
 
+signal status_reported(message: String)
+
 ## Visual and physical fishing system component.
 ## Instantiated on vessels with the "fishing" capability.
 ## Renders a spinning trommel winch and casts a trailing semi-transparent net.
@@ -35,6 +37,7 @@ const NET_MOUTH_AFT_OFFSET := 2.6
 var authored_winch: Node3D
 var authored_gantry: Node3D
 var imported_rig: ImportedTrawlRig
+var _winch_audio: AudioStreamPlayer3D
 var _body: BoatBody = null
 var _propulsion: PropulsionComponent = null
 
@@ -85,15 +88,12 @@ func toggle_trawling() -> void:
 	trawling = not trawling
 	if not trawling:
 		_cancel_haul(false)
-	if _body != null:
-		var controller = _body.find_child("BoatController", true, false) as BoatController
-		if controller != null:
-			var hud = controller.get("_ship_hud")
-			if hud != null and hud.has_method("show_toast"):
-				if trawling:
-					hud.show_toast("Setting trawl gear" if is_instance_valid(imported_rig) else "Net Cast - Trawling Active")
-				else:
-					hud.show_toast("Recovering trawl gear" if is_instance_valid(imported_rig) else "Net Retracted - Trawling Stopped")
+	_notify_trawl("Setting trawl gear" if trawling else "Recovering trawl gear")
+	WorldSound.play(
+		"res://resources/audio/world/fishing/gear_%s_1.wav" % ("out" if trawling else "in"),
+		global_position, -6.0)
+	if trawling:
+		WorldSound.play("res://resources/audio/world/fishing/net_splash_1.wav", global_position, -4.0)
 
 
 func _setup_visuals() -> void:
@@ -286,6 +286,9 @@ func _add_child_with_owner(parent_node: Node, child_node: Node) -> void:
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+	if _winch_audio == null:
+		_winch_audio = WorldSound.loop_on(self, "res://resources/audio/world/fishing/winch_1.wav", "TrawlWinch")
+	WorldSound.drive(_winch_audio, 1.0 if trawling else 0.0, -10.0)
 	if is_instance_valid(imported_rig):
 		imported_rig.update_rig(trawling,delta)
 		if _drum_rotation_node != null:
@@ -512,14 +515,7 @@ func _retract_trawl(notify_message: String = "") -> void:
 
 
 func _notify_trawl(message: String) -> void:
-	if _body == null:
-		return
-	var controller := _body.find_child("BoatController", true, false) as BoatController
-	if controller == null:
-		return
-	var hud = controller.get("_ship_hud")
-	if hud != null and hud.has_method("show_toast"):
-		hud.show_toast(message)
+	status_reported.emit(message)
 
 
 func _update_trawl_visuals() -> void:

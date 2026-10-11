@@ -23,9 +23,10 @@ This preserves the shipyard draft, paints and saved part placements.
 
 The main walking body follows the ship-end hinge each physics frame. Its shore
 endpoint is checked at 5 Hz. Floor and guard collisions are three simple boxes.
-The span is unavailable if the quay is absent/blocked, span exceeds 8 m, slope
-exceeds 31 degrees, or vessel speed exceeds 0.8 m/s. Casting off hides the span,
-disables its collision and closes the gate. Fit-out hydration refreshes the
+The span stays down while both lines are fast. It is unavailable if the quay
+is absent/blocked, the span exceeds 8 m, or the slope exceeds 31 degrees.
+Letting go both lines from the helm hides the span, disables its collision
+and closes the gate. Quay bollards are not a player interaction. Fit-out hydration refreshes the
 candidate gates and their moving colliders safely.
 
 Current scope: all four imported starter vessels, both sides; custom imported

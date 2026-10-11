@@ -44,6 +44,11 @@ func configure(snapshot: Dictionary) -> void:
 	physics_profile.wave_making_peak_coeff = {"trawler_hull_14m":.011,"hull_24x8":.007,"hull_32x10":.0065}.get(hull_id, .0065)
 	for property: String in platform.get("physics", {}):
 		physics_profile.set(property, platform.physics[property])
+	# Working freighters need useful helm authority during harbour manoeuvres.
+	# Keep the fast ferry and light trawler's separate handling unchanged.
+	if hull_id in ["hull_24x8", "hull_32x10", "hull_88x14"]:
+		physics_profile.prop_wash_speed_ms = 5.0
+		physics_profile.rudder_area_m2 *= {"hull_32x10":1.5, "hull_88x14":2.0}.get(hull_id, 1.0)
 	if physics_profile.demihull_beam_m > 0.0:
 		physics_profile.calibrate_longitudinal_mass_center()
 	angular_damp_coeff = float(platform.get("angular_damping", .9))
@@ -130,6 +135,9 @@ func _install_engine() -> void:
 	engine_coupling = engine_visual.find_child("CouplingRotor",true,false)
 	engine_couplings = engine_visual.find_children("CouplingRotor", "Node3D", true, false)
 	(get_node("HullVisual/DriveGear") as ShipDriveVisual).max_rpm = float(spec.shaft_rpm)
+	var audio := get_node_or_null("BoatAudio")
+	if audio != null and audio.has_method("bind_engine"):
+		audio.bind_engine(spec)
 
 func _process(delta: float) -> void:
 	if not is_instance_valid(engine_coupling): return

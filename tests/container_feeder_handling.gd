@@ -36,6 +36,7 @@ func _ready() -> void:
 			for i in boat.get_cargo_pads().size():boat.get_cargo_pads()[i].add_container(ContainerUnit.create("handling-%d"%i,"provisions",20000))
 		await run_for(30)
 		var row:Dictionary={"engine_preset":p.brick_layout.engine_preset,"power_kw":boat.physics_profile.shaft_power_kw,"laden":laden,"mass_t":boat.mass/1000,"static_keel_y":boat.position.y,"static_roll_deg":boat.rotation_degrees.z,"static_pitch_deg":boat.rotation_degrees.x}
+		boat.get_node("PropulsionComponent").set_engine_running(true)
 		helm.set_throttle_stage_idx(4)
 		await run_for(240)
 		row.cruise_kn=speed()

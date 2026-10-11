@@ -1,7 +1,7 @@
 class_name WeatherAudioSystem
 extends Node
 
-## Four-layer weather audio driven by supported local rain and wind.
+## Independent sea, wind and rain stems driven by supported local weather.
 ##
 ## Each sound "slot" supports multiple variants named {base}_{n}.wav (n = 1, 2, 3 …).
 ## Variants loop continuously at -80 dB until activated. Every 40–120 seconds the slot
@@ -50,16 +50,15 @@ class VariantSlot:
 				found.append(p)
 
 		for path in found:
-			var stream := ResourceLoader.load(path) as AudioStream
+			var stream := AudioLibrary.stream(path, true)
 			if stream == null:
 				continue
 			var pl := AudioStreamPlayer.new()
 			pl.stream    = stream
-			pl.bus       = "Master"
+			pl.bus       = AudioLibrary.bus(path)
 			pl.volume_db = -80.0
 			pl.autoplay  = false
 			parent.add_child(pl)
-			pl.finished.connect(pl.play)  # restart on finish — no .import editing needed
 			pl.play()
 			players.append(pl)
 
@@ -137,9 +136,8 @@ class VariantSlot:
 
 ## Volume ceiling per layer (dB).
 @export var ocean_db      : float = -18.0
-@export var wind_db       : float = -8.0
+@export var wind_db       : float = -18.0
 @export var rain_db       : float = -10.0
-@export var atmosphere_db : float = -12.0
 @export var thunder_db    : float = -2.0
 
 ## How quickly the weather parameters are smoothed (seconds for ~63 % of change).
@@ -163,12 +161,8 @@ var _rain_drizzle  := VariantSlot.new()
 var _rain_moderate := VariantSlot.new()
 var _rain_heavy    := VariantSlot.new()
 
-var _atm_calm_clear   := VariantSlot.new()
-var _atm_grey_drizzle := VariantSlot.new()
-var _atm_dry_squall   := VariantSlot.new()
-var _atm_full_storm   := VariantSlot.new()
 
-var _thunder_pool    : Array[AudioStreamPlayer] = []
+var _thunder_pool    : Array[AudioStreamPlayer3D] = []
 var _pending_thunder: Array[Dictionary] = []
 
 # Wave intensity window for ocean blend.
@@ -179,6 +173,10 @@ const _WAVE_GALE: float = 1.10
 var _wave_t : float = 0.0
 var _wind   : float = 0.0
 var _rain   : float = 0.0
+var _roof_rain := VariantSlot.new()
+var _shelter := 0.0
+var _shelter_target := 0.0
+var _shelter_wait := 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -201,12 +199,9 @@ func _ready() -> void:
 	_rain_moderate.load_variants(self, lo + "/rain",     "rain_moderate")
 	_rain_heavy.load_variants(self,    lo + "/rain",     "rain_heavy")
 
-	_atm_calm_clear.load_variants(self,   lo + "/atmosphere", "atm_calm_clear")
-	_atm_grey_drizzle.load_variants(self, lo + "/atmosphere", "atm_grey_drizzle")
-	_atm_dry_squall.load_variants(self,   lo + "/atmosphere", "atm_dry_squall")
-	_atm_full_storm.load_variants(self,   lo + "/atmosphere", "atm_full_storm")
 
 	_thunder_pool = _load_thunder_variants(no + "/thunder", "thunder")
+	_roof_rain.load_variants(self, lo + "/rain", "rain_on_roof")
 
 
 func _process(delta: float) -> void:
@@ -226,18 +221,21 @@ func _process(delta: float) -> void:
 	_wave_t  = lerpf(_wave_t,  wave_raw,    k)
 	_wind    = lerpf(_wind,    wind_raw,    k)
 	_rain    = lerpf(_rain,    rain_raw,    k)
+	_update_shelter(delta)
 
-	# --- Apply volumes ---
+	# Overhead cover muffles the open-air beds. The sea stays audible.
+	var open_air := 1.0 - _shelter
 	_blend_sequential(
 		[_ocean_calm, _ocean_choppy, _ocean_rough, _ocean_stormy],
-		1.0, _wave_t, ocean_db)
+		lerpf(0.42, 1.0, open_air), _wave_t, ocean_db)
 	_blend_sequential(
 		[_wind_light, _wind_gale],
-		smoothstep(0.10, 0.38, _wind), _wind, wind_db)
+		smoothstep(0.10, 0.38, _wind) * lerpf(0.28, 1.0, open_air), _wind, wind_db)
 	_blend_sequential(
 		[_rain_drizzle, _rain_moderate, _rain_heavy],
-		smoothstep(0.08, 0.40, _rain), _rain, rain_db)
-	_blend_atmosphere()
+		smoothstep(0.08, 0.40, _rain) * lerpf(0.18, 1.0, open_air), _rain, rain_db)
+	# Independent sea, wind and rain stems replace composite atmosphere tracks.
+	_apply_roof_rain()
 
 	_update_pending_thunder(delta)
 
@@ -251,8 +249,7 @@ func _process(delta: float) -> void:
 ## Works for any number of slots ≥ 1.
 func _blend_sequential(
 		slots: Array, gain: float, t: float, max_db: float) -> void:
-	# Do not crossfade into silence when a requested intensity recording is absent
-	# (currently rain_heavy). Keep the strongest available recording at that end.
+	# If a louder step has no recording, keep the strongest file that does exist.
 	slots = slots.filter(func(slot: VariantSlot): return not slot.is_empty())
 	var n := slots.size()
 	if n == 0:
@@ -290,42 +287,16 @@ func _blend_sequential(
 			(slots[i] as VariantSlot).apply_volume(max_db + linear_to_db(lin))
 
 
-## Cloud/fog are optical conditions, not permission to play rain or gale beds.
-## Use the same supported rain that drives particles, with a smooth onset/tail.
-func _blend_atmosphere() -> void:
-	var wet := smoothstep(.02, .65, _rain)
-	var gale := smoothstep(.16, .72, _wind)
-	var cc := pow((1.0 - wet) * (1.0 - gale), 2.0)
-	var gd := pow(wet * (1.0 - gale), 2.0)
-	var ds := pow((1.0 - wet) * gale, 2.0)
-	var fs := pow(wet * gale, 2.0)
-	var sum := cc + gd + ds + fs + 1e-6
-	cc /= sum
-	gd /= sum
-	ds /= sum
-	fs /= sum
-	_atm_apply_weight(_atm_calm_clear, cc)
-	_atm_apply_weight(_atm_grey_drizzle, gd)
-	_atm_apply_weight(_atm_dry_squall, ds)
-	_atm_apply_weight(_atm_full_storm, fs)
-
-
-func _atm_apply_weight(slot: VariantSlot, weight: float) -> void:
-	if weight < 0.01:
-		slot.apply_volume(-80.0)
-	else:
-		slot.apply_volume(atmosphere_db + linear_to_db(weight))
-
-
 # ---------------------------------------------------------------------------
 # Thunder
 # ---------------------------------------------------------------------------
 
-func _on_lightning_strike(intensity: float, distance_m: float) -> void:
+func _on_lightning_strike(intensity: float, distance_m: float, world_position := Vector3.INF) -> void:
 	_pending_thunder.append({
 		"delay": clampf(distance_m / 343.0, 0.15, 18.0),
 		"intensity": intensity,
 		"distance_m": distance_m,
+		"position": world_position,
 	})
 
 
@@ -336,40 +307,46 @@ func _update_pending_thunder(delta: float) -> void:
 		if float(event["delay"]) > 0.0:
 			_pending_thunder[i] = event
 			continue
-		_play_thunder(float(event.get("intensity", 0.5)), float(event.get("distance_m", 1000.0)))
+		_play_thunder(float(event.get("intensity", 0.5)), float(event.get("distance_m", 1000.0)), event.get("position", Vector3.INF))
 		_pending_thunder.remove_at(i)
 
 
-func _play_thunder(intensity: float, distance_m: float) -> void:
+func _play_thunder(intensity: float, distance_m: float, world_position := Vector3.INF) -> void:
 	if _thunder_pool.is_empty():
 		return
-	var idle: Array[AudioStreamPlayer] = []
-	for p: AudioStreamPlayer in _thunder_pool:
+	var idle: Array[AudioStreamPlayer3D] = []
+	for p: AudioStreamPlayer3D in _thunder_pool:
 		if not p.playing:
 			idle.append(p)
 	if idle.is_empty():
 		return
 
 	var p := idle[randi() % idle.size()]
-	var distance_attenuation := clampf(inverse_lerp(8000.0, 500.0, distance_m), 0.15, 1.0)
-	p.volume_db = thunder_db + linear_to_db(maxf(intensity * distance_attenuation, 0.01))
+	if not world_position.is_finite():
+		var camera := get_viewport().get_camera_3d()
+		if camera == null: return
+		world_position = camera.global_position + Vector3(0, 0, -distance_m)
+	p.global_position = world_position
+	p.volume_db = thunder_db + linear_to_db(maxf(intensity, 0.01))
 	p.pitch_scale = randf_range(0.88, 1.08)
 	p.play()
 
 
-func _load_thunder_variants(dir: String, base: String) -> Array[AudioStreamPlayer]:
-	var pool: Array[AudioStreamPlayer] = []
+func _load_thunder_variants(dir: String, base: String) -> Array[AudioStreamPlayer3D]:
+	var pool: Array[AudioStreamPlayer3D] = []
 	for i in range(1, 9):
 		var path := "%s/%s_%02d.wav" % [dir, base, i]
 		if not ResourceLoader.exists(path):
 			continue
-		var stream := ResourceLoader.load(path) as AudioStream
+		var stream := AudioLibrary.stream(path, false)
 		if stream == null:
 			continue
-		var p := AudioStreamPlayer.new()
+		var p := AudioStreamPlayer3D.new()
 		p.stream    = stream
-		p.bus       = "Master"
+		p.bus       = AudioLibrary.bus(path)
 		p.volume_db = -80.0
+		p.unit_size = 500.0
+		p.max_distance = 18000.0
 		p.autoplay  = false
 		add_child(p)
 		pool.append(p)
@@ -380,12 +357,38 @@ func _load_thunder_variants(dir: String, base: String) -> Array[AudioStreamPlaye
 # Helpers
 # ---------------------------------------------------------------------------
 
+func _update_shelter(delta: float) -> void:
+	_shelter_wait -= delta
+	if _shelter_wait <= 0.0:
+		_shelter_wait = 0.25
+		_shelter_target = _probe_overhead()
+	var blend := 1.0 - exp(-delta / 0.35)
+	_shelter = lerpf(_shelter, _shelter_target, blend)
+
+
+func _probe_overhead() -> float:
+	var body := get_tree().get_first_node_in_group("player") as CollisionObject3D
+	if body == null or body.get_world_3d() == null:
+		return 0.0
+	var camera := get_viewport().get_camera_3d()
+	var origin := camera.global_position if camera != null else body.global_position + Vector3.UP * 1.45
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + Vector3.UP * 5.5)
+	query.collision_mask = BoatBody.LAYER_WORLD | BoatBody.LAYER_BOAT_WALK | BoatBody.LAYER_BOAT_HULL
+	query.exclude = [body.get_rid()]
+	var hit := body.get_world_3d().direct_space_state.intersect_ray(query)
+	return 0.0 if hit.is_empty() else 1.0
+
+
+func _apply_roof_rain() -> void:
+	var amount := _shelter * smoothstep(0.08, 0.45, _rain)
+	_roof_rain.apply_volume(-16.0 + linear_to_db(amount) if amount >= 0.02 else -80.0)
+
+
 func _all_slots() -> Array[VariantSlot]:
 	return [
 		_ocean_calm, _ocean_choppy, _ocean_rough, _ocean_stormy,
 		_wind_light, _wind_gale,
-		_rain_drizzle, _rain_moderate, _rain_heavy,
-		_atm_calm_clear, _atm_grey_drizzle, _atm_dry_squall, _atm_full_storm,
+		_rain_drizzle, _rain_moderate, _rain_heavy, _roof_rain,
 	]
 
 

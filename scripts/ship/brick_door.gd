@@ -27,8 +27,6 @@ var _leaf_body: StaticBody3D
 var _collider: CollisionShape3D
 var _interact_area: Area3D
 var _interact_area_r: Area3D
-var _prompt_layer: CanvasLayer
-var _prompt_label: Label
 var _yaw_deg: float = 0.0
 var _boat_local: Vector3 = Vector3.ZERO
 var _leaf_size: Vector3 = Vector3(1.8, 2.8, 0.1)
@@ -59,7 +57,6 @@ func _ready() -> void:
 	if _hinge == null or _leaf == null:
 		push_warning("BrickDoor: missing DoorHinge / DoorLeaf under parent")
 		return
-	_ensure_prompt_ui()
 	_ensure_interact_area()
 	_ensure_collider()
 	_apply_open_state(false, true)
@@ -67,7 +64,6 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	_update_prompt()
 	if not _animating and _pending_remote_open >= 0:
 		var want_open := _pending_remote_open == 1
 		_pending_remote_open = -1
@@ -304,34 +300,3 @@ func _ensure_collider() -> void:
 	_collider.shape = box
 	_leaf_body.add_child(_collider)
 	add_child(_leaf_body)
-
-
-func _ensure_prompt_ui() -> void:
-	_prompt_layer = CanvasLayer.new()
-	_prompt_layer.name = "DoorPromptLayer"
-	_prompt_layer.layer = 20
-	add_child(_prompt_layer)
-	_prompt_label = Label.new()
-	_prompt_label.visible = false
-	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt_label.add_theme_font_size_override("font_size", 18)
-	_prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt_label.offset_left = -220.0
-	_prompt_label.offset_right = 220.0
-	_prompt_label.offset_top = -148.0
-	_prompt_label.offset_bottom = -108.0
-	_prompt_label.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	_prompt_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
-	_prompt_label.add_theme_constant_override("shadow_offset_x", 1)
-	_prompt_label.add_theme_constant_override("shadow_offset_y", 1)
-	_prompt_label.add_theme_constant_override("shadow_as_outline", 1)
-	_prompt_layer.add_child(_prompt_label)
-
-
-func _update_prompt() -> void:
-	if _prompt_label == null:
-		return
-	var show := _can_interact() and not _animating
-	_prompt_label.visible = show
-	if show:
-		_prompt_label.text = prompt_close if _open else prompt_open

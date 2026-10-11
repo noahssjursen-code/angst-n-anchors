@@ -15,6 +15,24 @@ var layout_graph: PortLayoutGraph
 
 var dock_length: float = PortSizing.dock_length_m(1)
 var max_ship_class: ShipClass.Type = ShipClass.Type.COASTAL_TRADER
+
+
+func freight_berths() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if layout_graph == null: return out
+	var plan: Dictionary = layout_graph.initial_attributes.get("berth_plan", {})
+	for key in ["quay_stations", "asphalt_stations"]:
+		for station in plan.get(key, []):
+			var faces: Array = station.get("sides", []) if str(station.get("layout", "")) == "twin_joined" else [station]
+			for face in faces:
+				var commodities: Array = face.get("commodities", []).duplicate()
+				var commodity := str(face.get("commodity_id", ""))
+				if not commodity.is_empty() and not commodities.has(commodity): commodities.append(commodity)
+				for zone in face.get("zones", []):
+					commodity = str(zone.get("commodity_id", ""))
+					if not commodity.is_empty() and not commodities.has(commodity): commodities.append(commodity)
+				out.append({"length_m":float(station.get("length_m", 0.0)), "commodities":commodities})
+	return out
 var has_fuel_point: bool = true
 var has_lighthouse: bool = false
 var has_fog_horn: bool = false

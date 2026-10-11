@@ -5,6 +5,7 @@ extends Node
 
 ## port_id -> { id, display_name, position, spawn_pos, ... }
 var _ports: Dictionary = {}
+var revision := 0
 
 
 func register_port(
@@ -25,12 +26,14 @@ func register_port(
 		region: String = "",
 		max_ship_class_name: String = "",
 		commodity_exports: Array = [],
+		port_definition: Dictionary = {},
 ) -> void:
 	if port_id.is_empty():
 		return
 	var already_known := _ports.has(port_id)
 	var entry := {
 		"id": port_id,
+		"port_definition": port_definition.duplicate(true),
 		"display_name": display_name,
 		"position": world_pos,
 		"spawn_pos": spawn_pos if spawn_pos != Vector3(INF, INF, INF) else world_pos,
@@ -50,6 +53,10 @@ func register_port(
 	}
 	if already_known:
 		var prev := _ports[port_id] as Dictionary
+		if prev.has("freight_berths"):
+			entry["freight_berths"] = prev.freight_berths.duplicate(true)
+		if port_definition.is_empty():
+			entry["port_definition"] = prev.get("port_definition", {}).duplicate(true)
 		if island_width == 0.0:
 			entry["island_width"] = prev.get("island_width", 0.0)
 			entry["plot_depth"] = prev.get("plot_depth", 140.0)
@@ -77,14 +84,23 @@ func register_port(
 		if max_ship_class_name.is_empty():
 			entry["max_ship_class_name"] = prev.get("max_ship_class_name", "Vessel")
 	_ports[port_id] = entry
+	revision += 1
 
 
 func unregister_port(port_id: String) -> void:
 	_ports.erase(port_id)
+	revision += 1
+
+
+func register_freight_berths(port_id: String, berths: Array[Dictionary]) -> void:
+	if not _ports.has(port_id): return
+	_ports[port_id]["freight_berths"] = berths.duplicate(true)
+	revision += 1
 
 
 func clear() -> void:
 	_ports.clear()
+	revision += 1
 
 
 func get_port_ids() -> Array[String]:

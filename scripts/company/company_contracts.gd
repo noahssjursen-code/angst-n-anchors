@@ -4,8 +4,11 @@ extends RefCounted
 ## Versioned, JSON-safe contracts shared by local authority today and a future
 ## server authority. Scene nodes are projections; these dictionaries are truth.
 
-const SCHEMA_VERSION := 1
+const SCHEMA_VERSION := 2
 const STARTING_MARKS := 6400
+## Walk-up careers buy stock at its authored price (largest starter 16,500).
+## Existing companies and the legacy starter-grant path retain their balances.
+const WALKUP_STARTING_MARKS := 18000
 const STARTER_WAREHOUSE_CAPACITY_UNITS := 24
 
 const STARTER_VESSELS := {
@@ -65,12 +68,17 @@ static func new_company(
 		"brand_color": brand_color.to_html(false),
 		"created_at_unix": created_at_unix,
 		"account": {
-			"currency": "MARK",
+			"currency": "NOK",
 			"balance_marks": 0,
 			"ledger": [],
 		},
 		"inventory_lots": [],
 		"warehouse_leases": [],
+		"crew": [],
+		"routes": [],
+		"deliveries": [],
+		"facilities": [],
+		"activity": [],
 		"processed_requests": {},
 		"starter_vessel_id": "",
 		"onboarding_complete": false,
@@ -103,6 +111,11 @@ static func normalize(raw: Dictionary, player_id: String, captain_name: String, 
 		company["inventory_lots"] = []
 	if typeof(company.get("warehouse_leases", [])) != TYPE_ARRAY:
 		company["warehouse_leases"] = []
+	company["crew"] = OperationsRecords.normalize_crew(company.get("crew", []))
+	company["routes"] = OperationsRecords.normalize_routes(company.get("routes", []))
+	company["deliveries"] = OperationsRecords.normalize_deliveries(company.get("deliveries", []))
+	company["facilities"] = OperationsRecords.normalize_facilities(company.get("facilities", []))
+	company["activity"] = OperationsRecords.normalize_activity(company.get("activity", []))
 	if typeof(company.get("processed_requests", {})) != TYPE_DICTIONARY:
 		company["processed_requests"] = {}
 	company["starter_vessel_id"] = str(company.get("starter_vessel_id", ""))
@@ -171,7 +184,7 @@ static func transaction(
 		"id": entry_id,
 		"request_id": request_id,
 		"company_id": company_id,
-		"currency": "MARK",
+		"currency": "NOK",
 		"amount_marks": amount_marks,
 		"category": category,
 		"description": description,
@@ -191,8 +204,16 @@ static func result_error(code: String, message: String) -> Dictionary:
 
 static func _normalize_account(raw: Dictionary) -> Dictionary:
 	var account := raw.duplicate(true)
-	account["currency"] = "MARK"
+	account["currency"] = "NOK"
 	account["balance_marks"] = int(account.get("balance_marks", 0))
-	if typeof(account.get("ledger", [])) != TYPE_ARRAY:
-		account["ledger"] = []
+	var ledger: Array = []
+	var ledger_raw: Variant = account.get("ledger", [])
+	if typeof(ledger_raw) == TYPE_ARRAY:
+		for entry_raw in ledger_raw as Array:
+			if typeof(entry_raw) != TYPE_DICTIONARY:
+				continue
+			var entry := (entry_raw as Dictionary).duplicate(true)
+			entry["currency"] = "NOK"
+			ledger.append(entry)
+	account["ledger"] = ledger
 	return account

@@ -1,13 +1,13 @@
 {
   "presets": [
-    {"id":"catamaran_3600","name":"Twin diesel package · 3600 kW","hull":"catamaran_36x11","model":"marine_v12_freighter","visual_offsets":[[-4.3,0,0],[4.3,0,0]],"power_kw":3600,"mass_kg":12500,"fuel_lph":850,"shaft_rpm":420,"default":true},
-    {"id":"feeder_2100","name":"Feeder diesel · 2100 kW","hull":"hull_88x14","model":"marine_v12_feeder","power_kw":2100,"mass_kg":12800,"fuel_lph":505,"shaft_rpm":185},
-    {"id":"feeder_5600","name":"Feeder high-output diesel · 5600 kW","hull":"hull_88x14","model":"marine_v12_feeder_high_output","power_kw":5600,"mass_kg":32000,"hull_reference_mass_kg":11200,"fuel_lph":1344,"shaft_rpm":220,"reverse_multiplier":0.28,"default":true},
-    {"id":"compact_300","name":"Compact diesel · 300 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":300,"mass_kg":950,"fuel_lph":75,"shaft_rpm":240,"default":true},
-    {"id":"compact_450","name":"Compact diesel · 450 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":450,"mass_kg":1050,"fuel_lph":113,"shaft_rpm":275},
-    {"id":"coastal_700","name":"Coastal diesel · 700 kW","hull":"hull_24x8","model":"marine_i6_coastal","power_kw":700,"mass_kg":2450,"fuel_lph":175,"shaft_rpm":210,"default":true},
-    {"id":"coastal_950","name":"Coastal diesel · 950 kW","hull":"hull_24x8","model":"marine_i6_coastal","power_kw":950,"mass_kg":2650,"fuel_lph":238,"shaft_rpm":240},
-    {"id":"freighter_1100","name":"Freighter diesel · 1100 kW","hull":"hull_32x10","model":"marine_v12_freighter","power_kw":1100,"mass_kg":4050,"fuel_lph":275,"shaft_rpm":180,"default":true},
-    {"id":"freighter_1600","name":"Freighter diesel · 1600 kW","hull":"hull_32x10","model":"marine_v12_freighter","power_kw":1600,"mass_kg":4400,"fuel_lph":400,"shaft_rpm":210}
+    {"id":"catamaran_3600","name":"Twin diesel package · 3600 kW","hull":"catamaran_36x11","model":"marine_v12_freighter","visual_offsets":[[-4.3,0,0],[4.3,0,0]],"power_kw":3600,"mass_kg":12500,"fuel_lph":850,"shaft_rpm":420,"audio_bank":"catamaran_twin","audio_reference_rpm":420,"default":true},
+    {"id":"feeder_2100","name":"Feeder diesel · 2100 kW","hull":"hull_88x14","model":"marine_v12_feeder","power_kw":2100,"mass_kg":12800,"fuel_lph":505,"shaft_rpm":185,"audio_bank":"feeder_v12","audio_reference_rpm":185},
+    {"id":"feeder_5600","name":"Feeder high-output diesel · 5600 kW","hull":"hull_88x14","model":"marine_v12_feeder_high_output","power_kw":5600,"mass_kg":32000,"hull_reference_mass_kg":11200,"fuel_lph":1344,"shaft_rpm":220,"audio_bank":"feeder_high_v12","audio_reference_rpm":220,"reverse_multiplier":0.28,"default":true},
+    {"id":"compact_300","name":"Compact diesel · 300 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":300,"mass_kg":950,"fuel_lph":75,"shaft_rpm":240,"audio_bank":"compact_i6","audio_reference_rpm":240,"default":true},
+    {"id":"compact_450","name":"Compact diesel · 450 kW","hull":"trawler_hull_14m","model":"marine_i6_compact","power_kw":450,"mass_kg":1050,"fuel_lph":113,"shaft_rpm":275,"audio_bank":"compact_i6","audio_reference_rpm":240},
+    {"id":"coastal_700","name":"Coastal diesel · 700 kW","hull":"hull_24x8","model":"marine_i6_coastal","power_kw":700,"mass_kg":2450,"fuel_lph":175,"shaft_rpm":210,"audio_bank":"coastal_i6","audio_reference_rpm":210,"default":true},
+    {"id":"coastal_950","name":"Coastal diesel · 950 kW","hull":"hull_24x8","model":"marine_i6_coastal","power_kw":950,"mass_kg":2650,"fuel_lph":238,"shaft_rpm":240,"audio_bank":"coastal_i6","audio_reference_rpm":210},
+    {"id":"freighter_1100","name":"Freighter diesel · 1100 kW","hull":"hull_32x10","model":"marine_v12_freighter","power_kw":1100,"mass_kg":4050,"fuel_lph":275,"shaft_rpm":180,"audio_bank":"freighter_v12","audio_reference_rpm":180,"default":true},
+    {"id":"freighter_1600","name":"Freighter diesel · 1600 kW","hull":"hull_32x10","model":"marine_v12_freighter","power_kw":1600,"mass_kg":4400,"fuel_lph":400,"shaft_rpm":210,"audio_bank":"freighter_v12","audio_reference_rpm":180}
   ]
 }

@@ -9,6 +9,8 @@ extends AudioStreamPlayer3D
 const _STOP_HYSTERESIS : float = 0.08   # stop_threshold = play_threshold − this
 
 var _is_active: bool = false
+var _signal_wait := 0.0
+const SIGNAL_INTERVAL := 30.0
 
 func _ready() -> void:
 	if Engine.is_editor_hint():
@@ -17,24 +19,15 @@ func _ready() -> void:
 	# 3D Audio setup
 	max_distance = 10000.0
 	unit_size = 80.0       # Increased from 50.0 to carry much further without falling off
-	volume_db = 12.0       # Boosted base volume
+	volume_db = -6.0       # Boosted base volume
 	attenuation_model = AudioStreamPlayer3D.ATTENUATION_LOGARITHMIC
 	bus = &"Master"
 
-	# Load the audio.
-	stream = load("res://resources/audio/looped/foghorns/fog_horn_1.wav")
-	# Belt-and-suspenders against the .import file silently flipping the loop
-	# mode back to PINGPONG (the default for many WAV exports). A foghorn has
-	# a decaying tail — ping-pong only plays the first BWWAAAAA, then bounces
-	# back-and-forth across the silent tail forever.
-	# NB: we only touch loop_mode here — loop_begin/loop_end come from the
-	# import and zeroing them would produce an empty loop (= silence).
-	var wav := stream as AudioStreamWAV
-	if wav != null and wav.loop_mode != AudioStreamWAV.LOOP_FORWARD:
-		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream = AudioLibrary.stream("res://resources/audio/world/horns/harbour_horn_1.wav", false)
+	bus = AudioLibrary.bus("res://resources/audio/world/horns/harbour_horn_1.wav")
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if Engine.is_editor_hint() or stream == null:
 		return
 
@@ -46,10 +39,15 @@ func _process(_delta: float) -> void:
 
 	if should_play and not _is_active:
 		_is_active = true
-		play()
+		_signal_wait = 0.0
 	elif not should_play and _is_active:
 		_is_active = false
 		stop()
+	if _is_active:
+		_signal_wait -= delta
+		if _signal_wait <= 0.0 and not playing:
+			play()
+			_signal_wait = SIGNAL_INTERVAL
 
 
 func _sample_fog_density() -> float:

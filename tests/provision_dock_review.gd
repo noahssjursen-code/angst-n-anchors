@@ -75,8 +75,8 @@ func verify() -> void:
 	output = "C:/Users/noahs/Pictures/machinescreenshots/provision-dock-" + str(Time.get_unix_time_from_system()).replace(".", "-")
 	DirAccess.make_dir_recursive_absolute(output)
 	await capture("before")
-	if unloading: npc._panel._btn_unload.pressed.emit()
-	else: npc._panel._btn_load.pressed.emit()
+	if unloading: npc._on_request_unload()
+	else: npc._on_request_load()
 	if not auto.is_active(): failures.append("NPC did not start job")
 	var identity := job.authority_context()
 	if job.start_job(boat, QuayEquipmentJob.MODE_LOAD): failures.append("Duplicate job start accepted")
@@ -116,16 +116,16 @@ func verify() -> void:
 			if crane.get_attached_container() != held: failures.append("Unreachable approach detached cargo")
 			await capture("unreachable-retains-cargo")
 			destination_pad.global_transform = saved_pose
-			if unloading: npc._panel._btn_unload.pressed.emit()
-			else: npc._panel._btn_load.pressed.emit()
+			if unloading: npc._on_request_unload()
+			else: npc._on_request_load()
 			if not auto.is_active(): failures.append("Cannot retry after unreachable approach")
 		if cancel_resume and not interrupted and auto._phase == ProvisionCraneAutoOperator.Phase.TO_DROP:
 			interrupted = true
 			var held := crane.get_attached_container()
-			npc._panel._btn_stop.pressed.emit()
+			npc._on_request_stop()
 			if crane.get_attached_container() != held: failures.append("Cancel lost suspended cargo")
-			if unloading: npc._panel._btn_unload.pressed.emit()
-			else: npc._panel._btn_load.pressed.emit()
+			if unloading: npc._on_request_unload()
+			else: npc._on_request_load()
 			if not auto.is_active(): failures.append("Cannot resume a suspended lift")
 		if blocked_drop and not interrupted and auto._phase == ProvisionCraneAutoOperator.Phase.RELEASE:
 			interrupted = true
@@ -137,8 +137,8 @@ func verify() -> void:
 			if auto.is_active() or job.last_failure.is_empty(): failures.append("Occupied destination did not fail visibly")
 			if crane.get_attached_container() != held: failures.append("Occupied destination detached cargo")
 			blocked_pad.remove_container_at(temporary_blocker)
-			if unloading: npc._panel._btn_unload.pressed.emit()
-			else: npc._panel._btn_load.pressed.emit()
+			if unloading: npc._on_request_unload()
+			else: npc._on_request_load()
 			if not auto.is_active(): failures.append("Cannot retry blocked destination")
 		auto._process(.05)
 		if i % 300 == 0 and auto.is_active():

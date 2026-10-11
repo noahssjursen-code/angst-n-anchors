@@ -7,7 +7,8 @@ extends Node
 ## Local saves go through PlayerSaveStore; swap load/save there for a server
 ## fetch when accounts arrive. Nothing else in the game needs to change.
 
-## Fictional ledger currency — abstract enough to fit any era or tone.
+## Norwegian kroner. Amounts are whole kroner.
+const CURRENCY_CODE   := PlayerData.CURRENCY_CODE
 const CURRENCY_SYMBOL := PlayerData.CURRENCY_SYMBOL
 const CURRENCY_NAME   := PlayerData.CURRENCY_NAME
 
@@ -262,12 +263,43 @@ func begin_new_captain(
 		"company_name": resolved_company_name,
 		"brand_color": brand_color.to_html(false),
 		"starter_vessel": starter_vessel,
+		"walkup_purchase": starter_vessel.is_empty(),
 	})
 	if not bool(create_result.get("ok", false)):
 		push_error("PlayerSession: company onboarding failed: %s" % str(create_result.get("message", "unknown")))
 	data_loaded.emit(data)
 	company_changed.emit(company_service.company_summary())
 	save_now()
+
+
+func purchase_yard_vessel(command: Dictionary) -> Dictionary:
+	if is_remote_voyage():
+		return CompanyContracts.result_error("remote_purchase_unavailable", "Vessel purchases require the server's purchase service; this local yard cannot charge a remote account.")
+	_ensure_company_authority()
+	var previous := data.to_dict()
+	var result := company_service.purchase_vessel(command)
+	if not bool(result.get("ok", false)):
+		return result
+	# Commit the debit and owned vessel together in the canonical player file.
+	# Archives are recovery copies, never a second purchase authority: writing
+	# them first could resurrect an unpaid vessel after a failed player save.
+	var saved := not _persistent_io_enabled
+	if _persistent_io_enabled and LocalCaptainStore.has_active():
+		_snapshot_world_state()
+		saved = PlayerSaveStore.save_player(data)
+	if not saved:
+		data = PlayerData.from_dict(previous)
+		company_service.bind(data)
+		return CompanyContracts.result_error("save_failed", "Purchase was not saved. No money was charged; try again.")
+	if _persistent_io_enabled:
+		LocalCaptainStore.touch_index_from_player(data)
+		var bought: Dictionary = result.get("data",{}).get("vessel",{})
+		if not VesselArchive.save_record(_vessel_owner_id(), bought):
+			push_warning("Purchase saved in captain ledger; vessel recovery copy will be retried on the next save.")
+	marks_changed.emit(data.marks)
+	company_changed.emit(company_service.company_summary())
+	vessels_synced.emit()
+	return result
 
 
 func get_company_summary() -> Dictionary:
@@ -285,6 +317,48 @@ func store_company_inventory(command: Dictionary) -> Dictionary:
 func reserve_company_inventory(command: Dictionary) -> Dictionary:
 	_ensure_company_authority()
 	var result := company_service.reserve_inventory(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func hire_company_crew(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.hire_crew(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func file_company_route(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.file_route(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func file_company_delivery(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.file_delivery(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func assign_company_crew(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.assign_crew(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func advance_company_delivery(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.advance_delivery(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func acquire_company_facility(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.acquire_facility(command)
 	_company_mutation_completed(result)
 	return result
 

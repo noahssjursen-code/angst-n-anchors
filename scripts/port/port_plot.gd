@@ -158,7 +158,6 @@ func _spawn_harbour_staff() -> void:
 	hm.position = apron + Vector3(-3.5, 0.0, 0.0)
 	hm.rotation.y = facing_seaward
 	add_child(hm)
-	_add_staff_nameplate(hm, "HARBOUR MASTER")
 
 	var sw := ShipwrightNpc.new()
 	sw.name = "Shipwright"
@@ -166,7 +165,6 @@ func _spawn_harbour_staff() -> void:
 	sw.position = apron + Vector3(3.5, 0.0, 0.0)
 	sw.rotation.y = facing_seaward
 	add_child(sw)
-	_add_staff_nameplate(sw, "SHIPWRIGHT")
 
 	var agent := CargoAgentNpc.new()
 	agent.name = "CargoAgent"
@@ -175,7 +173,6 @@ func _spawn_harbour_staff() -> void:
 	agent.position = apron + Vector3(0.0, 0.0, -2.5)
 	agent.rotation.y = facing_seaward
 	add_child(agent)
-	_add_staff_nameplate(agent, "CARGO AGENT")
 
 	## Snap feet onto apron/foundation collision once StaticBodies exist.
 	call_deferred("_snap_staff_to_ground", [hm, sw, agent])
@@ -199,22 +196,6 @@ func _staff_apron_local() -> Vector3:
 	var spawn := _layout_graph.spawn_local_position()
 	## Keep XZ from spawn anchor; replace the player-body Y lift with deck height.
 	return Vector3(spawn.x, deck_y, spawn.z)
-
-
-func _add_staff_nameplate(npc: Node3D, text: String) -> void:
-	if npc == null:
-		return
-	var label := Label3D.new()
-	label.name = "StaffNameplate"
-	label.text = text
-	label.pixel_size = 0.012
-	label.modulate = Color(0.98, 0.94, 0.78)
-	label.outline_modulate = Color(0.05, 0.08, 0.10, 0.9)
-	label.outline_size = 8
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.position = Vector3(0.0, 2.25, 0.0)
-	npc.add_child(label)
 
 
 func _snap_staff_to_ground(staff: Array) -> void:
@@ -310,6 +291,7 @@ func _register_with_catalog() -> void:
 		str(chart.get("max_ship_class_name", "")),
 		_data.trade_profile.export_slots if _data.trade_profile != null else [],
 	)
+	catalog.register_freight_berths(_data.port_id, _data.freight_berths())
 
 
 func _own_subtree(node: Node, root: Node) -> void:

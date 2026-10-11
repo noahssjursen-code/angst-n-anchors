@@ -81,6 +81,7 @@ void fragment() {
 	float s_up    = luma(texture(screen_texture, uv + vec2( 0.0,  px.y)).rgb);
 	float s_down  = luma(texture(screen_texture, uv + vec2( 0.0, -px.y)).rgb);
 
+
 	float gx = s_right - s_left;
 	float gy = s_up    - s_down;
 	float edge    = length(vec2(gx, gy));

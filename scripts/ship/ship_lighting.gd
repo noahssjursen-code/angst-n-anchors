@@ -37,6 +37,9 @@ func cycle_preset() -> void:
 	_preset = (_preset + 1) % 4
 	_apply_preset()
 	preset_changed.emit(PRESET_NAMES[_preset])
+	var host := get_parent() as Node3D
+	if host != null and host.is_inside_tree():
+		WorldSound.play("res://resources/audio/world/helm/breaker_click_1.wav", host.global_position, -10.0)
 
 
 func get_preset_name() -> String:

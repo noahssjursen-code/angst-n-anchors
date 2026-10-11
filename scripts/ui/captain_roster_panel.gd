@@ -15,49 +15,44 @@ var _sail_btn: Button
 var _show_seed := true
 var _allow_debug_marks := false
 var _on_debug_marks: Callable = Callable()
+var _delete_confirmation: ConfirmationDialog
+var _pending_delete_id := ""
 
 
 func _ready() -> void:
-	theme = HudStyle.make_theme()
-	add_theme_constant_override("separation", 12)
+	add_theme_constant_override("separation", UiPalette.GAP_M)
+	add_child(Ui.eyebrow("Captains"))
 
-	var title := Label.new()
-	title.text = "CAPTAINS"
-	HudStyle.apply_body_font(title, 11, HudStyle.C_COPPER, true)
-	add_child(title)
-
-	var scroll := ScrollContainer.new()
+	var scroll := Ui.scroll()
 	scroll.custom_minimum_size = Vector2(0, 180)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_child(scroll)
-
-	_list = VBoxContainer.new()
-	_list.add_theme_constant_override("separation", 6)
+	_list = Ui.vbox(6)
 	scroll.add_child(_list)
 
-	_hint = Label.new()
-	HudStyle.apply_body_font(_hint, 12, HudStyle.C_LABEL)
+	_hint = Ui.caption("")
 	add_child(_hint)
 
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	var row := Ui.hbox(10)
 	add_child(row)
-
-	_sail_btn = MenuActionButton.new()
-	_sail_btn.text = "Sail voyage"
+	_sail_btn = Ui.button("Sail voyage", "primary")
 	_sail_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sail_btn.disabled = true
 	_sail_btn.pressed.connect(func() -> void:
 		if not selected_id.is_empty():
-			sail_pressed.emit(selected_id)
-	)
+			sail_pressed.emit(selected_id))
 	row.add_child(_sail_btn)
-
-	var create_btn := MenuActionButton.new()
-	create_btn.text = "New captain"
-	create_btn.pressed.connect(func() -> void: create_pressed.emit())
-	row.add_child(create_btn)
+	row.add_child(Ui.button("New captain", "secondary", func() -> void: create_pressed.emit()))
+	_delete_confirmation = ConfirmationDialog.new()
+	_delete_confirmation.title = "Delete captain"
+	_delete_confirmation.ok_button_text = "Delete save"
+	_delete_confirmation.confirmed.connect(func() -> void:
+		var id := _pending_delete_id
+		_pending_delete_id = ""
+		if not id.is_empty():
+			delete_pressed.emit(id))
+	_delete_confirmation.canceled.connect(func() -> void: _pending_delete_id = "")
+	add_child(_delete_confirmation)
 
 
 func configure(show_seed: bool = true, allow_debug_marks: bool = false, on_debug_marks: Callable = Callable()) -> void:
@@ -68,8 +63,7 @@ func configure(show_seed: bool = true, allow_debug_marks: bool = false, on_debug
 
 func set_entries(entries: Array, selected: String = "") -> void:
 	selected_id = selected
-	for child in _list.get_children():
-		child.queue_free()
+	Ui.clear(_list)
 	if entries.is_empty():
 		_hint.text = "No captains yet. Create one to begin."
 		_sail_btn.disabled = true
@@ -88,33 +82,24 @@ func set_message(text: String) -> void:
 
 func _add_row(entry: Dictionary) -> void:
 	var id := str(entry.get("id", ""))
-	var row := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
 	var active := id == selected_id
-	sb.bg_color = Color(0.08, 0.12, 0.13, 0.55) if active else Color(0.05, 0.07, 0.08, 0.35)
-	sb.border_color = HudStyle.C_AMBER if active else HudStyle.C_BRASS
-	sb.set_border_width_all(1)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 10
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 10
-	row.add_theme_stylebox_override("panel", sb)
+	var row := Ui.card("signal" if active else "")
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_list.add_child(row)
 
-	var inner := HBoxContainer.new()
-	inner.add_theme_constant_override("separation", 10)
+	var inner := Ui.hbox(10)
 	row.add_child(inner)
-
-	var text_col := VBoxContainer.new()
+	var text_col := Ui.vbox(2)
 	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_col.add_theme_constant_override("separation", 2)
 	inner.add_child(text_col)
-
 	var pick := Button.new()
-	pick.flat = true
+	pick.theme_type_variation = "GhostButton"
 	pick.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	pick.text = str(entry.get("display_name", "Captain"))
-	HudStyle.apply_body_font(pick, 16, HudStyle.C_AMBER if active else HudStyle.C_TEXT, true)
+	pick.add_theme_font_override("font", UiPalette.strong())
+	pick.add_theme_font_size_override("font_size", UiPalette.SIZE_LEAD)
+	if active:
+		pick.add_theme_color_override("font_color", UiPalette.CRANE)
 	text_col.add_child(pick)
 
 	var meta_bits: PackedStringArray = []
@@ -126,23 +111,19 @@ func _add_row(entry: Dictionary) -> void:
 	if not company_name.is_empty():
 		meta_bits.append(company_name)
 	meta_bits.append(PlayerSession.format_money(int(entry.get("marks", 0))))
-	var meta := Label.new()
-	meta.text = " · ".join(meta_bits)
-	HudStyle.apply_body_font(meta, 11, HudStyle.C_LABEL)
-	text_col.add_child(meta)
+	text_col.add_child(Ui.caption(" · ".join(meta_bits)))
 
 	if _allow_debug_marks and _on_debug_marks.is_valid():
-		var cheat := Button.new()
-		cheat.text = "+1M"
-		cheat.flat = true
+		var cheat := Ui.button("+1M", "chip")
+		cheat.toggle_mode = false
 		cheat.pressed.connect(func() -> void: _on_debug_marks.call(entry))
 		inner.add_child(cheat)
 
-	var del := Button.new()
-	del.text = "Delete"
-	del.flat = true
-	HudStyle.apply_body_font(del, 12, HudStyle.C_LABEL)
-	del.pressed.connect(func() -> void: delete_pressed.emit(id))
+	var del := Ui.button("Delete", "ghost")
+	del.pressed.connect(func() -> void:
+		_pending_delete_id = id
+		_delete_confirmation.dialog_text = "Delete %s and this captain's saved company and vessels?\nThis cannot be undone." % str(entry.get("display_name", "Captain"))
+		_delete_confirmation.popup_centered(Vector2i(460, 180)))
 	inner.add_child(del)
 
 	var select := func() -> void:
@@ -151,5 +132,4 @@ func _add_row(entry: Dictionary) -> void:
 	pick.pressed.connect(select)
 	row.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			select.call()
-	)
+			select.call())

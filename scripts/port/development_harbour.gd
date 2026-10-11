@@ -10,10 +10,12 @@ const PASSENGER_FRONTAGE_M := 120.0
 static func trade_profile() -> PortTradeProfile:
 	var profile := PortTradeProfile.new()
 	profile.theme_id = THEME
-	# Every existing commodity has its own terminal. General/container handling
-	# supports both directions; specialised cargo keeps its normal one-way quay.
+	# Exercise implemented handling only. Unfinished catalogue entries must not
+	# create placeholder quays even in the development captain's home.
 	for commodity: Dictionary in CommodityCatalog.COMMODITIES:
 		var id := str(commodity.id)
+		if not CommodityCatalog.generates_port_facility(id):
+			continue
 		if id in ["fresh_groundfish", "crude_oil", "lng"]:
 			profile.destiny_import_slots.append(id)
 		else:

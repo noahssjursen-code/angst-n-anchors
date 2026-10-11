@@ -41,7 +41,7 @@ func sync_from_player_data(data: Variant) -> void:
 
 
 func offers_at(port_id: String) -> Array[Dictionary]:
-	return _generated_offers(port_id, FreightOfferGenerator.OFFER_COUNT)
+	return _generated_offers(port_id, 0)
 
 
 func eligible_offers_at(port_id: String, ship: BoatBody) -> Array[Dictionary]:
@@ -63,9 +63,7 @@ func eligible_offers_at(port_id: String, ship: BoatBody) -> Array[Dictionary]:
 		offer["id"] = "%s:vessel:%s:load:%d" % [template.id, _vessel_uid(ship), int(quantity)]
 		if is_offer_compatible_with_ship(offer, ship):
 			eligible.append(offer)
-		if eligible.size() >= FreightOfferGenerator.OFFER_COUNT:
-			break
-	return eligible
+	return FreightOfferGenerator.select_offers(eligible, 0)
 
 
 func _generated_offers(port_id: String, max_offers: int) -> Array[Dictionary]:
@@ -80,6 +78,75 @@ func _generated_offers(port_id: String, max_offers: int) -> Array[Dictionary]:
 
 func active_contracts() -> Array[Dictionary]:
 	return _active.duplicate(true)
+
+
+## A booking can be released without a fee while its cargo is still ashore.
+## Never orphan cargo already aboard or suspended on a crane. UI previews and
+## the command both use this authoritative check, including stale-panel retries.
+func cancellation_status(contract_id: String) -> Dictionary:
+	if PlayerSession.is_remote_voyage():
+		return {"allowed":false,"reason":"Contract cancellation is not available on this server."}
+	var index := _contract_index(contract_id)
+	if index < 0:
+		return {"allowed":false,"reason":"This job is no longer active."}
+	var contract := _active[index]
+	var loaded := float(contract.get("loaded_quantity",0.0))
+	var delivered := float(contract.get("delivered_quantity",0.0))
+	if loaded > delivered + .001:
+		return {"allowed":false,"reason":"Cargo is already aboard. Unload it at the destination before cancelling the remaining booking."}
+	var harbour := HarbourRegistry.controller(str(contract.get("origin_port_id","")))
+	if harbour != null:
+		for equipment_id in harbour.equipment_ids_on_berth(str(contract.get("berth_id",""))):
+			var equipment := harbour.get_equipment(equipment_id)
+			if equipment != null and equipment.is_job_active():
+				return {"allowed":false,"reason":"A transfer is running at this quay. Stop it before cancelling."}
+	var waiting := _waiting_contract_containers(contract)
+	var issued := float(contract.get("issued_quantity",0.0))
+	var accounted := loaded
+	if str(contract.get("handling_mode","")) in ["general","container"]:
+		accounted += waiting.size()
+	if issued > accounted + .001:
+		return {"allowed":false,"reason":"Cargo has left the quay and is still in transit on handling equipment. Return or finish transferring it first."}
+	return {"allowed":true,"reason":"No cancellation fee. Reserved space and waiting quay cargo will be released; no delivery payment is earned."}
+
+
+func cancel_contract(contract_id: String) -> Dictionary:
+	var status := cancellation_status(contract_id)
+	if not bool(status.allowed):
+		return CompanyContracts.result_error("cannot_cancel",str(status.reason))
+	var index := _contract_index(contract_id)
+	var previous := _active.duplicate(true)
+	var waiting := _waiting_contract_containers(_active[index])
+	_active.remove_at(index)
+	PlayerSession.data.accepted_contracts = active_contracts()
+	# Commit the booking removal before deleting its physical staging. Roll back
+	# without restore_contracts(), which intentionally resets voyage counters.
+	if not PlayerSession.save_now():
+		_active.assign(previous)
+		PlayerSession.data.accepted_contracts = active_contracts()
+		return CompanyContracts.result_error("save_failed","The cancellation could not be saved. Your job and cargo are unchanged; try again.")
+	for entry in waiting:
+		var pad := entry.pad as CargoSlotPadComponent
+		var container := entry.container as ContainerNode
+		if is_instance_valid(pad) and is_instance_valid(container):
+			pad.take_container_node(container)
+			container.queue_free()
+	_publish()
+	return CompanyContracts.result_ok({"message":"Job cancelled. Reserved cargo space released. No fee charged."})
+
+
+func _waiting_contract_containers(contract: Dictionary) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	var harbour := HarbourRegistry.controller(str(contract.get("origin_port_id","")))
+	if harbour == null: return found
+	var consignment_id := str((contract.get("consignment",{}) as Dictionary).get("consignment_id",""))
+	for yard in harbour.yards_on_berth(str(contract.get("berth_id",""))):
+		if yard is not CargoSlotPadComponent: continue
+		for container in (yard as CargoSlotPadComponent).iter_container_nodes():
+			if not is_instance_valid(container) or container.unit == null: continue
+			if container.unit.freight_contract_id == str(contract.id) and container.unit.consignment_id == consignment_id:
+				found.append({"pad":yard,"container":container})
+	return found
 
 
 ## Called after the authoritative world port directory is populated. This also
@@ -139,9 +206,17 @@ func is_offer_compatible_with_ship(offer: Dictionary, ship: BoatBody) -> bool:
 		return false
 	var commodity_id := str(offer.get("commodity_id", ""))
 	var destination := PortCatalog.get_port_info(str(offer.get("destination_port_id", "")))
+	if destination.has("freight_berths"):
+		var fits := false
+		for slot in destination.freight_berths:
+			if (slot.get("commodities", []) as Array).has(commodity_id) and float(slot.get("length_m", 0.0)) + 0.01 >= ship.length_m + 4.0:
+				fits = true
+				break
+		if not fits: return false
 	var limit_name := str(destination.get("max_ship_class_name", ""))
 	var hull := HullRegistry.get_by_id(str(ship.get_meta("hull_id", "")))
 	for class_id in ShipClass.DISPLAY_NAME:
+		if destination.has("freight_berths"): break
 		if str(ShipClass.DISPLAY_NAME[class_id]) != limit_name: continue
 		if ImportedHullCatalog.has(str(ship.get_meta("hull_id", ""))):
 			if float(hull.get("loa_m", 0.0)) > ShipClass.max_length(class_id): return false

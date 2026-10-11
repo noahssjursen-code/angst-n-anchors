@@ -1,13 +1,20 @@
 class_name PlayerData
 
-## Fictional ledger currency — shared by UI formatters and PlayerSession.
-const CURRENCY_SYMBOL := "ℳ"
-const CURRENCY_NAME   := "Marks"
+## Norwegian kroner. Shared by UI formatters and PlayerSession.
+const CURRENCY_CODE   := "NOK"
+const CURRENCY_SYMBOL := "NOK"
+const CURRENCY_NAME   := "NOK"
 const NEW_CAPTAIN_STARTING_MARKS := 6400
 
 
 static func format_money(amount: int) -> String:
-	return "%s %d" % [CURRENCY_SYMBOL, amount]
+	var negative := amount < 0
+	var digits := str(absi(amount))
+	var grouped := ""
+	while digits.length() > 3:
+		grouped = " " + digits.substr(digits.length() - 3, 3) + grouped
+		digits = digits.substr(0, digits.length() - 3)
+	return "%s%s NOK" % ["-" if negative else "", digits + grouped]
 
 
 static func new_uuid() -> String:

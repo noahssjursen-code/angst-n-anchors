@@ -24,7 +24,6 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	theme = HudStyle.make_theme()
 	set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_load_preference()
 	_build_button()
@@ -86,14 +85,14 @@ func _draw() -> void:
 	if collapsed:
 		return
 	var panel := Rect2(Vector2.ZERO, size)
-	draw_rect(panel, Color(0.015, 0.025, 0.03, 0.94))
-	draw_rect(panel, Color(0.58, 0.60, 0.52, 0.92), false, 1.0)
+	draw_rect(panel, UiPalette.HUD_GLASS)
+	draw_rect(panel, UiPalette.KERB, false, 1.0)
 	draw_string(
-		ThemeDB.fallback_font,
+		UiPalette.sign(),
 		Vector2(9.0, 19.0),
-		"LOCAL CHART   2.7 nm",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-		Color(0.86, 0.84, 0.67),
+		"LOCAL CHART   2.7 NM",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
+		UiPalette.CRANE,
 	)
 	var chart := _chart_rect()
 	var bounds := camera.world_bounds(chart.size)
@@ -103,18 +102,19 @@ func _draw() -> void:
 		"world_span": camera.span,
 	}
 	source.renderer.render_minimap(self, context, source.layers, source.nav)
-	draw_rect(chart, Color(0.12, 0.18, 0.18, 0.90), false, 1.0)
+	draw_rect(chart, UiPalette.KERB, false, 1.0)
 	draw_string(
-		ThemeDB.fallback_font,
+		UiPalette.medium(),
 		Vector2(9.0, size.y - 7.0),
 		"K  collapse    C  cursor",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-		Color(0.62, 0.70, 0.67),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+		UiPalette.PAINT_FAINT,
 	)
 
 
 func _build_button() -> void:
-	collapse_button = Button.new()
+	collapse_button = Ui.button("–", "chip")
+	collapse_button.toggle_mode = false
 	collapse_button.name = "MinimapCollapse"
 	collapse_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	collapse_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)

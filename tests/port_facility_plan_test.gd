@@ -22,13 +22,14 @@ func _ready() -> void:
 		berths.quay_stations.append({"id":"berth_"+cid,"family":CommodityCatalog.commodity_terminal_family(cid),"commodities":[cid],"origin":[seen.size()*24-120,-32]})
 	var foundation := {"spine":[[-360,0],[-160,5],[0,20],[160,0],[360,-10]],"town_inland_m":160,"dock_reach_m":26,"bay_lip_m":6}
 	var plan := PortFacilityPlan.build(foundation,berths,profile,5)
-	check(plan.facilities.size()==9,"Office and all eight cargo facility families fit broad test site")
+	check(plan.facilities.size()==4,"Only office, general cargo, fishing and ore/coal facilities generate")
 	print("UNMET ",plan.unmet)
 	check(plan.unmet.is_empty(),"Broad site has no unmet facilities")
 	check(JSON.stringify(plan)==JSON.stringify(PortFacilityPlan.build(foundation,berths,profile,5)),"Plan is deterministic")
 	validate(plan)
 	var kinds := {}
 	for f in plan.facilities:
+		check(f.kind in ["office", "general", "fishing", "bulk_ore"], "Unfinished facility excluded even from explicit all-cargo profile")
 		check(not kinds.has(f.kind),"One shared facility per compatible group")
 		kinds[f.kind]=true
 		if f.kind=="general": check(f.commodity_ids.size()==1,"Import/export general cargo deduplicated")

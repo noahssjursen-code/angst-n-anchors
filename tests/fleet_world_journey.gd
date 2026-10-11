@@ -14,6 +14,8 @@ var cycles := 2
 var filter := ""
 var speed := 8.0
 var container_count := 0
+var lifecycle_only := false
+var purchase_command: Dictionary = {}
 var stage_label: Label
 var checks_label: Label
 var camera_subject: Node3D
@@ -112,11 +114,14 @@ func run() -> void:
 	checks_label = Label.new()
 	column.add_child(checks_label)
 	for arg in OS.get_cmdline_user_args():
+		if arg == "--lifecycle-only": lifecycle_only = true
 		if arg.begins_with("--vessel="): filter = arg.trim_prefix("--vessel=")
 		if arg.begins_with("--cycles="): cycles = maxi(1, int(arg.trim_prefix("--cycles=")))
 		if arg.begins_with("--seed="): report.seed = int(arg.trim_prefix("--seed="))
 		if arg.begins_with("--speed="): speed = clampf(float(arg.trim_prefix("--speed=")),1.0,16.0)
 		if arg.begins_with("--containers="): container_count = maxi(0, int(arg.trim_prefix("--containers=")))
+	if lifecycle_only:
+		report.scope["lifecycle"] = "Real NPC purchase, storage, scratch captain save/reload and redeployment; explicit test capital"
 	if container_count > 0:
 		report.scope["container_booking"] = "Generated route with controlled %d-unit consignment; normal acceptance and physical handling" % container_count
 	# Accelerate simulated time while retaining the normal physical timestep.
@@ -174,6 +179,7 @@ func run() -> void:
 		PlayerVessel.despawn_all_ships(get_tree())
 		ship = null
 		FreightService.restore_contracts([])
+		PlayerSession._persistent_io_enabled = false
 		await get_tree().process_frame
 	report.status = "passed" if not report.cases.is_empty() else "no_cases"
 	for item in report.cases:
@@ -239,7 +245,11 @@ func journey(entry: Dictionary) -> void:
 	if not check(origin != null, "generated origin supports vessel", {"families": Array(families)}): return
 	var master := npc_of(origin, preload("res://scripts/npc/harbour_master_npc.gd")) as HarbourMasterNpc
 	if not check(master != null, "harbourmaster exists"): return
-	PlayerSession.data.set_active_vessel(record)
+	if lifecycle_only:
+		record = await purchase_at_yard(origin, entry)
+		if record.is_empty(): return
+	else:
+		PlayerSession.data.set_active_vessel(record)
 	master._on_interact()
 	master._deploy_fleet_vessel(record)
 	if not check(await wait_until(func(): return PlayerVessel.find_active_ship(get_tree()) != null, 10), "harbourmaster deploys ship"): return
@@ -247,8 +257,6 @@ func journey(entry: Dictionary) -> void:
 	camera_subject = ship
 	set_stage("Checking harbourmaster deployment")
 	ship.freeze = true
-	master._dialogue.hide_panel()
-	master.close_ui()
 	# Dismiss the walk-up conversation through normal input before reviewing
 	# the ship. Otherwise the service panel obscures every cargo capture.
 	if GameMenu.is_modal_open():
@@ -275,6 +283,9 @@ func journey(entry: Dictionary) -> void:
 	await get_tree().physics_frame
 	check_spawn_clearance()
 	await capture("deployed")
+	if lifecycle_only:
+		await storage_roundtrip(origin, master, record)
+		return
 	for trip in cycles:
 		if fishing:
 			if not await fish_trip(record, mc, trip): return
@@ -350,11 +361,9 @@ func run_operator(plot: PortPlot, mode: String) -> bool:
 	if job is ProvisionCraneEquipmentJob:
 		operator = (job.get_parent() as ProvisionCrane).get_auto_operator()
 		operator.cycle_completed.connect(cycle_observer)
-	npc._on_interact()
-	var button: Button = npc._panel._btn_load if mode == "load" else npc._panel._btn_unload
-	if not check(not button.disabled, "operator enables " + mode): npc._on_ui_cancel(); return false
-	button.pressed.emit()
-	npc._on_ui_cancel()
+	if not check(job.can_serve(ship, mode), "operator can serve " + mode): return false
+	if mode == "load": npc._on_request_load()
+	else: npc._on_request_unload()
 	await capture(mode+"-started-"+str(current.get("checks",[]).size()))
 	var simulation_budget := 180.0
 	if job is ProvisionCraneEquipmentJob:
@@ -398,9 +407,7 @@ func freight_trip(record: Dictionary, mc: MooringComponent, trip: int) -> bool:
 		offer["quantity"] = float(container_count)
 		offer["id"] += ":capacity-fixture"
 	var marks := PlayerSession.data.marks
-	agent._on_interact()
 	agent._accept(offer)
-	agent._on_ui_cancel()
 	if not check(not FreightService.active_contracts().is_empty(), "cargo agent accepts movement", {"offer":offer}): return false
 	for i in 5: await get_tree().process_frame
 	if not await run_equipment(plot,"load"): return false
@@ -465,6 +472,84 @@ func fish_trip(record: Dictionary, mc: MooringComponent, trip: int) -> bool:
 	check(PlayerSession.data.marks > marks, "fish landing pays captain")
 	await capture("landed-"+str(trip))
 	return true
+
+
+func purchase_at_yard(origin: PortPlot, entry: Dictionary) -> Dictionary:
+	set_stage("Purchasing from the shipwright")
+	var yard := npc_of(origin, preload("res://scripts/npc/shipwright_npc.gd")) as ShipwrightNpc
+	if not check(yard != null, "generated port has shipwright"): return {}
+	# Set both roots before enabling any writes, including recovery archives/index.
+	LocalCaptainStore.root_override = output.path_join("scratch-saves")
+	var captain_id := "lifecycle-" + str(entry.prebuilt_id)
+	if not check(LocalCaptainStore.create_slot(captain_id), "isolated captain slot created"): return {}
+	PlayerSession._persistent_io_enabled = true
+	PlayerSession.begin_new_captain("Lifecycle Test", CharacterAppearance.default_appearance(), origin.port_id,
+		captain_id, int(report.seed), "Test Shipping", Color.WHITE, "", captain_id)
+	check(PlayerSession.data.owned_vessels.is_empty(), "new captain owns no ship")
+	var funding := PlayerSession.company_service.post_transaction({"request_id":"test-capital", "amount_marks":200000, "category":"test_fixture"})
+	if not check(funding.get("ok", false), "explicit test capital credited"): return {}
+	var desk: Script = load("res://scripts/port/port_service_desk.gd")
+	purchase_command = {"stock_id":entry.prebuilt_id,"vessel_name":"Test " + str(entry.prebuilt_id),"request_id":"buy-" + str(entry.prebuilt_id)}
+	player.global_position = yard.global_position + Vector3(20,0,0)
+	var denied: Dictionary = desk.request(yard,"buy",purchase_command)
+	check(not denied.get("ok",true) and PlayerSession.data.owned_vessels.is_empty(), "out-of-range purchase rejected")
+	player.global_position = yard.global_position + Vector3(0,0,1.5)
+	var before: int = PlayerSession.data.marks
+	var bought: Dictionary = desk.request(yard,"buy",purchase_command)
+	if not check(bought.get("ok",false), "shipwright purchase committed", {"result":bought.get("message","")}): return {}
+	var record: Dictionary = bought.data.vessel
+	check(PlayerSession.data.marks == before-int(bought.data.price_marks), "purchase debits exact stock price", {"price":bought.data.price_marks})
+	check(PlayerSession.data.owned_vessels.size() == 1, "purchase creates one owned vessel")
+	check(ImportedVesselLayout.valid(record.brick_layout,record.hull_id,true), "purchased fit-out passes compliance")
+	var disk := PlayerSaveStore.load_player()
+	check(PlayerData.json_equivalent(disk.find_owned_vessel(str(record.uid)),record), "purchase and complete design persisted")
+	check(disk.marks == PlayerSession.data.marks, "disk balance agrees with purchase")
+	check(VesselArchive.load_records(captain_id).size() == 1, "one recovery archive in scratch slot")
+	var balance: int = PlayerSession.data.marks
+	var retry: Dictionary = desk.request(yard,"buy",purchase_command)
+	check(retry.get("ok",false) and PlayerSession.data.marks == balance and PlayerSession.data.owned_vessels.size() == 1, "purchase retry cannot charge twice")
+	return record
+
+
+func storage_roundtrip(origin: PortPlot, master: HarbourMasterNpc, record: Dictionary) -> void:
+	set_stage("Storing the vessel at the harbourmaster")
+	var uid := str(record.uid)
+	var balance: int = PlayerSession.data.marks
+	var berth := ship.get_moored_berth() as QuayBerthSlot
+	var berth_id := berth.berth_id
+	var desk: Script = load("res://scripts/port/port_service_desk.gd")
+	player.global_position = master.global_position + Vector3(0,0,1.5)
+	var stored: Dictionary = desk.request(master,"store")
+	if not check(stored.get("ok",false), "harbourmaster accepts storage", {"message":stored.get("message","")}): return
+	if not check(await wait_until(func(): return PlayerVessel.find_active_ship(get_tree()) == null, 5), "storage removes physical vessel"): return
+	ship = null
+	camera_subject = master
+	check(origin.harbour_controller().moored_ship(berth_id) == null, "storage frees local quay occupancy")
+	var projection: Dictionary = WorldGateway.projection("vessel_berth",HarbourDeploy.authority_vessel_id(record)).get("state",{})
+	check(str(projection.get("status","")) == "released", "authority releases stored vessel berth")
+	check(PlayerSession.save_now(), "stored fleet saves successfully")
+	var reloaded := LocalCaptainStore.load_player(str(PlayerSession.data.account_id))
+	check(reloaded.owned_vessels.size() == 1 and reloaded.marks == balance, "reload preserves fleet and money")
+	var restored := reloaded.find_owned_vessel(uid)
+	if not check(PlayerData.json_equivalent(restored,record), "reload preserves vessel UUID and every fitted part"): return
+	PlayerSession.data = reloaded
+	PlayerSession.company_service.bind(reloaded)
+	PlayerSession.data_loaded.emit(reloaded)
+	var retry: Dictionary = PlayerSession.call("purchase_yard_vessel",purchase_command)
+	check(retry.get("ok",false) and PlayerSession.data.marks == balance and PlayerSession.data.owned_vessels.size() == 1, "purchase retry after disk reload remains idempotent")
+	set_stage("Redeploying the saved vessel")
+	var deployed: Dictionary = desk.request(master,"deploy",{"id":uid})
+	if not check(deployed.get("ok",false), "saved vessel deploy request accepted", {"message":deployed.get("message","")}): return
+	if not check(await wait_until(func(): return PlayerVessel.find_active_ship(get_tree()) != null,10), "saved vessel reappears"): return
+	ship = PlayerVessel.find_active_ship(get_tree())
+	ship.freeze = true
+	camera_subject = ship
+	check(str(ship.get_meta("vessel_uid","")) == uid, "redeployment preserves UUID")
+	check(get_tree().get_nodes_in_group(PlayerVessel.GROUP).size() == 1, "redeployment leaves exactly one physical vessel")
+	check(ship.get_moored_berth() != null, "redeployment assigns a serviceable berth")
+	var mooring := ship.find_child("MooringComponent",true,false) as MooringComponent
+	check(await wait_until(func(): return mooring != null and mooring.bow_line_tied and mooring.stern_line_tied,5), "redeployment restores both mooring lines")
+	await capture("stored-reloaded-redeployed")
 
 
 func check_spawn_clearance() -> void:

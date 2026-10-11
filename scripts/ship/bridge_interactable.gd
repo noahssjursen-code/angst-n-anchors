@@ -25,8 +25,6 @@ const LAYER_WORLD := 1
 
 var _occupied: bool = false
 var _player: CharacterBody3D = null
-var _prompt_layer: CanvasLayer
-var _prompt_label: Label
 var _boat_cam: Camera3D = null
 var _boat_controller: BoatController = null
 var _boat_rigid_cached: RigidBody3D = null
@@ -36,11 +34,6 @@ var _interact_area: Area3D
 func _ready() -> void:
 	_cache_boat_nodes()
 	_ensure_interact_area()
-	_ensure_prompt_ui()
-
-
-func _process(_delta: float) -> void:
-	_update_prompt()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -108,8 +101,6 @@ func _board() -> void:
 	if _player == null:
 		return
 	_occupied = true
-	if _prompt_label != null:
-		_prompt_label.visible = false
 	_player.set_physics_process(false)
 	_player.set_process_unhandled_input(false)
 	_player.velocity = Vector3.ZERO
@@ -121,6 +112,7 @@ func _board() -> void:
 			(_boat_cam as BoatCamera).begin_helm(self)
 	if _boat_controller != null:
 		_boat_controller.activate()
+	WorldSound.play("res://resources/audio/world/helm/seat_sit_1.wav", global_position, -12.0)
 	player_boarded.emit()
 
 
@@ -144,6 +136,7 @@ func _exit() -> void:
 		_player = null
 	if _boat_controller != null:
 		_boat_controller.deactivate()
+	WorldSound.play("res://resources/audio/world/helm/seat_stand_1.wav", global_position, -12.0)
 	player_exited.emit()
 
 
@@ -195,33 +188,6 @@ func _ensure_interact_area() -> void:
 		box = BoxShape3D.new()
 		col.shape = box
 	box.size = interaction_volume_size
-
-
-func _ensure_prompt_ui() -> void:
-	if _prompt_layer != null:
-		return
-	_prompt_layer = CanvasLayer.new()
-	_prompt_layer.name = "BoardPromptLayer"
-	add_child(_prompt_layer)
-	_prompt_label = Label.new()
-	_prompt_label.name = "BoardPrompt"
-	_prompt_label.text = prompt_text
-	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_prompt_label.visible = false
-	_prompt_label.add_theme_font_size_override("font_size", 22)
-	_prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt_label.offset_left = -180.0
-	_prompt_label.offset_right = 180.0
-	_prompt_label.offset_top = -92.0
-	_prompt_label.offset_bottom = -48.0
-	_prompt_layer.add_child(_prompt_label)
-
-
-func _update_prompt() -> void:
-	if _prompt_label == null:
-		return
-	_prompt_label.visible = not _occupied and _boarding_player() != null
 
 
 func is_occupied() -> bool:

@@ -96,7 +96,14 @@ const COMMODITIES := [
 	},
 ]
 
-## Full trade pool for seeded port profiles (import/export slots).
+## Catalogue records above remain available for future systems and old data.
+## Only implemented handling chains may reserve generated quays or land yards.
+const GENERATED_PORT_COMMODITIES := ["provisions", "fresh_groundfish", "iron_ore", "coal"]
+
+static func generates_port_facility(commodity_id: String) -> bool:
+	return commodity_id in GENERATED_PORT_COMMODITIES
+
+## Full catalogue pool; generation is gated separately above.
 const PLAYABLE_TRADE := [
 	"provisions", "containers", "grain", "iron_ore", "coal",
 	"crude_oil", "diesel", "lng",

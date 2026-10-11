@@ -44,13 +44,23 @@ func run() -> void:
 			check(offers.is_empty(), "trawler without freight equipment gets no cargo offers")
 		elif str(entry.prebuilt_id) == "28_10_m":
 			check(not offers.is_empty() and offers[0].quantity == 2, "Harbour Cargo gets a two-container job")
+			test_local_destinations(ship)
 		elif str(entry.prebuilt_id) == "container_feeder_40":
+			var destination: Dictionary = PortCatalog._ports["capacity-destination"]
+			destination["max_ship_class_name"] = "Coastal Trader"
+			destination["freight_berths"] = [{"length_m":200.0,"commodities":["containers","provisions"]}]
+			check(not FreightService.eligible_offers_at("capacity-origin", ship).is_empty(), "Northline can book a physically suitable quay despite obsolete Coastal Trader label")
+			destination.freight_berths[0].length_m = 40.0
+			check(FreightService.eligible_offers_at("capacity-origin", ship).is_empty(), "Northline cannot book a quay shorter than the ship")
+			destination.erase("max_ship_class_name")
+			destination.erase("freight_berths")
 			check(not offers.is_empty() and offers[0].quantity == 40, "Northline receives a forty-container job without a test quantity override")
 			if not offers.is_empty(): test_container_reservations(ship, offers[0])
 		elif str(entry.prebuilt_id) == "bulk_small":
 			test_bulk(ship, offers)
 		else:
-			check(not offers.is_empty(), "freighter gets a usable job")
+			var freight_capacity := FreightService.available_cargo_quantity(ship, "provisions", "general") + FreightService.available_cargo_quantity(ship, "iron_ore", "bulk")
+			check(not offers.is_empty() if freight_capacity >= 1 else offers.is_empty(), "offers match installed freight capacity, including passenger-only vessels")
 		FreightService.restore_contracts([])
 		harbour.unplug_ship(ship)
 		ship.queue_free()
@@ -60,6 +70,19 @@ func run() -> void:
 	FileAccess.open(output.path_join("report.json"), FileAccess.WRITE).store_string(JSON.stringify({"checks": checks, "failures": failures}, "\t"))
 	print("FREIGHT CAPACITY REPORT ", output, " ", failures)
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func test_local_destinations(ship: BoatBody) -> void:
+	var previous := PortCatalog._ports.duplicate(true)
+	for i in range(1, 9):
+		var id := "near-%02d" % (9-i)
+		PortCatalog._ports[id] = {"id":id, "position":Vector3(i*100,0,0), "commodity_imports":["provisions"]}
+	var offers := FreightService.eligible_offers_at("capacity-origin", ship)
+	check(offers.size() == 10, "live service retains eight nearby jobs and both distant cargo options")
+	check(offers.back().distance_m == 3000, "distant work remains selectable beyond the nearby ports")
+	for i in 8:
+		check(offers[i].distance_m == (i+1)*100 and offers[i].quantity == 2, "live vessel offer %d selects nearest compatible port and fits the actual ship" % i)
+	PortCatalog._ports = previous
 
 
 func test_container_reservations(ship: BoatBody, original: Dictionary) -> void:
@@ -75,7 +98,7 @@ func test_container_reservations(ship: BoatBody, original: Dictionary) -> void:
 	check(FreightService.accept_offer_for_ship(six, ship, "capacity-origin"), "existing six-container booking remains valid")
 	available = FreightService.eligible_offers_at("capacity-origin", ship)
 	check(available[0].quantity == 27, "new job fills only twenty-seven unreserved positions")
-	check(available[0].pay_marks == 165 + 27*95, "payment uses full new quantity and one route allowance")
+	check(available[0].pay_marks == 19770, "27 containers over 3 km earn one dispatch fee and distance pay for every container")
 	var quoted := available[0].duplicate(true)
 	for unit in FreightService.make_container_units(six.id, 3):
 		for pad in pads:

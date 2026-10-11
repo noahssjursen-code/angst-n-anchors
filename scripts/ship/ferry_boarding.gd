@@ -21,6 +21,8 @@ var landing_rejection := ""
 var _mount: Node3D
 var _barrels: Array[Node3D] = []
 var _rods: Array[Node3D] = []
+var _ramp_audio: AudioStreamPlayer3D
+var _heard_landed := false
 
 func setup(owner_boat: ImportedDraftVessel, visual: Node3D) -> void:
 	boat = owner_boat
@@ -86,9 +88,16 @@ func _physics_process(delta: float) -> void:
 		deployed = false
 		_set_status("Keep clear of the bow ramp")
 		return
+	var previous_angle := angle
 	angle = move_toward(angle, target, ROTATION_SPEED*delta)
 	_pose()
+	_drive_ramp_audio(delta, previous_angle)
 	deployed = _want_down and not solution.is_empty() and absf(angle-target)<.012
+	if deployed and not _heard_landed:
+		var tip_node := part.find_child("RampTip", true, false) as Node3D
+		var tip := tip_node.global_position if tip_node != null else part.global_position
+		WorldSound.play("res://resources/audio/world/ramp/ramp_land_1.wav", tip, -6.0)
+	_heard_landed = deployed
 	if deployed: _set_status("Boarding ramp ready")
 	elif angle >= STOW_ANGLE-.002:
 		_set_status(landing_rejection if _want_down else "Ramp stowed")
@@ -172,6 +181,15 @@ func _landing_solution() -> Dictionary:
 func _reject(reason: String) -> Dictionary:
 	landing_rejection = reason
 	return {}
+
+func _drive_ramp_audio(delta: float, previous_angle: float) -> void:
+	if _ramp_audio == null and is_instance_valid(part):
+		_ramp_audio = WorldSound.loop_on(part, "res://resources/audio/world/ramp/ramp_hydraulic_1.wav", "RampHydraulics")
+		if _ramp_audio != null:
+			_ramp_audio.position = _hinge
+	var rate := absf(angle - previous_angle) / maxf(delta, 0.001)
+	WorldSound.drive(_ramp_audio, clampf(rate / ROTATION_SPEED, 0.0, 1.0), -12.0)
+
 
 func _set_status(text: String) -> void:
 	if status == text: return

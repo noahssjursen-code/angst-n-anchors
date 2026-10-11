@@ -85,6 +85,8 @@ static func derive(definition: PortDefinition, world_seed: int) -> PortTradeProf
 	profile.theme_id = str(theme.get("id", ""))
 	profile.destiny_export_slots = _unique_list(theme.get("exports", []) as Array)
 	profile.destiny_import_slots = _unique_list(theme.get("imports", []) as Array)
+	profile.destiny_export_slots = profile.destiny_export_slots.filter(CommodityCatalog.generates_port_facility)
+	profile.destiny_import_slots = profile.destiny_import_slots.filter(CommodityCatalog.generates_port_facility)
 	## Every harbour handles ordinary mixed freight in both directions. Themes
 	## describe the specialist economy layered on top of this universal service.
 	# General freight is supplied independently by _apply_size_unlock. It must

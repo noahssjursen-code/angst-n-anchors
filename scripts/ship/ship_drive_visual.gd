@@ -57,7 +57,7 @@ func _process(delta: float) -> void:
 		if drive != null and steering != null:
 			max_rudder_degrees = steering.max_rudder_angle_deg
 			apply_snapshot({"throttle":-drive.throttle, "steering":steering.rudder_input,
-				"powered":local_boat.get_fuel_fraction() > 0.0}, revision + 1)
+				"powered":drive.engine_running and local_boat.get_fuel_fraction() > 0.0}, revision + 1)
 	for rotor in propellers:
 		rotor.rotation.z = wrapf(rotor.rotation.z + signed_rpm * TAU / 60.0 * delta, -PI, PI)
 	# Positive helm pushes stern toward port: trailing edge turns starboard.

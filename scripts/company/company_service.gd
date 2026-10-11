@@ -56,7 +56,8 @@ func create_company(command: Dictionary) -> Dictionary:
 	if company_name.length() < 2 or company_name.length() > 48:
 		return CompanyContracts.result_error("invalid_company_name", "Company name must be 2–48 characters.")
 	var starter_id := str(command.get("starter_vessel", "")).strip_edges()
-	if not CompanyContracts.STARTER_VESSELS.has(starter_id):
+	var walkup := bool(command.get("walkup_purchase", false))
+	if not walkup and not CompanyContracts.STARTER_VESSELS.has(starter_id):
 		return CompanyContracts.result_error("invalid_starter_vessel", "Choose a valid starter vessel.")
 	var color := Color.from_string(str(command.get("brand_color", "2f7f83")), Color("2f7f83"))
 	var timestamp := int(command.get("timestamp_unix", Time.get_unix_time_from_system()))
@@ -82,7 +83,7 @@ func create_company(command: Dictionary) -> Dictionary:
 	)
 	var opening := post_transaction({
 		"request_id": "%s:capital" % request_id,
-		"amount_marks": CompanyContracts.STARTING_MARKS,
+		"amount_marks": CompanyContracts.WALKUP_STARTING_MARKS if walkup else CompanyContracts.STARTING_MARKS,
 		"category": "starting_capital",
 		"description": "Company opening capital",
 		"related_entity_id": company_id,
@@ -97,7 +98,7 @@ func create_company(command: Dictionary) -> Dictionary:
 	var leases := _player.company.get("warehouse_leases", []) as Array
 	leases.append(CompanyContracts.opening_warehouse_lease(company_id, _player.home_port_id, timestamp))
 	_player.company["warehouse_leases"] = leases
-	var vessel_result := _grant_starter_vessel(starter_id, request_id)
+	var vessel_result := CompanyContracts.result_ok({}) if walkup else _grant_starter_vessel(starter_id, request_id)
 	if not bool(vessel_result.get("ok", false)):
 		_restore_onboarding_snapshot(
 			previous_company, previous_marks, previous_total_earned, previous_vessels,
@@ -105,6 +106,7 @@ func create_company(command: Dictionary) -> Dictionary:
 		)
 		return vessel_result
 	_player.company["onboarding_complete"] = true
+	_player.company["walkup_purchase"] = walkup
 	var completed_data := {
 		"company_id": company_id,
 		"starter_vessel": starter_id,
@@ -116,6 +118,49 @@ func create_company(command: Dictionary) -> Dictionary:
 		"company": _player.company.duplicate(true),
 		"vessel": (vessel_result.get("data", {}) as Dictionary).get("vessel", {}),
 	})
+
+
+## Resolve stock and price on the authority. The UI never supplies a trusted
+## fit-out, amount or generated vessel id. One request can be retried safely.
+func purchase_vessel(command: Dictionary) -> Dictionary:
+	if _player == null or not bool(_player.company.get("onboarding_complete", false)):
+		return CompanyContracts.result_error("company_missing", "Create your company before buying a vessel.")
+	var request_id := _request_id(command)
+	var cached := _processed_result(request_id)
+	if not cached.is_empty():
+		return CompanyContracts.result_ok(cached)
+	var entry: Dictionary = {}
+	for item in PrebuiltVesselCatalog.for_sale_entries():
+		if str(item.get("prebuilt_id", "")) == str(command.get("stock_id", "")):
+			entry = item
+			break
+	if entry.is_empty():
+		return CompanyContracts.result_error("stock_unavailable", "That vessel is no longer available from the yard.")
+	var vessel_name := str(command.get("vessel_name", entry.get("prebuilt_name", "Vessel"))).strip_edges()
+	if vessel_name.length() < 2 or vessel_name.length() > 48:
+		return CompanyContracts.result_error("invalid_name", "Vessel name must be 2–48 characters.")
+	var price := ShipwrightPricing.commission_price(entry, HullStations.from_box(float(entry.get("loa_m", 24)), float(entry.get("beam_m", 8)), float(entry.get("depth_m", 4)), 10), _player)
+	var uid := VesselSpawn.new_vessel_uid(str(entry.get("hull_id", "")))
+	var record := PlayerData.ledger_vessel_record(VesselSpawn.normalize_record({
+		"uid": uid, "name": vessel_name, "display": vessel_name,
+		"hull_id": entry.hull_id, "registration_id": entry.get("registration_id", ""),
+		"shaft_power_kw": entry.get("shaft_power_kw", 1.0),
+		"brick_layout": entry.prebuilt_layout.duplicate(true),
+	}))
+	if record.is_empty():
+		return CompanyContracts.result_error("invalid_stock", "The yard cannot validate this vessel's fit-out.")
+	if price > 0:
+		var payment := post_transaction({"request_id": request_id + ":payment", "amount_marks": -price,
+			"category": "vessel_purchase", "description": "Purchased " + vessel_name, "related_entity_id": uid})
+		if not bool(payment.get("ok", false)):
+			return payment
+	_player.upsert_owned_vessel(record)
+	if _player.active_vessel.is_empty():
+		_player.set_active_vessel(record)
+	_player.company["tablet_received"] = true
+	var result := {"vessel": record, "price_marks": price, "balance_marks": _player.marks}
+	_mark_processed(request_id, result)
+	return CompanyContracts.result_ok(result)
 
 
 func post_transaction(command: Dictionary) -> Dictionary:
@@ -284,8 +329,248 @@ func company_summary() -> Dictionary:
 		"inventory_lots": (_player.company.get("inventory_lots", []) as Array).duplicate(true),
 		"warehouse_leases": (_player.company.get("warehouse_leases", []) as Array).duplicate(true),
 		"recent_transactions": _recent_transactions(account.get("ledger", []) as Array, 12),
+		"currency": "NOK",
+		"crew": (_player.company.get("crew", []) as Array).duplicate(true),
+		"routes": (_player.company.get("routes", []) as Array).duplicate(true),
+		"deliveries": (_player.company.get("deliveries", []) as Array).duplicate(true),
+		"facilities": (_player.company.get("facilities", []) as Array).duplicate(true),
+		"activity": (_player.company.get("activity", []) as Array).duplicate(true),
+		"fleet": OperationsRecords.fleet_postings(
+			_player.owned_vessels,
+			_player.company.get("crew", []) as Array,
+			str(_player.active_vessel.get("uid", "")),
+		),
 		"onboarding_complete": bool(_player.company.get("onboarding_complete", false)),
 	}
+
+
+func hire_crew(command: Dictionary) -> Dictionary:
+	if _player == null or _player.company.is_empty():
+		return CompanyContracts.result_error("company_missing", "Create a company first.")
+	var request_id := _request_id(command)
+	var cached := _processed_result(request_id)
+	if not cached.is_empty():
+		return CompanyContracts.result_ok(cached)
+	var display_name := str(command.get("display_name", "")).strip_edges()
+	if display_name.is_empty():
+		return CompanyContracts.result_error("name_required", "A crew member needs a name.")
+	var timestamp := int(command.get("timestamp_unix", Time.get_unix_time_from_system()))
+	var crew_id := str(command.get("crew_id", "")).strip_edges()
+	if crew_id.is_empty():
+		crew_id = "crew-%s" % PlayerData.new_uuid()
+	if _index_by_id("crew", crew_id) >= 0:
+		return CompanyContracts.result_error("crew_exists", "That crew member is already on the books.")
+	var member := OperationsRecords.crew_member(
+		crew_id,
+		str(_player.company.get("id", "")),
+		display_name,
+		str(command.get("role", "deck")),
+		str(command.get("qualification", "")),
+		int(command.get("wage_nok_per_day", 0)),
+		timestamp,
+	)
+	var crew := _player.company.get("crew", []) as Array
+	crew.append(member)
+	_player.company["crew"] = crew
+	_append_activity("crew_hired", "%s hired as %s." % [display_name, member.role], crew_id, timestamp)
+	var data := {"crew": member}
+	_mark_processed(request_id, data)
+	return CompanyContracts.result_ok(data)
+
+
+func assign_crew(command: Dictionary) -> Dictionary:
+	if _player == null or _player.company.is_empty():
+		return CompanyContracts.result_error("company_missing", "Create a company first.")
+	var request_id := _request_id(command)
+	var cached := _processed_result(request_id)
+	if not cached.is_empty():
+		return CompanyContracts.result_ok(cached)
+	var index := _index_by_id("crew", str(command.get("crew_id", "")))
+	if index < 0:
+		return CompanyContracts.result_error("crew_missing", "That crew member is not on the books.")
+	var crew := _player.company.get("crew", []) as Array
+	var member := (crew[index] as Dictionary).duplicate(true)
+	if str(member.get("status", "")) != "active":
+		return CompanyContracts.result_error("crew_inactive", "Only an active crew member can be assigned.")
+	var vessel_uid := str(command.get("vessel_uid", "")).strip_edges()
+	member["vessel_uid"] = vessel_uid
+	member["availability"] = "assigned" if not vessel_uid.is_empty() else "available"
+	crew[index] = member
+	_player.company["crew"] = crew
+	var timestamp := int(command.get("timestamp_unix", Time.get_unix_time_from_system()))
+	_append_activity("crew_assigned", "%s assignment updated." % str(member.get("display_name", "")), str(member.get("id", "")), timestamp)
+	var data := {"crew": member}
+	_mark_processed(request_id, data)
+	return CompanyContracts.result_ok(data)
+
+
+func file_route(command: Dictionary) -> Dictionary:
+	if _player == null or _player.company.is_empty():
+		return CompanyContracts.result_error("company_missing", "Create a company first.")
+	var request_id := _request_id(command)
+	var cached := _processed_result(request_id)
+	if not cached.is_empty():
+		return CompanyContracts.result_ok(cached)
+	var origin := str(command.get("origin_port_id", "")).strip_edges()
+	var destination := str(command.get("destination_port_id", "")).strip_edges()
+	if origin.is_empty() or destination.is_empty():
+		return CompanyContracts.result_error("route_ports", "A route needs an origin and a destination.")
+	var route_id := str(command.get("route_id", "")).strip_edges()
+	if route_id.is_empty():
+		route_id = "route-%s" % PlayerData.new_uuid()
+	if _index_by_id("routes", route_id) >= 0:
+		return CompanyContracts.result_error("route_exists", "That route is already filed.")
+	var record := OperationsRecords.route_plan(
+		route_id,
+		str(_player.company.get("id", "")),
+		str(command.get("vessel_uid", "")),
+		origin,
+		destination,
+		str(command.get("commodity_id", "")),
+	)
+	var routes := _player.company.get("routes", []) as Array
+	routes.append(record)
+	_player.company["routes"] = routes
+	var timestamp := int(command.get("timestamp_unix", Time.get_unix_time_from_system()))
+	_append_activity("route_filed", "Route filed from %s to %s." % [origin, destination], route_id, timestamp)
+	var data := {"route": record}
+	_mark_processed(request_id, data)
+	return CompanyContracts.result_ok(data)
+
+
+func file_delivery(command: Dictionary) -> Dictionary:
+	if _player == null or _player.company.is_empty():
+		return CompanyContracts.result_error("company_missing", "Create a company first.")
+	var request_id := _request_id(command)
+	var cached := _processed_result(request_id)
+	if not cached.is_empty():
+		return CompanyContracts.result_ok(cached)
+	var contract_id := str(command.get("contract_id", "")).strip_edges()
+	if contract_id.is_empty():
+		return CompanyContracts.result_error("contract_required", "A delivery needs a contract.")
+	var timestamp := int(command.get("timestamp_unix", Time.get_unix_time_from_system()))
+	var delivery_id := str(command.get("delivery_id", "")).strip_edges()
+	if delivery_id.is_empty():
+		delivery_id = "delivery-%s" % contract_id
+	if _index_by_id("deliveries", delivery_id) >= 0:
+		return CompanyContracts.result_error("delivery_exists", "That delivery is already filed.")
+	var record := OperationsRecords.delivery(
+		delivery_id,
+		str(_player.company.get("id", "")),
+		contract_id,
+		str(command.get("consignment_id", "")),
+		str(command.get("vessel_uid", "")),
+		str(command.get("origin_port_id", "")),
+		str(command.get("destination_port_id", "")),
+		str(command.get("commodity_id", "")),
+		int(command.get("pay_nok", command.get("pay_marks", 0))),
+		timestamp,
+	)
+	var deliveries := _player.company.get("deliveries", []) as Array
+	deliveries.append(record)
+	_player.company["deliveries"] = deliveries
+	_append_activity("delivery_filed", "Delivery filed for %s." % contract_id, delivery_id, timestamp)
+	var data := {"delivery": record}
+	_mark_processed(request_id, data)
+	return CompanyContracts.result_ok(data)
+
+
+func advance_delivery(command: Dictionary) -> Dictionary:
+	if _player == null or _player.company.is_empty():
+		return CompanyContracts.result_error("company_missing", "Create a company first.")
+	var request_id := _request_id(command)
+	var cached := _processed_result(request_id)
+	if not cached.is_empty():
+		return CompanyContracts.result_ok(cached)
+	var index := _index_by_id("deliveries", str(command.get("delivery_id", "")))
+	if index < 0:
+		return CompanyContracts.result_error("delivery_missing", "That delivery is not on the books.")
+	var deliveries := _player.company.get("deliveries", []) as Array
+	var record := (deliveries[index] as Dictionary).duplicate(true)
+	var target := str(command.get("status", "")).strip_edges()
+	if not OperationsRecords.can_advance_delivery(str(record.get("status", "")), target):
+		return CompanyContracts.result_error("delivery_status", "That delivery cannot move to %s." % target)
+	var timestamp := int(command.get("timestamp_unix", Time.get_unix_time_from_system()))
+	record["status"] = target
+	record["diesel_nok"] = maxi(int(command.get("diesel_nok", record.get("diesel_nok", 0))), 0)
+	record["maintenance_nok"] = maxi(int(command.get("maintenance_nok", record.get("maintenance_nok", 0))), 0)
+	record["wages_nok"] = maxi(int(command.get("wages_nok", record.get("wages_nok", 0))), 0)
+	var events := record.get("events", []) as Array
+	events.append({"status": target, "at_unix": timestamp})
+	record["events"] = events
+	if target == "delivered" and not bool(record.get("settled", false)):
+		var pay := int(record.get("pay_nok", 0))
+		if pay > 0:
+			var paid := post_transaction({
+				"request_id": "%s:pay" % request_id,
+				"amount_marks": pay,
+				"category": "freight",
+				"description": "Delivery %s" % str(record.get("id", "")),
+				"related_entity_id": str(record.get("id", "")),
+				"count_as_earned": true,
+				"timestamp_unix": timestamp,
+			})
+			if not bool(paid.get("ok", false)):
+				return paid
+		record["settled"] = true
+	deliveries[index] = record
+	_player.company["deliveries"] = deliveries
+	_append_activity("delivery_%s" % target, "Delivery %s." % target, str(record.get("id", "")), timestamp)
+	var data := {"delivery": record, "account": OperationsRecords.voyage_account(
+		int(record.get("pay_nok", 0)),
+		int(record.get("diesel_nok", 0)),
+		int(record.get("maintenance_nok", 0)),
+		int(record.get("wages_nok", 0)),
+	)}
+	_mark_processed(request_id, data)
+	return CompanyContracts.result_ok(data)
+
+
+func acquire_facility(command: Dictionary) -> Dictionary:
+	if _player == null or _player.company.is_empty():
+		return CompanyContracts.result_error("company_missing", "Create a company first.")
+	var request_id := _request_id(command)
+	var cached := _processed_result(request_id)
+	if not cached.is_empty():
+		return CompanyContracts.result_ok(cached)
+	var kind := str(command.get("kind", "fish_farm")).strip_edges()
+	if kind != "fish_farm":
+		return CompanyContracts.result_error("facility_kind", "Only a fish farm can be acquired in this pass.")
+	var price := maxi(int(command.get("price_nok", 0)), 0)
+	var timestamp := int(command.get("timestamp_unix", Time.get_unix_time_from_system()))
+	var facility_id := str(command.get("facility_id", "")).strip_edges()
+	if facility_id.is_empty():
+		facility_id = "facility-%s" % PlayerData.new_uuid()
+	if _index_by_id("facilities", facility_id) >= 0:
+		return CompanyContracts.result_error("facility_exists", "That site is already owned.")
+	if price > 0:
+		var paid := post_transaction({
+			"request_id": "%s:price" % request_id,
+			"amount_marks": -price,
+			"category": "facility",
+			"description": "Acquired %s" % kind,
+			"related_entity_id": facility_id,
+			"timestamp_unix": timestamp,
+		})
+		if not bool(paid.get("ok", false)):
+			return paid
+	var record := OperationsRecords.facility(
+		facility_id,
+		str(_player.company.get("id", "")),
+		kind,
+		str(command.get("display_name", "Fish farm")),
+		str(command.get("site_id", "")),
+		price,
+		int(command.get("upkeep_nok_per_day", 0)),
+		timestamp,
+	)
+	var facilities := _player.company.get("facilities", []) as Array
+	facilities.append(record)
+	_player.company["facilities"] = facilities
+	_append_activity("facility_acquired", "%s acquired." % str(record.get("display_name", "")), facility_id, timestamp)
+	var data := {"facility": record}
+	_mark_processed(request_id, data)
+	return CompanyContracts.result_ok(data)
 
 
 func _grant_starter_vessel(starter_id: String, request_id: String) -> Dictionary:
@@ -397,6 +682,27 @@ func _lease_index_by_id(lease_id: String) -> int:
 	var leases := _player.company.get("warehouse_leases", []) as Array
 	for index in range(leases.size()):
 		if typeof(leases[index]) == TYPE_DICTIONARY and str((leases[index] as Dictionary).get("id", "")) == lease_id:
+			return index
+	return -1
+
+
+func _append_activity(kind: String, summary: String, related_entity_id: String, timestamp: int) -> void:
+	var activity := _player.company.get("activity", []) as Array
+	activity.append(OperationsRecords.activity_entry(
+		"activity-%s" % PlayerData.new_uuid(),
+		str(_player.company.get("id", "")),
+		kind,
+		summary,
+		related_entity_id,
+		timestamp,
+	))
+	_player.company["activity"] = OperationsRecords.normalize_activity(activity)
+
+
+func _index_by_id(key: String, record_id: String) -> int:
+	var records := _player.company.get(key, []) as Array
+	for index in range(records.size()):
+		if typeof(records[index]) == TYPE_DICTIONARY and str((records[index] as Dictionary).get("id", "")) == record_id:
 			return index
 	return -1
 

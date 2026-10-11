@@ -17,12 +17,16 @@ signal mooring_state_changed(
 ## Ship cleats: any `Node3D` in group `SHIP_MOORING_CLEAT_GROUP` under this vessel's
 ## `RigidBody3D` root. Distance is from cleat anchor to **this dock post's** anchor.
 const SHIP_MOORING_CLEAT_GROUP := "ship_mooring_cleat"
-## Dock bollards (`MooringPost`); any eligible for tie / prompts when this ship mooring registers.
+## Dock bollards (`MooringPost`). Lines are ordered from the helm, not from the quay.
 const DOCK_MOORING_GROUP := "dock_mooring_bollard"
 ## Group that MooringComponent joins at runtime so new bollards can auto-register.
 const SHIP_MOORING_COMPONENT_GROUP := "ship_mooring_component"
 
 const _MAX_SEGMENT_POOL_PER_ROPE: int = 32
+
+var _stern_line_audio: AudioStreamPlayer3D
+var _line_audio: AudioStreamPlayer3D
+var _fender_audio: AudioStreamPlayer3D
 
 @export var rope_radius: float = 0.045
 @export var rope_color: Color = Color(0.55, 0.42, 0.25)
@@ -461,6 +465,20 @@ func _rope_max_distance_from_rest(rest_distance: float) -> float:
 
 
 func _physics_process(_delta: float) -> void:
+	if _line_audio == null:
+		_line_audio = WorldSound.loop_on(self, "res://resources/audio/world/mooring/line_creak_1.wav", "LineCreak")
+		_stern_line_audio = WorldSound.loop_on(self, "res://resources/audio/world/mooring/line_creak_1.wav", "SternLineCreak")
+		_fender_audio = WorldSound.loop_on(self, "res://resources/audio/world/mooring/fender_rub_1.wav", "FenderRub")
+	var working := 0.0
+	if is_moored and _body != null:
+		working = clampf(_body.linear_velocity.length() / 0.6, 0.0, 1.0)
+	if is_instance_valid(_bow_point): _line_audio.global_position = _bow_point.global_position
+	if is_instance_valid(_stern_point): _stern_line_audio.global_position = _stern_point.global_position
+	if is_instance_valid(_bow_point) and is_instance_valid(_stern_point):
+		_fender_audio.global_position = (_bow_point.global_position + _stern_point.global_position) * 0.5
+	WorldSound.drive(_line_audio, working if bow_line_tied else 0.0, -17.0)
+	WorldSound.drive(_stern_line_audio, working if stern_line_tied else 0.0, -17.0)
+	WorldSound.drive(_fender_audio, working, -16.0)
 	if not is_moored:
 		return
 	_update_rope_visuals()
@@ -482,6 +500,88 @@ func moor_to_posts(front_post: Node, rear_post: Node) -> void:
 	_sync_berth_with_dock()
 	_remember_authority_identity()
 	_emit_mooring_state()
+	_play_line(true, front_post)
+	_play_line(true, rear_post)
+
+
+## Captain's order from the wheel. Both lines go on or come off together, so one
+## person never has to walk the quay. The boarding gangway stays down while
+## both lines are fast and stows only on this cast-off.
+const HELM_ALONGSIDE_REACH_M := 12.0
+const HELM_MAKE_FAST_SPEED_M_S := 1.2
+
+func order_lines_from_helm() -> String:
+	last_mooring_reject = ""
+	if _body == null:
+		_body = _resolve_boat_rigid_body()
+	if is_moored:
+		release_mooring()
+		if is_moored: return last_mooring_reject
+		return "Lines let go. The gangway is stowed."
+	var ship := _resolve_boat_body()
+	if ship != null and Vector2(ship.linear_velocity.x, ship.linear_velocity.z).length() > HELM_MAKE_FAST_SPEED_M_S:
+		last_mooring_reject = "Slow down before making fast"
+		mooring_rejected.emit(last_mooring_reject)
+		return last_mooring_reject
+	var slot := _alongside_berth()
+	if slot == null:
+		last_mooring_reject = "Come alongside a free berth before making fast"
+		mooring_rejected.emit(last_mooring_reject)
+		return last_mooring_reject
+	moor_to_nearest_of(slot.bollards())
+	if not bow_line_tied or not stern_line_tied:
+		last_mooring_reject = "Could not get both lines fast"
+		mooring_rejected.emit(last_mooring_reject)
+		return last_mooring_reject
+	return "Both lines fast. Leave the helm and use the gangway."
+
+
+func _alongside_berth() -> QuayBerthSlot:
+	var ship := _resolve_boat_body()
+	if ship == null:
+		return null
+	var assigned := ship.get_moored_berth() as QuayBerthSlot
+	if assigned != null and _berth_line_reach(assigned) <= HELM_ALONGSIDE_REACH_M:
+		return assigned
+	var best: QuayBerthSlot = null
+	var best_reach := HELM_ALONGSIDE_REACH_M
+	for port_id in HarbourRegistry.all_port_ids():
+		var harbour := HarbourRegistry.controller(port_id)
+		if harbour == null:
+			continue
+		for raw in harbour.berths():
+			var slot := raw as QuayBerthSlot
+			if slot == null:
+				continue
+			var occupant := harbour.moored_ship(slot.berth_id)
+			if occupant != null and occupant != ship:
+				continue
+			var reach := _berth_line_reach(slot)
+			if reach <= best_reach:
+				best_reach = reach
+				best = slot
+	return best
+
+
+func _berth_line_reach(slot: QuayBerthSlot) -> float:
+	if slot == null:
+		return INF
+	var posts := slot.bollards()
+	if posts.size() < 2:
+		return INF
+	var cleats := _ship_cleat_nodes()
+	if cleats.is_empty():
+		return INF
+	var bow_pos := _mean_cleat_position(cleats, "bow")
+	var stern_pos := _mean_cleat_position(cleats, "stern")
+	var front := _closest_post_to(bow_pos, posts, null)
+	var rear := _closest_post_to(stern_pos, posts, front)
+	if front == null or rear == null:
+		return INF
+	return maxf(
+		bow_pos.distance_to(dock_post_anchor_world(front)),
+		stern_pos.distance_to(dock_post_anchor_world(rear)),
+	)
 
 
 func _departure_rejected() -> bool:
@@ -497,6 +597,10 @@ func _departure_rejected() -> bool:
 
 func release_mooring() -> void:
 	if _departure_rejected(): return
+	if bow_line_tied:
+		_play_line(false, _front_post)
+	if stern_line_tied:
+		_play_line(false, _rear_post)
 	_remember_authority_identity()
 	is_moored = false
 	bow_line_tied = false
@@ -511,6 +615,17 @@ func release_mooring() -> void:
 	_stern_point = null
 	_hide_all_rope_segments()
 	_emit_mooring_state()
+
+
+func _play_line(tied_on: bool, post: Node) -> void:
+	if _suppress_state_signal:
+		return
+	var at := global_position
+	if post is Node3D:
+		at = (post as Node3D).global_position
+	WorldSound.play(
+		"res://resources/audio/world/mooring/line_%s_1.wav" % ("on" if tied_on else "off"),
+		at, -6.0)
 
 
 func is_mooring_line_tied_from_post(post: Node) -> bool:
@@ -572,6 +687,12 @@ func toggle_line_from_post(post: Node) -> bool:
 			_stern_point = pick
 
 	set_line_tied(forward_slot, next_tied)
+	var at := global_position
+	if post is Node3D:
+		at = (post as Node3D).global_position
+	WorldSound.play(
+		"res://resources/audio/world/mooring/line_%s_1.wav" % ("on" if next_tied else "off"),
+		at, -6.0)
 	return is_slot_tied(forward_slot)
 
 

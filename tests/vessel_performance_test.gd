@@ -23,6 +23,7 @@ func _ready() -> void:
 			for pad in boat.get_cargo_pads(): pad.add_container(ContainerUnit.create("","provisions",24000))
 		boat.place_at_waterline(WaveSurface.WATER_LEVEL)
 		boat.get_node("BoatController").set_physics_process(false)
+		boat.get_node("PropulsionComponent").set_engine_running(true)
 		boat.get_node("PropulsionComponent").throttle = -1
 		boats.append(boat)
 	set_physics_process(true)
@@ -53,6 +54,7 @@ func finish() -> void:
 		boat.get_node("HullVisual/DriveGear")._process(.1)
 		assert(is_zero_approx(boat.get_node("HullVisual/DriveGear").signed_rpm))
 		boat.fuel_l = 10
+		boat.get_node("PropulsionComponent").set_engine_running(true)
 		boat.get_node("PropulsionComponent").throttle = 1
 	for frame in 8: await get_tree().physics_frame
 	for boat in boats:

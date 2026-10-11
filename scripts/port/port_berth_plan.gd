@@ -258,7 +258,7 @@ static func _collect_slot(
 ) -> void:
 	for raw in slots:
 		var commodity_id := str(raw)
-		if commodity_id.is_empty():
+		if not CommodityCatalog.generates_port_facility(commodity_id):
 			continue
 		if uses_asphalt_dock(commodity_id):
 			asphalt_slots.append({

@@ -21,6 +21,10 @@ extends Node3D
 @export var fuel_burn_l_per_sec_full: float = 0.5
 
 var throttle: float = 0.0
+## Machinery state is independent of helm occupancy and propeller order.
+var engine_running := false
+signal engine_state_changed(running: bool)
+@export_range(0.0, 0.2, 0.01) var idle_fuel_fraction := 0.04
 var delivered_thrust_n: float = 0.0
 var advance_speed_ms: float = 0.0
 
@@ -40,7 +44,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if _body != null and not is_zero_approx(throttle) and not _body.departure_block_reason().is_empty():
 		throttle = 0.0
-	if Engine.is_editor_hint() or _body == null or is_zero_approx(throttle):
+	if Engine.is_editor_hint() or _body == null or not engine_running:
 		delivered_thrust_n = 0.0
 		return
 
@@ -49,12 +53,19 @@ func _physics_process(delta: float) -> void:
 	# this component only owns propulsion.
 	var fuel_pct := _body.get_fuel_fraction()
 	if fuel_pct <= 0.0:
+		set_engine_running(false)
 		delivered_thrust_n = 0.0
 		return
 
-	var burn := absf(throttle) * fuel_burn_l_per_sec_full * delta
+	var burn := lerpf(idle_fuel_fraction, 1.0, absf(throttle)) * fuel_burn_l_per_sec_full * delta
 	if burn > 0.0:
 		_body.consume_fuel(burn)
+	if _body.get_fuel_fraction() <= 0.0:
+		set_engine_running(false)
+		return
+	if is_zero_approx(throttle):
+		delivered_thrust_n = 0.0
+		return
 	var prop_world := _body.to_global(stern_offset)
 	var water := WaveSurface.sample_at(prop_world.x, prop_world.z)
 	var world_com := _body.get_world_center_of_mass()
@@ -85,6 +96,19 @@ func _physics_process(delta: float) -> void:
 	var force: Vector3  = _body.global_transform.basis.z * magnitude
 	var offset: Vector3 = prop_world - _body.global_position
 	_body.apply_force(force, offset)
+
+
+func set_engine_running(running: bool) -> bool:
+	if running and (_body == null or _body.get_fuel_fraction() <= 0.0):
+		return false
+	if engine_running == running:
+		return true
+	engine_running = running
+	if not running:
+		throttle = 0.0
+		delivered_thrust_n = 0.0
+	engine_state_changed.emit(running)
+	return true
 
 
 static func calculate_wake_strength(

@@ -103,14 +103,13 @@ func _review_audio() -> Array[Dictionary]:
 		# Settle production smoothing without waiting minutes or advancing saves.
 		sound._process(12.0)
 		var rain := WeatherLighting.rain_amount
-		var levels := {"calm":_level(sound._atm_calm_clear),"drizzle":_level(sound._atm_grey_drizzle),
-			"squall":_level(sound._atm_dry_squall),"storm":_level(sound._atm_full_storm),
-			"rain_layer":maxf(_level(sound._rain_drizzle),maxf(_level(sound._rain_moderate),_level(sound._rain_heavy)))}
+		var levels := {"rain_layer":maxf(_level(sound._rain_drizzle),maxf(_level(sound._rain_moderate),_level(sound._rain_heavy))),
+			"wind_layer":maxf(_level(sound._wind_light),_level(sound._wind_gale))}
 		var valid := true
-		if rain<.001: valid=levels.drizzle<=-79 and levels.storm<=-79 and levels.rain_layer<=-79
-		if float(spec[3])<.1: valid=valid and levels.squall<=-79 and levels.storm<=-79
-		if spec[0]=="dry-gale": valid=valid and levels.squall>-40
-		if rain>.8: valid=valid and levels.rain_layer>-40
+		if rain < .001: valid = levels.rain_layer <= -79
+		if float(spec[3]) < .1: valid = valid and levels.wind_layer <= -79
+		if spec[0] == "dry-gale": valid = valid and levels.wind_layer > -40
+		if rain > .8: valid = valid and levels.rain_layer > -40
 		results.append({"state":spec[0],"supported_rain":rain,"levels_db":levels,"ok":valid})
 		print("WEATHER AUDIO ","PASS " if valid else "FAIL ",spec[0]," ",levels)
 		if not valid: audio_failures.append(spec[0])

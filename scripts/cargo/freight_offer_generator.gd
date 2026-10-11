@@ -4,8 +4,14 @@ extends RefCounted
 ## Pure deterministic offer generation. The ledger is cargo-agnostic; this
 ## availability gate only exposes handling modes that have working equipment.
 
-const OFFER_COUNT := 3
-const MIN_PAY := 180
+const OFFER_COUNT := 6
+const MIN_PAY := 600
+## Gameplay freight tariff: dispatch fee plus handling and distance per unit.
+## These are transport earnings, not the sale value of the goods aboard.
+const CONTAINER_HANDLING_PAY := 350.0
+const CONTAINER_PAY_PER_KM := 120.0
+const BULK_HANDLING_PAY_PER_TONNE := 12.0
+const BULK_PAY_PER_TONNE_KM := 4.0
 const COMPLETED_HANDLING_MODES: Array[String] = ["general", "container", "bulk"]
 
 
@@ -38,16 +44,32 @@ static func generate(
 				var small := _make_offer(origin, destination, commodity_id, day)
 				small["id"] += ":small"
 				small["quantity"] = 20.0
-				small["pay_marks"] = maxi(MIN_PAY, int(round(float(small.distance_m) * 0.055)) + 160)
+				small["pay_marks"] = payment_for(float(small.distance_m), "bulk", 20.0)
 				candidates.append(small)
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return str(a.get("id", "")) < str(b.get("id", "")))
-	if max_offers <= 0 or candidates.size() <= max_offers:
-		return candidates
+	return select_offers(candidates, max_offers)
+
+
+## Nearest compatible destinations first. Alternate cargo to the same port may
+## fill spare slots, but cannot crowd neighbouring ports off the board.
+static func select_offers(candidates: Array[Dictionary], max_offers: int = OFFER_COUNT) -> Array[Dictionary]:
+	var sorted := candidates.duplicate()
+	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if float(a.distance_m) != float(b.distance_m):
+			return float(a.distance_m) < float(b.distance_m)
+		return str(a.id) < str(b.id))
+	if max_offers <= 0:
+		return sorted
 	var selected: Array[Dictionary] = []
-	var start := posmod(origin_id.hash() ^ (day * 0x45d9f3b), candidates.size())
-	for index in range(max_offers):
-		selected.append(candidates[(start + index) % candidates.size()])
+	var destinations: Dictionary = {}
+	for offer in sorted:
+		if destinations.has(offer.destination_port_id): continue
+		selected.append(offer)
+		destinations[offer.destination_port_id] = true
+		if selected.size() >= max_offers: return selected
+	for offer in sorted:
+		if selected.has(offer): continue
+		selected.append(offer)
+		if selected.size() >= max_offers: break
 	return selected
 
 
@@ -79,8 +101,10 @@ static func _make_offer(origin: Dictionary, destination: Dictionary, commodity_i
 
 
 static func payment_for(distance_m: float, handling_mode: String, quantity: float) -> int:
-	var cargo_factor := 8.0 if handling_mode == "bulk" else 95.0
-	return maxi(MIN_PAY, int(round(distance_m * 0.055)) + int(round(quantity * cargo_factor)))
+	if quantity <= 0.0 or not is_finite(quantity) or not is_finite(distance_m): return 0
+	var handling := BULK_HANDLING_PAY_PER_TONNE if handling_mode == "bulk" else CONTAINER_HANDLING_PAY
+	var rate := BULK_PAY_PER_TONNE_KM if handling_mode == "bulk" else CONTAINER_PAY_PER_KM
+	return MIN_PAY + roundi(quantity * (handling + maxf(0.0, distance_m) / 1000.0 * rate))
 
 
 static func is_handling_available(commodity_id: String) -> bool:

@@ -2,9 +2,9 @@ extends CharacterBody3D
 
 # ── Movement ──────────────────────────────────────────────────────────────────
 @export_group("Movement")
-@export var walk_speed:          float = 2.0
-## Shift is a jog, not a flat-out sprint.
-@export var sprint_speed:        float = 3.6
+@export var walk_speed:          float = 3.6
+## Shift runs at 1.5 times the normal walking pace.
+@export var sprint_speed:        float = 5.4
 @export var precision_speed: float = 0.75
 @export var ground_acceleration: float = 20.0
 @export var ground_friction:     float = 24.0
@@ -59,6 +59,9 @@ var _was_on_floor:     bool    = true
 var _stepped_last_frame: bool = false
 var _last_safe_position: Vector3 = Vector3.ZERO
 var _water_submerge_time: float = 0.0
+var _step_travel: float = 0.0
+var _body_in_water := false
+var _wade_audio: AudioStreamPlayer3D
 var _vehicle_occupied: bool = false
 var _safe_support: WeakRef
 var _safe_local_position := Vector3.ZERO
@@ -117,6 +120,9 @@ func _ready() -> void:
 
 	_player_camera.bind(self, camera, _body_npc)
 	_free_cam.bind(self, camera, _player_camera, _body_npc)
+	var quay_water: Node = load("res://scripts/audio/nearby_quay_water.gd").new()
+	quay_water.name = "NearbyQuayWater"
+	add_child(quay_water)
 	# Match boat camera: default Godot far (4000 m) black-clips the mainland.
 	camera.far = 40000.0
 	camera.near = 0.08
@@ -154,6 +160,8 @@ func _physics_process(delta: float) -> void:
 	if on_floor and not _was_on_floor:
 		if _player_camera != null:
 			_player_camera.notify_landing(_landing_speed)
+		if _landing_speed < -1.6:
+			WorldSound.play_set("body", "land_steel" if _mounted else "land_concrete", global_position, -8.0)
 	_was_on_floor = on_floor
 
 	# Gravity — variable scale depending on jump state. Always applied so the
@@ -185,6 +193,7 @@ func _physics_process(delta: float) -> void:
 		velocity.y = sqrt(2.0 * BASE_GRAVITY * jump_peak_height)
 		_jump_buffer = 0.0
 		_coyote_time = 0.0
+		WorldSound.play_set("body", "jump", global_position, -12.0)
 
 	# Smooth raw input on the forward axis — strafe stays immediate
 	var raw := Input.get_vector("move_left", "move_right", "move_forward", "move_back") if inputs_active else Vector2.ZERO
@@ -300,8 +309,33 @@ func _physics_process(delta: float) -> void:
 		_remember_safe_footing()
 	_locomotion_velocity = (global_position - pre_move_pos) / maxf(delta, .0001)
 	_capture_ship_mount(delta)
+	_update_body_audio(delta, waterline)
 
 	_update_walk_animation(delta)
+
+
+func _update_body_audio(delta: float, waterline: float) -> void:
+	var in_water := global_position.y < waterline and not is_on_floor()
+	if in_water and not _body_in_water:
+		WorldSound.play_set("water", "splash_enter", global_position, -4.0)
+	_body_in_water = in_water
+	if _wade_audio == null and in_water:
+		_wade_audio = WorldSound.loop_on(self, "res://resources/audio/world/water/wade_1.wav", "WadeAudio")
+	WorldSound.drive(_wade_audio, 0.85 if in_water else 0.0, -10.0)
+	if in_water or not is_on_floor():
+		return
+	var stride := Vector2(velocity.x, velocity.z).length()
+	if stride < 0.45:
+		return
+	_step_travel += stride * delta
+	if _step_travel < 0.72:
+		return
+	_step_travel = 0.0
+	var deck := _mount_node()
+	if deck != null and str(deck.name) == "GangwayWalk":
+		WorldSound.play_set("gangway", "gangway_step", global_position, -10.0)
+	else:
+		WorldSound.play_set("footsteps", "step_steel" if _mounted else "step_concrete", global_position, -12.0)
 
 
 func _process(delta: float) -> void:

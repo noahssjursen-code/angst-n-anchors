@@ -53,6 +53,7 @@ func setup(
 	## Default: water face is half the cross-section extent (deck width / pad depth).
 	face_offset_m = face_offset if face_offset >= 0.0 else maxf(width_m * 0.5, 1.0)
 	name = "BerthSlot_%s" % station_id.replace("/", "_")
+	add_to_group("quay_berth_slot")
 
 
 ## Distance from slot origin to ship centre along water_dir for a given half-beam.
