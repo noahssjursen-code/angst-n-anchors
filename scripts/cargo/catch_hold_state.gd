@@ -35,6 +35,11 @@ func is_empty() -> bool:
 func accept_lot(incoming: CatchLot) -> CatchLot:
 	if incoming == null or incoming.is_empty():
 		return CatchLot.new()
+	if incoming.specimen:
+		if incoming.mass_kg > available_kg(): return incoming.duplicate_lot()
+		for existing in lots:
+			if not incoming.lot_id.is_empty() and existing.lot_id == incoming.lot_id:
+				return incoming.duplicate_lot()
 	var accepted_kg := minf(incoming.mass_kg, available_kg())
 	if accepted_kg <= CatchLot.MASS_EPS_KG:
 		return incoming.duplicate_lot()
@@ -62,6 +67,7 @@ func withdraw_oldest(max_mass_kg: float) -> Array[CatchLot]:
 	while remaining > CatchLot.MASS_EPS_KG and not lots.is_empty():
 		var first := lots[0]
 		var taken := first.split(remaining)
+		if taken.is_empty(): break
 		if not taken.is_empty():
 			out.append(taken)
 			remaining -= taken.mass_kg
@@ -96,6 +102,11 @@ static func from_dict(data: Dictionary) -> CatchHoldState:
 		var room := state.available_kg()
 		if room <= CatchLot.MASS_EPS_KG:
 			break
+		if lot.specimen and lot.mass_kg > room: continue
+		if lot.specimen and not lot.lot_id.is_empty():
+			var duplicate := false
+			for existing in state.lots: duplicate = duplicate or existing.lot_id == lot.lot_id
+			if duplicate: continue
 		lot.mass_kg = minf(lot.mass_kg, room)
 		state.lots.append(lot)
 	return state

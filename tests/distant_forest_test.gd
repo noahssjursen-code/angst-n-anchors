@@ -31,6 +31,40 @@ func _run() -> void:
 				assert(position.x>ForestField.MIN_INLAND_M,"Canopy crosses bare shoreline")
 				assert(not ForestField.inside_flatten_zones(Vector2(position.x,position.z),[zone]),"Canopy enters cleared port")
 	assert(count>200,"Distant forest unexpectedly sparse")
+	var graded := FAR.new()
+	graded.layout=Coast.new();graded.cell_m=100.0
+	graded.coverage=Image.create(4,4,false,Image.FORMAT_R8);graded.coverage.fill(Color.WHITE)
+	graded.zones=[{"polygon":PackedVector2Array([Vector2(40,-30),Vector2(80,-30),Vector2(80,30),Vector2(40,30)]),"height":2.0,"cut_only":true,"falloff":240.0,"clearance_margin":36.0}]
+	graded.prepare_density_pixels()
+	graded.build_cell(Vector2i(3,2))
+	var graded_count:=0
+	for groups: Array in graded.batches.values():
+		for data: PackedFloat32Array in groups:
+			for i in range(0,data.size(),4):
+				var point:=Vector2(data[i],data[i+2])
+				var expected:=WorldForestStreamer.sample_root_height(graded.layout,point,graded.zones,{})
+				assert(absf(data[i+1]-expected)<.001,"Distant trees float above graded hillside")
+				assert(data[i+1]<27.5,"Grading test did not lower terrain")
+				graded_count+=1
+	assert(graded_count>0)
+	graded.free()
+	# Progressive publication must contain exactly the serial placements, with
+	# the nearby batch published first rather than waiting to publish the world.
+	var progressive := FAR.new()
+	var serial := FAR.new()
+	for node in [progressive,serial]:
+		node.layout=Coast.new();node.cell_m=100.0
+		node.coverage=a.coverage;node.zones=[zone]
+		node.prepare_density_pixels()
+	for y in 4:
+		for x in 8:
+			progressive.jobs.append(Vector2i(x,y))
+			serial.build_cell(Vector2i(x,y))
+	progressive.generate()
+	assert(progressive.batches==serial.batches,"Progressive forest changed tree placement")
+	assert(progressive.completed_batches.size()==2)
+	assert(progressive.completed_batches[0].key==Vector2i.ZERO,"Far batch published before nearby batch")
+	progressive.free();serial.free()
 	a.free();b.free()
 	# Closing a world during preparation must join its worker and must not
 	# publish a partial woodland cache for the next visit.

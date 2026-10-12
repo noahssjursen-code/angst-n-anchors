@@ -35,6 +35,7 @@ var _frame_index := 0
 var _last_request_xz := Vector2(INF, INF)
 var _last_build_ms := 0.0
 var _peak_build_ms := 0.0
+var boot_focus := Vector3(INF,INF,INF)
 
 
 func configure(layout: Object, flatten_zones: Array = []) -> void:
@@ -49,8 +50,9 @@ func configure(layout: Object, flatten_zones: Array = []) -> void:
 		if is_instance_valid(_distant): _distant.free()
 		_distant = load("res://scripts/world/distant_forest.gd").new()
 		add_child(_distant)
-		_distant.configure(layout)
-		_refresh_requests(WorldReferenceScript.visual_position(get_viewport()))
+		var focus := boot_focus if is_finite(boot_focus.x) else WorldReferenceScript.visual_position(get_viewport())
+		_distant.configure(layout,focus)
+		_refresh_requests(focus)
 
 
 func _ready() -> void:
@@ -58,6 +60,29 @@ func _ready() -> void:
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null and telemetry.has_method("register_provider"):
 		telemetry.register_provider(&"world.forest", self, &"get_debug_stats", &"world")
+
+
+## A new bridge clears its corridor, not every forest chunk in the world.
+func add_exclusions(zones: Array) -> void:
+	_flatten_zones = _flatten_zones.duplicate()
+	_flatten_zones.append_array(zones)
+	for key in _chunks.keys():
+		var local_zones := STREAMER.zones_intersecting_chunk(zones,key,CHUNK_SIZE_M)
+		if local_zones.is_empty(): continue
+		var record: Dictionary = _chunks[key]
+		var transforms: Array = record.get("transforms", [])
+		var affected := false
+		for xf: Transform3D in transforms:
+			if ForestField.inside_flatten_zones(Vector2(xf.origin.x, xf.origin.z), local_zones):
+				affected = true
+				break
+		if affected: _unload_chunk(key)
+	# Partial placements may contain roots accepted before the new exclusion.
+	for job in _jobs:
+		if not STREAMER.zones_intersecting_chunk(zones,job.coord,CHUNK_SIZE_M).is_empty():
+			job.erase("placement")
+	_last_request_xz = Vector2(INF, INF)
+	if is_instance_valid(_distant): _distant.add_exclusions(zones)
 
 
 func _exit_tree() -> void:
@@ -71,7 +96,7 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	if _layout == null:
 		return
-	var stream_position := WorldReferenceScript.visual_position(get_viewport())
+	var stream_position := boot_focus if is_finite(boot_focus.x) else WorldReferenceScript.visual_position(get_viewport())
 	if _frame_index % maxi(queue_refresh_frames, 1) == 0 \
 			and _should_refresh_requests(Vector2(stream_position.x, stream_position.z)):
 		_refresh_requests(stream_position)
@@ -102,7 +127,7 @@ func _refresh_requests(stream_position: Vector3) -> void:
 	var stream_xz := Vector2(stream_position.x, stream_position.z)
 	_last_request_xz = stream_xz
 	var half := float(_layout.half_extent_m)
-	var desired := select_chunk_requests(stream_xz, half, PROP_LOD.CULL_M)
+	var desired := select_chunk_requests(stream_xz, half, 1000.0 if is_finite(boot_focus.x) else PROP_LOD.CULL_M)
 	var desired_keys := {}
 	for request in desired:
 		var coord: Vector2i = request["coord"]

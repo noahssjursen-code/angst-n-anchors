@@ -19,12 +19,7 @@ static func quote(hold_states: Array[CatchHoldState]) -> Dictionary:
 				continue
 			lot_count += 1
 			mass_kg += lot.mass_kg
-			value_marks += (
-				lot.mass_kg / 100.0
-				* MARKS_PER_100_KG
-				* clampf(lot.quality, 0.0, 1.0)
-				* maxf(lot.price_multiplier, 0.0)
-			)
+			value_marks += lot_value(lot,lot.mass_kg)
 	return {
 		"mass_kg": mass_kg,
 		"lot_count": lot_count,
@@ -49,3 +44,14 @@ static func settle_transfer(report: Dictionary, session: Node, port_id: String) 
 		port_id,
 	)
 	return {"ok": true, "data": report.duplicate(true)}
+
+static var _species:Dictionary={}
+
+static func lot_value(lot:CatchLot,mass_kg:float)->float:
+	if _species.is_empty():_species=JsonUtil.load("res://resources/data/fishing/species.json")
+	var rate:=MARKS_PER_100_KG/100.0
+	var multiplier:=maxf(lot.price_multiplier,0)
+	if _species.has(lot.species_id):
+		rate=float(_species[lot.species_id].marks_per_kg)
+		multiplier=1.0
+	return maxf(0,mass_kg)*rate*clampf(lot.quality,0,1)*multiplier

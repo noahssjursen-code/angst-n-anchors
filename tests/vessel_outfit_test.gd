@@ -65,7 +65,7 @@ func _test_hidden_cargo_rejected() -> void:
 func _test_official_trawler_passes() -> void:
 	var found := false
 	for entry in PrebuiltVesselCatalog.catalog_entries():
-		if str(entry.get("prebuilt_id", "")) != "fishing_trawler":
+		if str(entry.get("prebuilt_id", "")) != "fishing_hook_line":
 			continue
 		found = true
 		var layout := BrickLayout.from_dict(entry.get("prebuilt_layout", {}) as Dictionary)

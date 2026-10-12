@@ -20,6 +20,9 @@ const TP_MAX_PITCH := deg_to_rad(72.0)
 
 @export_group("First Person")
 @export var fp_height: float = 1.68
+## Authored mariner's face is 9 cm ahead of its centre. Keep the eye near
+## that plane so nearby hands are visible instead of behind the camera.
+@export var fp_forward: float = .10
 
 @export_group("Feel")
 @export var mouse_sensitivity: float = 0.0015
@@ -205,7 +208,7 @@ func _update_first_person(
 	_step_offset = lerpf(_step_offset, 0.0, 1.0 - exp(-12.0 * delta))
 	if not Input.is_action_pressed("player_freelook"):
 		_free_yaw = lerp_angle(_free_yaw, 0.0, 1.0 - exp(-10.0 * delta))
-	_camera.position = Vector3(0.0, fp_height + bob_offset + _camera_y_offset + _step_offset, -.23)
+	_camera.position = Vector3(0.0, fp_height + bob_offset + _camera_y_offset + _step_offset, -fp_forward)
 	_camera.rotation.y = wrapf(_look_yaw - _player.rotation.y, -PI, PI) + _free_yaw
 	_camera.rotation.x = _fp_pitch
 
@@ -262,7 +265,7 @@ func _apply_mode() -> void:
 		return
 	if _mode == CameraMode.FIRST_PERSON:
 		_camera.rotation = Vector3(_fp_pitch, wrapf(_look_yaw - _player.rotation.y, -PI, PI), 0.0)
-		_camera.position = Vector3(0.0, fp_height, 0.0)
+		_camera.position = Vector3(0.0, fp_height, -fp_forward)
 	else:
 		_update_third_person()
 

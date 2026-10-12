@@ -20,7 +20,7 @@ static func has_capability(layout: Dictionary, capability: String) -> bool:
 	for part: Dictionary in layout.get("parts", []): ids.append(str(part.get("asset_id", "")))
 	match capability:
 		"helm": return ids.has("helm_chair") and ids.has("helm_wheel") and ids.has("helm_throttle")
-		"fishing": return ids.has("trawl_winch") and ids.has("insulated_catch_tank")
+		"fishing": return (ids.has("trawl_winch") or ids.has("hook_line_station")) and ids.has("insulated_catch_tank")
 		"cargo": return ids.has("container_bed_20ft") or ids.has("cargo_securing_bed_4m") or ids.has("bulk_divider_5m") or ids.has("hold_coaming_6x12")
 		"cabin": return ids.has("cabin_door_straight")
 	return false

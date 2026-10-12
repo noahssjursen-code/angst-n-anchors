@@ -123,7 +123,11 @@ func show_service_snapshot(snapshot: Dictionary) -> void:
 	if service_kind == "operator":
 		_operator_content(snapshot)
 		return
-	if service_kind == "harbourmaster": _service_actions(snapshot)
+	if service_kind == "harbourmaster":
+		var harbour_snapshot:=snapshot.duplicate(true)
+		harbour_snapshot.actions=harbour_snapshot.get("actions",[]).filter(func(a):return not (str(a.id).begins_with("equipment:") or str(a.id).begins_with("equip:")))
+		_service_actions(harbour_snapshot)
+		_body.add_child(VoyageStyle.button("Equipment shop",_show_equipment))
 	if _items.is_empty():
 		_body.add_child(VoyageStyle.label("No vessels owned yet. Visit the shipwright." if service_kind == "harbourmaster" else "No compatible work is available here. Check your vessel's quay and free cargo space.",25))
 		return
@@ -254,6 +258,7 @@ func _send(action: String, payload: Dictionary = {}) -> void:
 		if action == "buy":
 			show_tablet("Today")
 			message = "Your vessel is purchased. Company tablet received — press J to open it. Visit the harbourmaster next."
+		elif action.begins_with("equipment:") or action.begins_with("equip:"): _show_equipment()
 		elif action in ["book","store","refuel","deploy"]: show_service(npc)
 	_feedback.text = message
 	message_requested.emit(message)
@@ -440,3 +445,14 @@ func show_settings(from_title: bool = false) -> void:
 
 func _balance() -> int:
 	return int(preview_data.get("balance",18000)) if preview_mode else LocalPlayerView.get_marks()
+
+
+func _show_equipment() -> void:
+	var snapshot:=LocalPlayerView.service_snapshot(npc)
+	var record:=LocalPlayerView.get_active_vessel_record()
+	_reset("Equipment shop", "For %s · %s available\nRod and harpe equip at the fishing mount. Trap supplies remain stored."%[VesselSpawn.vessel_name_of(record),PlayerData.format_money(LocalPlayerView.get_marks())])
+	_card.anchor_left=.38;_card.anchor_right=.98
+	_card.anchor_top=.12;_card.anchor_bottom=.94
+	snapshot.actions=snapshot.get("actions",[]).filter(func(a):return str(a.id).begins_with("equipment:") or str(a.id).begins_with("equip:"))
+	_service_actions(snapshot)
+	_body.add_child(VoyageStyle.button("Back to harbourmaster",func():show_service(npc)))

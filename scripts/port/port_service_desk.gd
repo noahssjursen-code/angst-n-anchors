@@ -23,6 +23,17 @@ static func describe(npc: NpcInteractable) -> Dictionary:
 		result.title = "Harbourmaster"
 		result.line = "Bring a vessel alongside at a suitable quay. Your other vessels remain in your fleet."
 		result["port_id"] = npc.port_id
+		var selected:=LocalPlayerView.get_active_vessel_record()
+		if VesselEquipment.has_mount(selected):
+			for id in ["fishing_rod","harpe"]:
+				var equipped:bool=str(selected.get("equipped_fishing_item","fishing_rod"))==id
+				result.actions.append({"id":"equip:"+id,"label":("Equipped: " if equipped else "Equip ")+str(VesselEquipment.item(id).name),"reason":"Already equipped" if equipped else ("Buy this for your ship first." if id=="harpe" and VesselEquipment.count(selected,id)==0 else "")})
+		for stock:Dictionary in VesselEquipment.catalog():
+			var reason:="" if not selected.is_empty() else "Select a vessel first."
+			if PlayerSession.is_remote_voyage():reason="Equipment purchases are not available on this server."
+			elif int(stock.price_nok)>LocalPlayerView.get_marks():reason="Insufficient funds."
+			result.actions.append({"id":"equipment:"+str(stock.id),"label":"Buy %s · %s · %d aboard %s"%[stock.name,PlayerData.format_money(stock.price_nok),VesselEquipment.count(selected,stock.id),VesselSpawn.vessel_name_of(selected)],"reason":reason})
+
 		var ship := LocalPlayerView.get_active_ship() as BoatBody
 		if ship != null:
 			var reason := storage_reason(npc, ship)
@@ -112,6 +123,10 @@ static func storage_reason(npc: HarbourMasterNpc, ship: BoatBody) -> String:
 static func request(npc: NpcInteractable, action: String, payload: Dictionary = {}) -> Dictionary:
 	if not is_instance_valid(npc) or npc._nearest_player() == null:
 		return CompanyContracts.result_error("out_of_range", "Return to the operator to place this order.")
+	if action.begins_with("equip:") and npc is HarbourMasterNpc:
+		return PlayerSession.equip_ship_fishing_item({"vessel_id":str(LocalPlayerView.get_active_vessel_record().get("uid","")),"item_id":action.trim_prefix("equip:")})
+	if action.begins_with("equipment:") and npc is HarbourMasterNpc:
+		return PlayerSession.purchase_ship_equipment({"request_id":str(payload.get("request_id",PlayerData.new_uuid())),"vessel_id":str(LocalPlayerView.get_active_vessel_record().get("uid","")),"item_id":action.trim_prefix("equipment:"),"quantity":1})
 	if action == "buy" and npc is ShipwrightNpc:
 		return PlayerSession.purchase_yard_vessel(payload)
 	if action in ["store","refuel"] and npc is HarbourMasterNpc:

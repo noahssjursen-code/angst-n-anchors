@@ -1,0 +1,31 @@
+Seabed foundation - 11 October 2026
+
+WorldLayout now provides seeded continuous shelves, banks and basins below the
+existing coastline. Heights share the terrain datum; sample_water_depth accepts
+an explicit water level, and sample_bottom_type provides initial rock/sand/mud
+classification. SEABED_VERSION is separate from coastline identity so this pass
+does not reroll captain seeds or move existing harbour sites. Chart caches include
+that version. Future world/server compatibility must include seabed version when
+bottom depth becomes authoritative for grounding or navigation.
+
+WorldTerrainStreamer retains the clipped coastal shelf and fills its water-side
+complement. Bottom meshes use existing terrain LODs, background construction and
+sourced rock/soil materials. Fully submerged chunks do not cast shadows. Existing
+land-only collision policy is retained: this pass adds no beaching/damage rules.
+Depth values describe the natural seabed; port terrain overrides must be sampled
+through sample_render_terrain_height for future local equipment/grounding.
+
+The chart includes depth bands and a hover depth/bottom readout. The fishing
+heatmap renderer, toggle and shortcut are removed. Old fishing preferences cannot
+restore it. Trawl catch rules remain unchanged pending physical fish populations.
+
+Seabed is the immediate milestone. Next fishing direction: variants of the
+existing trawler for crab pots and rod/multi-hook fishing (including cod), natural
+fish discovery, and potentially sonar. No school, sonar, pot, navigation-mark or
+new boat implementation is included in this foundation.
+
+Validation: three-seed seabed/depth/mesh-boundary and chart/weather cache checks;
+terrain mesh/streamer and background tests; coastal continuity test (210 preserved
+port placements); port placer test. Rendered cutaway and production depth chart
+inspected, with captures archived in Pictures/machinescreenshots.
+F6: scenes/showcases/seabed_showcase.tscn. Space shows chart; arrows orbit bottom.

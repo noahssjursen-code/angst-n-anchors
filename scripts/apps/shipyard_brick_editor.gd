@@ -451,7 +451,7 @@ func _build_top_bar(parent: VBoxContainer) -> void:
 	bar.add_child(ship_btn)
 	var playtest_btn := UiBuilder.compact_button("Playtest boat", 140)
 	playtest_btn.name = "PlaytestBoat"
-	playtest_btn.tooltip_text = "Test this draft in a separate ocean window. No save or server changes."
+	playtest_btn.tooltip_text = "Start aboard this draft in the real coast sandbox. No save or server changes."
 	playtest_btn.pressed.connect(_launch_playtest)
 	bar.add_child(playtest_btn)
 	var help_btn := UiBuilder.compact_button("?", 36)

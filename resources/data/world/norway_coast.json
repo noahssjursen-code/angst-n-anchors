@@ -1,6 +1,6 @@
 {
 	"world_size_m": 40000.0,
-	"raster_resolution": 257,
+	"raster_resolution": 513,
 	"mainland": {
 		"coast_x_m": 6500.0,
 		"coast_amplitude_m": 2800.0,

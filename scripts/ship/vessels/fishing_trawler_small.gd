@@ -87,6 +87,7 @@ static func make_physics_profile() -> HullPhysicsProfile:
 
 
 func _ready() -> void:
+	ensure_sounder()
 	if get_node_or_null("HullVisual") == null:
 		_assemble()
 	model_data_path = ""

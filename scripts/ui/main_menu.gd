@@ -51,6 +51,7 @@ var _account_logout: Button
 var _mp_sail_requested := false
 var _authority_join_pending := false
 var _authority_join_generation := 0
+var _sailing := false
 
 
 func _ready() -> void:
@@ -490,11 +491,20 @@ func _on_development_captain() -> void:
 
 
 func _on_sp_sail(captain_id: String) -> void:
-	if preview_mode:
+	if preview_mode or _sailing:
 		return
+	_sailing = true
+	WorldBootstrapScript.begin_entry()
+	GameMenu.show_loading()
+	# Present feedback before synchronous captain and scene preparation.
+	await get_tree().process_frame
+	await get_tree().process_frame
 	if not _captains.load_local_into_session(captain_id):
+		_sailing = false
+		GameMenu.hide_loading()
 		_sp_roster.set_message("Could not load that captain.")
 		return
+	WorldBootstrapScript.trace_entry("captain_loaded")
 	var session := get_node("/root/PlayerSession")
 	WorldBootstrapScript.apply_player_world_context(session.data)
 	WorldBootstrapScript.enter_world(get_tree(), false)

@@ -16,7 +16,7 @@ func _ready() -> void:
 		push_error("Playtest requires isolated launch arguments.")
 		get_tree().quit(1)
 		return
-	get_window().title = "Boat playtest — isolated ocean"
+	get_window().title = "Boat playtest — coast sandbox"
 	get_tree().auto_accept_quit = true
 	var snapshot := {"version":1, "hull":"trawler_hull_14m", "parts":[]}
 	var path := ShipyardPlaytestMode.snapshot_path()
@@ -31,16 +31,31 @@ func _ready() -> void:
 		var cache := OS.get_cache_dir().path_join("angst-n-anchors-playtest")
 		if path.get_base_dir() == cache and path.get_file().begins_with("draft-"):
 			DirAccess.remove_absolute(path)
-	# This world has no ports, authority backend, company, or saved captain.
-	_set_test_weather()
+	# A bounded coastal sandbox: production terrain/water/habitat, no world boot,
+	# port population, settlements, bridge plans or traffic graph.
+	var layout := WorldLayoutGenerator.generate(1212599375, WorldLayoutGenerator.DEFAULT_CONFIG_PATH, 10000.0)
+	LandField.initialize(layout)
+	FishingField.initialize(layout.seed)
+	FishingField.configure_habitat(layout)
+	var launch := _find_launch(Vector3.ZERO, snapshot)
 	var renderer := RENDERER.new()
-	renderer.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(renderer)
+	var terrain := WorldTerrainStreamer.new()
+	terrain.visual_radius_m = 1800.0
+	terrain.collision_radius_m = 1000.0
+	terrain.begin_boot_priority(launch)
+	add_child(terrain)
+	terrain.configure(layout)
+	_set_test_weather()
 	boat = ImportedDraftVessel.new()
 	boat.configure(snapshot)
 	boat.process_mode = Node.PROCESS_MODE_PAUSABLE
+	boat.freeze = true
+	boat.position = launch
 	add_child(boat)
 	boat.place_at_waterline(WaveSurface.WATER_LEVEL)
+	boat.snap_to_transform(boat.global_transform)
+	boat.freeze = true
 	start_transform = boat.transform
 	controller = boat.get_node("BoatController")
 	camera = boat.get_node("BoatCamera")
@@ -49,13 +64,37 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	player = PLAYER.instantiate()
-	player.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(player)
+	GameMenu.set_gameplay_hud_visible(true)
+	GameMenu.hide_loading()
 	_find_spawn()
 	_place_player()
+	terrain.end_boot_priority()
+	boat.freeze = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	ready_to_play = true
 	if OS.get_cmdline_user_args().has("--verify-playtest"):
 		_verify()
+
+func _find_launch(origin: Vector3, draft: Dictionary) -> Vector3:
+	# Check the entire hull footprint, not only its centre; avoid shallow banks.
+	var grid := ImportedHullCatalog.make_grid(str(draft.hull))
+	var probes := PackedVector2Array([Vector2.ZERO])
+	for corner in grid.deck_polygon:
+		for fraction in [0.25, 0.5, 0.75, 1.0, 1.5]: probes.append(corner * fraction)
+	for radius in range(100, 2100, 50):
+		for i in 32:
+			var angle := TAU * float(i) / 32.0
+			var point := Vector2(origin.x, origin.z) + Vector2(cos(angle), sin(angle)) * radius
+			var clear := true
+			for probe in probes:
+				if FishingField.habitat.bottom(point + probe) > WaveSurface.WATER_LEVEL - 12.0:
+					clear = false
+					break
+			if clear: return Vector3(point.x, 0, point.y)
+	push_error("No safe playtest launch found in coastal sandbox")
+	get_tree().quit(1)
+	return origin
 
 func _set_test_weather() -> void:
 	WorldClock.set_game_hours_elapsed(12.0)
@@ -82,9 +121,9 @@ func _build_ui() -> void:
 	status.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	status.offset_left = -350
 	status.offset_right = -20
-	status.offset_top = 145
+	status.offset_top = 350
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	status.text = "BOAT PLAYTEST · Daylight / moderate waves\nHome · Reset boat\nF8 · Stop playtest / return to builder"
+	status.text = "BOAT PLAYTEST · Coast sandbox\nHome · Reset boat\nF8 · Stop playtest / return to builder"
 	status.modulate = Color(.8, .9, 1)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -130,6 +169,8 @@ func _reset() -> void:
 	for interaction in boat.get_bridge_stations():
 		if interaction.is_occupied():
 			interaction._exit()
+	controller.set_throttle_stage_idx(1)
+	controller._throttle = 0.0
 	controller.deactivate()
 	boat.snap_to_transform(start_transform)
 	boat.fill_tank()
@@ -144,13 +185,17 @@ func _process(_delta: float) -> void:
 
 	if not player.is_vehicle_occupied() and (player.global_position.y < WaveSurface.WATER_LEVEL - .3 or player.global_position.distance_to(boat.global_position) > 30):
 		_place_player()
-	if Vector2(boat.position.x, boat.position.z).length() > 1500 or boat.position.y < -15:
+	if boat.position.y < -15:
 		_reset()
 
 func _quit() -> void:
 	get_tree().quit()
 
 func _verify() -> void:
+	assert(GameMenu._gameplay and GameMenu._hud_layer.visible, "Production HUD must be enabled")
+	assert(FishingField.habitat.layout != null, "Production fishing habitat must exist")
+	assert(FishingField.habitat.bottom(Vector2(boat.position.x, boat.position.z)) < WaveSurface.WATER_LEVEL - 12.0, "Launch must clear seabed")
+	assert(get_tree().get_nodes_in_group("world").is_empty(), "Sandbox must not boot the global world")
 	assert(WeatherLighting.daylight_factor() > .8)
 	assert(is_equal_approx(WeatherLighting.sea_state, .35))
 	assert(WaveSurface.wave_intensity > WeatherLighting.calm_wave_intensity)
@@ -203,6 +248,21 @@ func _verify() -> void:
 	assert(helm.is_occupied() and controller._active, "F must enter the real helm")
 	if helm is ImportedSeatInteractable:
 		assert(helm.state_driver.state["occupied"], "Helm chair must report seated occupancy")
+	var deck_rod := boat.get_node_or_null("RodFishingStation") as RodFishingStation
+	if deck_rod != null:
+		Input.action_press("fishing_rod")
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		Input.action_release("fishing_rod")
+		assert(deck_rod.session.phase == "stowed" and not deck_rod.working, "Helm must never operate the deck rod")
+	var sonar := boat.get_node_or_null("ShipSounder")
+	assert(sonar != null, "Every ship needs a sounder, regardless of equipment")
+	for i in 40: await get_tree().physics_frame
+	var voyage := LocalPlayerView.get_voyage_snapshot()
+	assert(voyage.has("sonar") and voyage.sonar.sounder, "Helm snapshot must expose enabled sonar")
+	assert(not voyage.sonar.history.is_empty() and float(voyage.sonar.history[-1].depth_m) > 0, "Sonar must sample real depth")
+	assert(GameMenu._hud._fishing.visible and GameMenu._hud._fishing.data.get("sonar_view",false), "Sonar must actually be visible in helm HUD")
+	print("SONAR HUD PASS: visible at helm, enabled by default, real depth ",voyage.sonar.history[-1].depth_m)
 	var fishing_systems:=boat.get_fishing_systems()
 	if not fishing_systems.is_empty():
 		await _tap_g()
@@ -233,10 +293,10 @@ func _verify() -> void:
 	var turn_frames := ceili(240.0 * maxf(1.0,boat.length_m/14.0))
 	for i in range(turn_frames):
 		await get_tree().physics_frame
+	assert(stern_gear.steering_degrees > 1, "Installed rudder must follow actual helm input")
 	Input.action_release("move_right")
 	print("HELM CHECK: yaw=",angle_difference(old_yaw,boat.rotation.y)," speed=",boat.linear_velocity.length()," input=",boat.get_node("RudderComponent").rudder_input," force=",boat.get_node("RudderComponent").lateral_force_n," inertia=",boat.inertia)
 	assert(absf(angle_difference(old_yaw, boat.rotation.y)) > .02, "Shared rudder must turn the draft")
-	assert(stern_gear.steering_degrees > 1, "Installed rudder must follow actual helm input")
 	camera._mode = BoatCamera.Mode.THIRD_PERSON
 	for i in range(120):
 		await get_tree().process_frame
@@ -270,6 +330,39 @@ func _verify() -> void:
 	for i in range(120):
 		await get_tree().physics_frame
 	assert(player.is_on_floor(), "Player must remain aboard while the vessel coasts")
+	if deck_rod != null:
+		boat.freeze = true
+		boat.linear_velocity = Vector3.ZERO
+		var view := player.get_node("Camera3D") as Camera3D
+		view.current = true
+		for i in 16:
+			var angle := TAU * float(i) / 16
+			player.global_position = deck_rod.authored_station.global_position + boat.global_basis * Vector3(cos(angle)*1.2, .1, sin(angle)*1.2)
+			view.global_position = player.global_position + Vector3(0,1.6,0)
+			view.look_at(deck_rod._interaction.global_position)
+			if deck_rod.can_interact(): break
+		assert(deck_rod.can_interact(), "Installed rod must be reachable from deck")
+		_press_f()
+		assert(deck_rod.working, "F must start deck fishing")
+		var look:=player.get_node("PlayerCamera") as PlayerCamera
+		var target:=view.global_position+boat.global_basis.x*30-Vector3.UP*3
+		look._look_yaw=atan2(-(target.x-player.global_position.x),-(target.z-player.global_position.z))
+		player.rotation.y=look._look_yaw
+		view.look_at(target);look._fp_pitch=view.rotation.x
+		Input.action_press("fishing_rod")
+		for i in 45:await get_tree().physics_frame
+		Input.action_release("fishing_rod")
+		for i in 65:await get_tree().physics_frame
+		assert(deck_rod.session.phase == "fishing", "Deck rod input must cast: "+deck_rod.session.message)
+		Input.action_press("move_back")
+		for i in 8:await get_tree().physics_frame
+		Input.action_release("move_back")
+		assert(deck_rod.working and deck_rod.session.phase == "fishing", "Walking away must keep the carried rod and line")
+		assert(not deck_rod._rod_parts.is_empty(), "Rod mesh must leave its holder")
+		assert(helm._boarding_player() == null, "Return rod before taking helm")
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("C:/Users/noahs/Pictures/machinescreenshots/carried-rod-%d.png"%Time.get_unix_time_from_system())
+		print("DECK ROD PASS: helm rejected, aimed pickup, deck cast, carried rod retained, helm blocked")
 	_reset()
 	assert(not controller._active and controller.get_throttle_stage_idx() == 1)
 	assert(boat.position.distance_to(start_transform.origin) < .1)

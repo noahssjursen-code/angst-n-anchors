@@ -29,7 +29,6 @@ var snapshot
 var base := BaseRaster.new()
 var coastline := CoastlineIndex.new()
 var weather := RasterLayer.new(RasterLayer.Kind.WEATHER)
-var fishing := RasterLayer.new(RasterLayer.Kind.FISHING)
 var last_draw_usec := 0
 var draw_count := 0
 var _route_navigation: MarineRoutePlanner
@@ -45,7 +44,6 @@ func set_snapshot(next) -> void:
 	_shipping_ramps.clear()
 	_route_navigation = null
 	weather.invalidate()
-	fishing.invalidate()
 	ChartHarbourPlan.clear_cache()
 	if snapshot != null and snapshot.layout != null:
 		base.prepare(snapshot.layout)
@@ -59,8 +57,6 @@ func prepare_overlays(bounds: Rect2, layers: ChartLayerManager, game_hours: floa
 		return
 	if layers.is_visible("weather"):
 		weather.prepare(snapshot, bounds, game_hours)
-	if layers.is_visible("fishing"):
-		fishing.prepare(snapshot, bounds, game_hours)
 
 
 func render(
@@ -78,8 +74,6 @@ func render(
 	base.draw(canvas, chart, bounds, not fast_interaction)
 	if layers.is_visible("weather"):
 		weather.draw(canvas, chart, bounds)
-	if layers.is_visible("fishing"):
-		fishing.draw(canvas, chart, bounds)
 	if layers.is_visible("weather") and not fast_interaction:
 		weather.draw_wind(canvas, chart, bounds)
 		_draw_fronts(canvas, ctx)
@@ -115,8 +109,6 @@ func render_minimap(
 	base.draw(canvas, chart, bounds)
 	if layers.is_visible("weather"):
 		weather.draw(canvas, chart, bounds)
-	if layers.is_visible("fishing"):
-		fishing.draw(canvas, chart, bounds)
 	if layers.is_visible("weather"):
 		weather.draw_wind(canvas, chart, bounds)
 	_draw_coastline(canvas, ctx)
@@ -180,13 +172,8 @@ func overlay_readout(world: Vector2, layers: ChartLayerManager, game_hours: floa
 				WeatherProfileCatalog.label_for_band("precipitation", str(components.get("precipitation", ""))),
 				WeatherProfileCatalog.label_for_band("sea", str(components.get("sea", ""))),
 			])
-	if layers.is_visible("fishing"):
-		var zone := fishing.sample_at(world, game_hours)
-		rows.append(
-			"Fishing %s" % str(zone.get("tier_label", "No trawling"))
-			if bool(zone.get("open_water", false))
-			else "No trawling"
-		)
+	if snapshot != null and snapshot.layout != null and not snapshot.layout.is_land(world):
+		rows.append("Chart depth %.1f m / %s bottom" % [snapshot.layout.sample_water_depth(world, WaveSurface.WATER_LEVEL), snapshot.layout.sample_bottom_type(world)])
 	return rows
 
 
@@ -196,7 +183,6 @@ func debug_stats() -> Dictionary:
 		"draw_count": draw_count,
 		"base_build_usec": base.build_usec,
 		"weather": weather.debug_stats(),
-		"fishing": fishing.debug_stats(),
 		"shipping_lane_lines": _shipping_lane_lines.size(),
 	}
 

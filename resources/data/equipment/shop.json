@@ -1,0 +1,32 @@
+[
+  {
+    "id": "fishing_rod",
+    "name": "Heavy-pilk sea rod",
+    "price_nok": 1800
+  },
+  {
+    "id": "harpe",
+    "name": "Six-hook harpe",
+    "price_nok": 950
+  },
+  {
+    "id": "crab_trap",
+    "name": "Crab trap",
+    "price_nok": 650
+  },
+  {
+    "id": "rope_100m",
+    "name": "100 m rope coil",
+    "price_nok": 450
+  },
+  {
+    "id": "marker_buoy",
+    "name": "Marker buoy",
+    "price_nok": 180
+  },
+  {
+    "id": "bait_pack",
+    "name": "Bait pack",
+    "price_nok": 80
+  }
+]

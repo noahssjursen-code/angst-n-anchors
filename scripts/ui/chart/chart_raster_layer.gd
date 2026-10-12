@@ -1,11 +1,10 @@
 class_name ChartRasterLayer
 extends RefCounted
 
-enum Kind { WEATHER, FISHING }
+enum Kind { WEATHER }
 
 const COLS := 32
 const ROWS := 24
-const FISHING_RESOLUTION := 96
 const WEATHER_MAX_AGE_H := 0.08
 const WEATHER_OVERSCAN := 0.85
 
@@ -35,18 +34,6 @@ func invalidate() -> void:
 func prepare(snapshot, visible_world: Rect2, game_hours: float) -> bool:
 	if snapshot == null or not snapshot.is_valid():
 		return false
-	if kind == Kind.FISHING:
-		var fishing_key := "%d:%s" % [snapshot.world_seed, snapshot.layout_checksum]
-		if fishing_key == _view_key and texture != null:
-			return false
-		_view_key = fishing_key
-		_time_bucket = 0
-		_raster_cols = FISHING_RESOLUTION
-		_raster_rows = FISHING_RESOLUTION
-		var half := float(snapshot.layout.half_extent_m)
-		world_rect = Rect2(-half, -half, half * 2.0, half * 2.0)
-		_build(snapshot, game_hours)
-		return true
 	var lod := _weather_lod(visible_world)
 	var snapped := _snap_bounds(visible_world, lod.x, lod.y)
 	var bucket := floori(game_hours / WEATHER_MAX_AGE_H)
@@ -133,8 +120,6 @@ func draw_wind(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> v
 
 
 func sample_at(world: Vector2, game_hours: float) -> Dictionary:
-	if kind == Kind.FISHING:
-		return FishingField.sample_chart(Vector3(world.x, 0.0, world.y))
 	var sample := WeatherComposer.sample_chart(Vector3(world.x, 0.0, world.y), game_hours)
 	return {
 		"pressure": sample.pressure,
@@ -164,8 +149,6 @@ func debug_stats() -> Dictionary:
 func _build(snapshot, game_hours: float) -> void:
 	var started := Time.get_ticks_usec()
 	WeatherField.world_seed = snapshot.world_seed
-	if kind == Kind.FISHING and FishingField.world_seed != snapshot.world_seed:
-		FishingField.initialize(snapshot.world_seed)
 	_wind.resize(_raster_cols * _raster_rows)
 	_sea.resize(_raster_cols * _raster_rows)
 	sample_count = 0
@@ -186,19 +169,6 @@ func _build(snapshot, game_hours: float) -> void:
 				_write_rgba(bytes, idx, color)
 				_wind[idx] = Vector2(sample.wind.x, sample.wind.z)
 				_sea[idx] = sample.sea_state
-				sample_count += 1
-	else:
-		for y2 in range(_raster_rows):
-			for x2 in range(_raster_cols):
-				var world2 := Vector2(
-					lerpf(world_rect.position.x, world_rect.end.x, (float(x2) + 0.5) / _raster_cols),
-					lerpf(world_rect.position.y, world_rect.end.y, (float(y2) + 0.5) / _raster_rows),
-				)
-				var idx2 := y2 * _raster_cols + x2
-				var zone := FishingField.sample_chart(Vector3(world2.x, 0.0, world2.y))
-				_write_rgba(bytes, idx2, _fishing_color(zone))
-				_wind[idx2] = Vector2.ZERO
-				_sea[idx2] = 0.0
 				sample_count += 1
 	var image := Image.create_from_data(
 		_raster_cols, _raster_rows, false, Image.FORMAT_RGBA8, bytes
@@ -250,14 +220,6 @@ static func _weather_color(sample: WeatherSample) -> Color:
 	color = color.lerp(fog, smoothstep(0.12, 0.7, sample.fog_density))
 	color = color.lerp(Color(0.05, 0.28, 0.42, 0.70), smoothstep(0.25, 0.85, sample.sea_state) * 0.55)
 	color.a = clampf(color.a, 0.18, 0.78)
-	return color
-
-
-static func _fishing_color(zone: Dictionary) -> Color:
-	if not bool(zone.get("open_water", false)):
-		return Color(0.0, 0.0, 0.0, 0.0)
-	var color := FishingField.tier_color(str(zone.get("tier_id", "normal")))
-	color.a = minf(color.a, 0.58)
 	return color
 
 

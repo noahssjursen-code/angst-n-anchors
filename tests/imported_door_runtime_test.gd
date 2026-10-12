@@ -6,7 +6,7 @@ func _ready() -> void:
 func run() -> void:
 	assert(ShipyardPlaytestMode.active())
 	var boat := ImportedDraftVessel.new()
-	var stock: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/data/vessels/prebuilt/fishing_trawler.json"))
+	var stock: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/data/vessels/prebuilt/fishing_hook_line.json"))
 	boat.configure(stock.brick_layout)
 	boat.freeze = true
 	add_child(boat)

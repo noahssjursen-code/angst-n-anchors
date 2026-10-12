@@ -283,7 +283,7 @@ func _build_cranes() -> void:
 
 
 func _build_ship() -> void:
-	var preset := _prebuilt("fishing_trawler")
+	var preset := _prebuilt("fishing_hook_line")
 	if preset.is_empty():
 		return
 	var ship := VesselSpawn.instantiate(

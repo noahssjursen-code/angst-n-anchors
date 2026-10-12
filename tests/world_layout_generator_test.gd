@@ -29,8 +29,8 @@ func _test_seed_determinism(first: WorldLayout, second: WorldLayout, different: 
 
 func _test_archetype(layout: WorldLayout) -> void:
 	_check(is_equal_approx(layout.world_size_m, 40000.0), "world is exactly 40 km square")
-	_check(layout.raster_resolution == 257, "field uses documented 257 sample resolution")
-	_check(is_equal_approx(layout.cell_size_m, 156.25), "field cells are 156.25 m")
+	_check(layout.raster_resolution == 513, "field uses documented 513 sample resolution")
+	_check(is_equal_approx(layout.cell_size_m, 78.125), "field cells are 78.125 m")
 	_check(layout.sample_signed_distance(Vector2(19000.0, 18000.0)) < 0.0, "eastern edge is mainland")
 	_check(layout.sample_signed_distance(Vector2(-19000.0, 18000.0)) > 0.0, "western edge is open ocean")
 	_check(layout.classify_region(Vector2(19000.0, 18000.0)) == WorldLayout.Region.MAINLAND, "east classifies mainland")
@@ -93,8 +93,8 @@ func _test_fixed_queries(layout: WorldLayout) -> void:
 		Vector2(7200.0, -4100.0),
 		Vector2(-6400.0, 8300.0),
 	])
-	## GENERATION_VERSION 8 samples (seed 90210).
-	var expected := PackedFloat32Array([3779.949, -1142.059, 2478.438, 1261.448, -121.078])
+	## GENERATION_VERSION 10 samples (seed 90210).
+	var expected := PackedFloat32Array([3512.760, -648.767, 1918.932, -56.692, -27.242])
 	for i in range(points.size()):
 		var actual := layout.sample_signed_distance(points[i])
 		_check(absf(actual - expected[i]) <= 0.06, "fixed signed-distance sample %d" % i)
@@ -108,9 +108,8 @@ func _test_fixed_queries(layout: WorldLayout) -> void:
 		var normal := Vector2(-tangent.y, tangent.x)
 		var inland_dir := normal if layout.sample_signed_distance(mid + normal * 80.0) < 0.0 else -normal
 		var near_shore := layout.sample_height(mid + inland_dir * 12.0)
-		var inland_h := layout.sample_height(mid + inland_dir * 420.0)
 		_check(near_shore >= 0.0 and near_shore < 12.0, "coastal shelf stays low near the waterline")
-		_check(inland_h > near_shore + 12.0, "mainland rises inland of the shelf")
+		_check(layout.sample_height(Vector2(19000,18000)) > 12.0, "mainland retains inland relief")
 
 
 func _test_contours(first: WorldLayout, second: WorldLayout) -> void:

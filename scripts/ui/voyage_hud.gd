@@ -1,6 +1,7 @@
 class_name VoyageHud
 extends Control
 
+var _fishing: FishingInstrument
 var _helm: MarineHelmConsole
 var _prompt: Label
 var _shortcuts: Label
@@ -15,6 +16,10 @@ func _ready() -> void:
 	theme = VoyageStyle.theme()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fishing=FishingInstrument.new()
+	_place_sonar(SonarDisplay.VIEW_FULL)
+	add_child(_fishing)
+	_fishing.visible=false
 	_helm = MarineHelmConsole.new()
 	_helm.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	_helm.offset_left=28
@@ -42,6 +47,7 @@ func _ready() -> void:
 	_notice.visible=false
 	if not preview_mode:
 		LocalPlayerView.voyage_changed.connect(present)
+		LocalPlayerView.fishing_changed.connect(present_fishing)
 		present(LocalPlayerView.get_voyage_snapshot())
 
 func _banner(from: Vector2,to: Vector2,preset: Control.LayoutPreset) -> Label:
@@ -56,13 +62,30 @@ func _banner(from: Vector2,to: Vector2,preset: Control.LayoutPreset) -> Label:
 	return label
 
 func present(state: Dictionary) -> void:
+	var instrument: Dictionary = state.get("sonar",{}) if bool(state.helming) else state.get("fishing",{})
+	var sonar_view := int(instrument.get("view", SonarDisplay.VIEW_FULL)) if bool(state.helming) else SonarDisplay.VIEW_FULL
+	var sonar_hidden := bool(state.helming) and sonar_view == SonarDisplay.VIEW_HIDDEN
+	_fishing.visible = not modal and not instrument.is_empty() and not sonar_hidden and (bool(state.helming) or bool(instrument.get("working",false)))
+	if _fishing.visible:
+		if bool(state.helming):
+			_place_sonar(sonar_view)
+		else:
+			_fishing.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+			_fishing.offset_left=-240;_fishing.offset_right=240;_fishing.offset_top=-270;_fishing.offset_bottom=-118
+		_fishing.present(instrument)
 	_helm.visible=bool(state.helming) and not modal
-	_objective.visible=not bool(state.helming) and not modal
+	_objective.visible=not bool(state.helming) and not modal and not bool(instrument.get("working",false))
 	_objective.text=str(state.get("objective",""))
 	_shortcuts.visible=not modal
 	# Keep keys at the bottom edge; reserve the minimap corner while helming.
+	# A visible sounder sits in that same bottom band, so lift the keys above it.
+	var shortcut_lift := 0.0
+	if bool(state.helming) and not sonar_hidden:
+		shortcut_lift = HelmMinimap.MARGIN + SonarDisplay.layout_size(sonar_view).y + 8.0
 	_shortcuts.offset_left=-620 if bool(state.helming) else -300
 	_shortcuts.offset_right=-344 if bool(state.helming) else -28
+	_shortcuts.offset_bottom = -22 - shortcut_lift
+	_shortcuts.offset_top = -48 - shortcut_lift
 	if bool(state.helming):
 		_prompt.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 		_prompt.offset_left=28
@@ -78,6 +101,20 @@ func present(state: Dictionary) -> void:
 	_prompt.visible=not modal and not _prompt.text.is_empty()
 	if not _helm.visible: return
 	_helm.present(state)
+
+func _place_sonar(view: int) -> void:
+	var box := SonarDisplay.layout_size(view)
+	var right := HelmMinimap.MARGIN + HelmMinimap.EXPANDED_SIZE.x + 12.0
+	_fishing.scale = Vector2.ONE
+	_fishing.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	_fishing.offset_right = -right
+	_fishing.offset_left = -right - box.x
+	_fishing.offset_bottom = -HelmMinimap.MARGIN
+	_fishing.offset_top = -HelmMinimap.MARGIN - box.y
+
+func present_fishing(instrument: Dictionary) -> void:
+	if modal or not is_visible_in_tree(): return
+	_fishing.present(instrument)
 
 func _physics_process(delta: float) -> void:
 	if not is_visible_in_tree() or preview_mode: return

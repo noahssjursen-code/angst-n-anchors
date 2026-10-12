@@ -4,6 +4,10 @@ extends Node3D
 ## Persistent cheap settlement silhouettes and nearby authored building shells.
 ## Pure scenery: no NPC simulation, per-house scripts or distant physics.
 const LOD_DISTANCE := 480.0
+const LOAD_RADIUS := 2800.0
+const UNLOAD_RADIUS := 3300.0
+var _nodes := {}
+var _last_reference := Vector3(INF,INF,INF)
 var plan := {}
 var _jobs: Array = []
 var _groups := {}
@@ -32,11 +36,28 @@ func configure(layout: WorldLayout, records: Dictionary, zones: Array) -> void:
 		var coord := Vector2i(floori(mid.x/256),floori(mid.z/256))
 		var chunk: Dictionary = _groups.get_or_add(coord,{"buildings":[],"roads":[],"drives":[]})
 		chunk.drives.append(drive)
-	_jobs=_groups.keys()
-	var reference := WorldReference.visual_position(get_viewport())
-	_jobs.sort_custom(func(a:Vector2i,b:Vector2i): return Vector2(a*256).distance_squared_to(Vector2(reference.x,reference.z))<Vector2(b*256).distance_squared_to(Vector2(reference.x,reference.z)))
+	_jobs=[]
+	_last_reference=Vector3(INF,INF,INF)
+
+func _refresh_local_chunks(reference: Vector3) -> void:
+	if reference.distance_to(_last_reference)<128: return
+	_last_reference=reference
+	var at := Vector2(reference.x,reference.z)
+	for coord: Vector2i in _nodes.keys():
+		if Vector2(coord*256+Vector2i(128,128)).distance_to(at)>UNLOAD_RADIUS:
+			_nodes[coord].queue_free();_nodes.erase(coord)
+	_jobs=[]
+	var cell := Vector2i(floori(at.x/256),floori(at.y/256))
+	var radius := ceili(LOAD_RADIUS/256)
+	for z in range(cell.y-radius,cell.y+radius+1):
+		for x in range(cell.x-radius,cell.x+radius+1):
+			var coord := Vector2i(x,z)
+			if not _groups.has(coord) or _nodes.has(coord): continue
+			if Vector2(coord*256+Vector2i(128,128)).distance_to(at)<=LOAD_RADIUS: _jobs.append(coord)
+	_jobs.sort_custom(func(a:Vector2i,b:Vector2i): return Vector2(a*256).distance_squared_to(at)<Vector2(b*256).distance_squared_to(at))
 
 func _process(delta: float) -> void:
+	if get_viewport().get_camera_3d()==null: return
 	if not _jobs.is_empty():
 		var started := Time.get_ticks_usec()
 		_build_chunk(_jobs.pop_front())
@@ -44,6 +65,7 @@ func _process(delta: float) -> void:
 	_timer-=delta
 	if _timer<=0:
 		_timer=.5
+		_refresh_local_chunks(WorldReference.visual_position(get_viewport()))
 		CoastalBuildingLibrary.set_night_factor(1.0-WeatherLighting.daylight_factor())
 		_update_collisions(WorldReference.visual_position(get_viewport()))
 
@@ -51,6 +73,7 @@ func _build_chunk(coord: Vector2i) -> void:
 	var node := Node3D.new(); node.name="Village_%d_%d"%[coord.x,coord.y]
 	var center := Vector3(coord.x*256+128,0,coord.y*256+128)
 	add_child(node);node.position=center
+	_nodes[coord]=node
 	var batches := {}
 	for building: Dictionary in _groups[coord].buildings:
 		var key := str(building.kind)+":"+str(building.paint)
@@ -105,7 +128,7 @@ func _build_roads(parent: Node3D, center: Vector3, roads: Array, drives := false
 
 func _update_collisions(reference: Vector3) -> void:
 	var required := {}
-	for coord: Vector2i in _groups:
+	for coord: Vector2i in _nodes:
 		if Vector2(coord*256+Vector2i(128,128)).distance_to(Vector2(reference.x,reference.z))>330: continue
 		for item: Dictionary in _groups[coord].buildings:
 			if item.position.distance_to(reference)>160: continue

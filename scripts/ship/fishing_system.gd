@@ -77,6 +77,9 @@ func _ready() -> void:
 
 
 func toggle_trawling() -> void:
+	if not trawling and _rod_is_deployed():
+		_notify_trawl("Recover the rod before setting the trawl")
+		return
 	var hold := _catch_hold()
 	if not trawling and hold == null:
 		_notify_trawl("No insulated catch hold fitted")
@@ -499,6 +502,7 @@ func _catch_hold() -> CatchHoldComponent:
 
 ## External trawl control (e.g. autonomous NPC sim).
 func apply_trawl_desired(enabled: bool) -> void:
+	if enabled and _rod_is_deployed(): return
 	if trawling == enabled:
 		return
 	trawling = enabled
@@ -628,3 +632,8 @@ func catch_totals() -> Dictionary:
 		result.mass_kg += hold.state.total_mass_kg()
 		result.capacity_kg += hold.state.capacity_kg
 	return result
+
+func _rod_is_deployed() -> bool:
+	if _body == null: return false
+	var rod := _body.get_node_or_null("RodFishingStation") as RodFishingStation
+	return rod != null and rod.session.phase != "stowed"

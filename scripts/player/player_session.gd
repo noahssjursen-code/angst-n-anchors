@@ -773,3 +773,41 @@ func _request_marks_server_sync() -> void:
 func _sync_marks_to_server() -> void:
 	_marks_sync_pending = false
 	_marks_sync_in_flight = false
+
+
+func purchase_ship_equipment(command: Dictionary) -> Dictionary:
+	if is_remote_voyage():return CompanyContracts.result_error("remote_unavailable","This server does not provide equipment purchases yet.")
+	_ensure_company_authority()
+	var previous:=data.to_dict()
+	var result:=company_service.purchase_equipment(command)
+	if not bool(result.get("ok",false)):return result
+	var saved:=not _persistent_io_enabled
+	if _persistent_io_enabled and LocalCaptainStore.has_active():
+		_snapshot_world_state()
+		saved=PlayerSaveStore.save_player(data)
+	if not saved:
+		data=PlayerData.from_dict(previous);company_service.bind(data)
+		return CompanyContracts.result_error("save_failed","Purchase could not be saved. No money was charged.")
+	marks_changed.emit(data.marks)
+	company_changed.emit(company_service.company_summary())
+	vessels_synced.emit()
+	return result
+
+
+func equip_ship_fishing_item(command:Dictionary)->Dictionary:
+	if is_remote_voyage():return CompanyContracts.result_error("remote_unavailable","Remote equipment changes are not supported yet.")
+	var ship:=LocalPlayerView.get_active_ship() as BoatBody
+	if ship!=null:
+		var mount:=ship.get_node_or_null("RodFishingStation") as RodFishingStation
+		if mount!=null and mount.working:return CompanyContracts.result_error("gear_in_use","Return the fishing gear to its mount first.")
+	_ensure_company_authority()
+	var previous:=data.to_dict()
+	var result:=company_service.equip_fishing_item(command)
+	if not result.get("ok",false):return result
+	var saved:=not _persistent_io_enabled
+	if _persistent_io_enabled and LocalCaptainStore.has_active():saved=PlayerSaveStore.save_player(data)
+	if not saved:
+		data=PlayerData.from_dict(previous);company_service.bind(data)
+		return CompanyContracts.result_error("save_failed","Equipment change was not saved.")
+	company_changed.emit(company_service.company_summary());vessels_synced.emit()
+	return result

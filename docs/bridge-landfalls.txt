@@ -1,0 +1,45 @@
+Bridge landfalls and coverage (2026-10-12)
+
+BridgeStructurePlan now receives the same port grading zones as terrain and
+uses the 25 m ground surface used by roadside scenery. Bank height, approach
+landings, tower/pier bottoms and abutments all use this ground. Approach search
+tries seven inland headings, with an 8.5% grade limit and terrain obstruction
+checks. Unmapped crossings have a 22 m minimum deck; mapped waterways retain
+the existing 55 m protected opening.
+
+Bridge selection permits 56 candidates instead of 32, including up to 12
+mainland shortcuts. Minimum shore gap is 60 m and shortcut spacing is 450 m.
+A rejected crossing gets up to four nearby alternatives for the same land pair.
+Suspension tower positions can move along the span while retaining foundation
+depth, shipping opening and maximum main-span constraints.
+
+BridgeRoadConnector adds terrain-following ties to nearby settlement and port
+roads. It tries direct links, then a bounded local 25 m path search where needed.
+Every route is checked at 2 m intervals with nine cross-width surface samples for dry ground and grade; its end meets
+the existing road elevation. Surface and collision are included in the bridge
+batches. Vegetation clearances follow the separate bridge and connector paths.
+Planning remains on the existing background worker.
+
+Validation: four structural families and three world seeds passed. Graded
+landings fixture verifies an original 90 m hillside cut to 2 m, matching road
+ends and buried foundations. Inlet fixture verifies a dry detour. World fixture
+seed 1850239324 built 47 bridges (previous build: 15), rejecting 8 unsuitable
+crossings; 8 landfalls found valid existing-road ties. Captures are archived
+under Pictures/machinescreenshots/bridge-landfall-*.
+
+Limit: the surrounding road network is still sparse. This does not create a
+complete regional road network or guarantee an existing-road tie on every bank.
+Invalid water/grade links are left unbuilt, not drawn through unsuitable terrain.
+
+Placement and streaming follow-up (2026-10-12)
+Large uninhabited islands no longer count as destinations. They may still serve
+as intermediate links between inhabited land masses. Mainland shortcuts are
+limited to two per world, water gaps up to 350 m, distinct destinations within
+1200 m of each end, and no short land detour (at least a 5 km search threshold).
+Accepted spans AND approach corridors must stay 40 m apart; alternatives are
+checked as well. Selection order stays deterministic, independent of camera.
+Terrain samples are cached per design. Completed plans publish progressively.
+Assembly prioritizes distance to the whole bridge corridor. Bridges render
+within 12 km, hide beyond 13.5 km, and retain their built resources for immediate
+return; collision is enabled within 1.5 km. This is distance streaming, not a
+full simplified-mesh LOD system. Main-thread assembly can still cause a hitch.

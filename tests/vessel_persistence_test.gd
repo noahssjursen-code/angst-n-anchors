@@ -151,7 +151,7 @@ func _ready() -> void:
 	var prebuilts := PrebuiltVesselCatalog.catalog_entries()
 	var found_prebuilt := false
 	for prebuilt in prebuilts:
-		if str(prebuilt.get("prebuilt_id", "")) == "fishing_trawler":
+		if str(prebuilt.get("prebuilt_id", "")) == "fishing_hook_line":
 			found_prebuilt = true
 			_check(
 				(VesselSpawn.brick_layout_of({

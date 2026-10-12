@@ -1,0 +1,50 @@
+Profile-to-world loading investigation, 12 October 2026
+
+Measured the actual MainMenu Sail handler with a copy of the development
+captain, seed 1850239324, 40 km, on Godot 4.6.1 / D3D12 / RTX 5070.
+The copy lives outside the repository; live captain files were not changed.
+Previous tests used a preloaded world scene and Godot 4.7, so did not measure
+the same path as the user's profile-to-world wait.
+
+Findings and changes
+- Captain load plus scene handoff was about 0.45 s, not the main bottleneck.
+- Home harbour road-edge generation took 10.31 s. It recomputed route endpoint
+  connectivity inside every polygon-edge loop. Hoisting that unchanged test
+  reduced this work to about 0.27 s, preserving the markings.
+- Loading presentation existed but nobody called it. Sail now shows it before
+  blocking work; stage timings include profile read, scene, geography, ocean,
+  plans, navigation, home harbour, spawn terrain and player readiness.
+- Terrain boot requests and readiness now cover 1 km. Focus stays pinned to
+  the home harbour through camera creation; the old handoff briefly requested
+  chunks around world origin. Farther work follows after entry.
+- Near forest starts around the home harbour, not the temporary origin.
+- Bridge completion no longer destroys/restarts the entire forest streamer.
+  Only intersecting near patches are invalidated. Existing distant batches
+  filter new bridge corridors incrementally; future uploads filter them too.
+- Distant forest worker publishes completed spatial batches nearest spawn first,
+  instead of withholding all trees until the whole-world computation finishes.
+  Main-thread uploads retain their 2 ms budget. Worker data/cache is separate
+  from mutable presentation batches; bridge clearances do not invalidate the
+  base canopy cache. Tree placement/density and meshes have not been reduced.
+
+End-to-end results (Sail to boot_finished, rendered 1280x720 test)
+- Before this pass, cached geography: 22.48 s (22.02 s with extra tracing).
+- After: 10.75 s with cached geography.
+- After, generation caches bypassed without deleting user caches: 21.89 s.
+These are measured test runs, not a promise for every seed/editor condition.
+The new timings will record the user's actual next run as WORLD_ENTRY lines.
+
+Validation
+- Real copied-profile entry, terrain ready at actual spawn, bridge completion
+  keeps the same distant forest instance and publishes real trees.
+- Render capture inspected and archived in Pictures/machinescreenshots.
+- Loading priority regression: 1 km gate, old/new road-edge decisions agree,
+  nearby and distant bridge exclusions preserve unrelated trees.
+- Terrain streamer regression and port facility/road triangulation passed.
+- Distant forest placement, progressive publication and cancellation checks.
+
+Remaining work
+Whole-world geography/port plans still precede entry. Far canopy still computes
+the world once in the background; progressive publication removes the global
+display barrier but is not yet an observer-local cache of forest regions.
+Dense tree rendering and long-distance memory need their own measured pass.

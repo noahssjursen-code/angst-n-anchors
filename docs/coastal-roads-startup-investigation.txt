@@ -1,0 +1,83 @@
+COASTAL ROADS, FOUNDATIONS AND STARTUP — 12 October 2026
+
+Implemented foundation correction
+- Previous code sampled WorldLayout's pre-render datum. Actual terrain is
+  2.5 m lower; subtracting only 1–2 m could leave foundations hovering.
+- BridgeStructurePlan now samples the rendered terrain datum over the full
+  rotated support footprint, including both offset suspension legs.
+- Foundations continue five metres below the lowest sampled ground and the
+  bounding terrain grid vertices for all current LODs (25/50/100/200 m).
+  This conservative lower bound keeps the bottom buried during LOD changes.
+- Bank piers, approach piers, tower legs, landfall blocks and anchor blocks
+  use these bases. Approach endpoints now meet the correct terrain datum.
+- Full family/three-seed placement tests pass; a sloping-ground regression
+  also checks footprint and coarse-LOD burial. No constant-length legs.
+
+Road/settlement investigation (seed 42, 40 km)
+211 houses, 3,308 two-point road strips, 1,407 endpoint-connected components,
+largest component only seven nodes, maximum endpoint grade approximately 60%.
+34 houses occupy a different sampled land component from their assigned port.
+The current planner scans coastline within 850 m of each port. It offsets
+roads inland by 145/195 m, then joins adjacent samples only when <55 m apart
+and <5 m different in height. This is neither terrain routing nor a graph of
+destinations/junctions. Five metres rise over a short segment can be very steep.
+It has no shared graph for port exits, bridge ends, villages or house access.
+Nearby unrelated islands can receive houses because straight-line proximity
+is used without land-component ownership. Not every island is populated today,
+but there is no deliberate inhabited/wild island policy.
+Forest exclusion is building footprint +4 m, narrow drive strips and road
+strips. This clears trunk roots, not a garden, usable plot, village frontage
+or sightline towards the sea; trees 10–14 m tall can still hide small houses.
+
+Recommended next road pass (not implemented here)
+1. Stable inhabited/wild designation by land component, available buildable
+   area, port access and a sparse seeded settlement budget. Bridges alone
+   must not populate every stepping-stone island.
+2. A small persistent data graph: ports, accepted bridge landfalls, villages
+   and junctions. Sparse regional connections, not house-by-house world work.
+3. Deterministic terrain-aware routes between those anchors; explicit grade,
+   width, water and slope constraints. Local earthworks/foundations where
+   needed; do not drape a road ribbon across arbitrarily steep terrain.
+4. Place occupied plots and their entrances from the road graph. Define
+   gardens, driveways, open village space and selective coastal views before
+   vegetation is sampled. Preserve wild woodland between settlements.
+5. Generate/cache regional detail with fixed region ownership/borders so
+   approaching in a different order cannot change roads or settlements.
+   Walkable collision, props and detailed plots only near actual observers.
+   Cheap distant representations; movement-triggered queues with budgets.
+
+Startup changes implemented now
+- Immutable geography from the captain/home-port picker is retained, not
+  cleared immediately when entering its world.
+- Terrain raster bake uses up to four private row workers; results concatenate
+  in original row order before the unchanged redistance/checksum stages.
+- Disposable on-disk caches for terrain raster, seeded port records and forest
+  coverage. Keys include generator/config identity or layout identity and
+  relevant inputs. Payload SHA-256 detects damage; no Object deserialization.
+  Port records reconstruct fresh objects so development captain mutations do
+  not leak into later loads. Terrain and port algorithms remain unchanged.
+- Seamarks plan on a worker instead of blocking world setup; loaded/placed
+  near the observer as before. Worker and synchronous output parity checked.
+- Settlement mesh/road chunks load within 2.8 km and unload beyond 3.3 km.
+  Queues update after 128 m movement; collider checks visit loaded chunks.
+  Previously all settlement chunks were eventually built and retained.
+
+Measured rendered test, same seed 424242 / 40 km / local RTX 5070 system:
+Original boot_finished: 31.899 s.
+Optimized empty-new-cache run: 21.763 s.
+Optimized repeat process (disk caches): 12.477 s.
+These measure world initialization to playable boot, not application launch.
+Original major stages: layout 10.019 s, port placement 4.559 s, port zones
+2.652 s, settlements 1.041 s, forest 2.169 s, seamarks 3.986 s.
+New cold layout 3.555 s; repeat layout .196 s, port placement .001 s,
+forest .005 s. Seamark dispatch .00002 s (work continues in background).
+Remaining costs include all-port graph plans, shipping network and spawn
+terrain/model preparation. This does not claim the future road rewrite done.
+
+Validation commands (append -- --shipyard-playtest for scene tests):
+tests/world_startup_test.tscn: serial/parallel bit parity, layout checksum,
+port-cache parity and isolation, cache overwrite/integrity, local chunk
+movement/unload, synchronous/worker seamark parity.
+tests/port_world_boot_test.tscn: rendered real-world boot / one initial port.
+tests/bridge_structure_test.tscn: bridge families, placement and foundations.
+tests/coastal_road_audit.gd: read-only reproduction of road connectivity audit.

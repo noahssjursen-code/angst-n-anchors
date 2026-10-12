@@ -1,0 +1,52 @@
+BRIDGE LOCATION STUDY - revised after user screenshots
+
+Reference: Trekantsambandet connects Sveio through Bømlafjordtunnelen to
+Føyno, branching to Stord and via Nautøya/Spissøy to Bømlo.
+https://snl.no/Trekantsambandet
+https://www.toi.no/getfile.php/Publikasjoner/T%C3%98I%20rapporter/2010/1065-2010/1065-2010-nettutgave.pdf
+This supports planning a network of useful land masses, not independent
+short gaps. Tunnels are reference context only; none are generated here.
+
+F3 > G > BRIDGE CANDIDATES enables the advisory layer. Planning runs once
+on a worker, with cached edge and landing checks. The reported seed groups in about
+3.7 seconds; full planning measured 22-23 seconds.
+Yellow spans include island-to-island links; green is a mainland shortcut.
+Cyan/pink spheres identify the two landings. Stems descend to actual ground.
+No collision, road construction, terrain edits, shipping or save mutations.
+
+Revised model:
+- Land occupancy comes from sample_height > sea level +0.25m, including the
+  visible coastal apron. The former signed-distance-only mask could split
+  dry peninsulas into false islands. Connectivity grid is now 50m on a
+  40km world (801 squared); grid edges have intermediate dry checks.
+- Trace the physical shore from each contour sample; sample every 100m.
+  Shore pairs remain 100-2200m apart, with 45m inland landings. Opposing
+  normals require dot >=0.65. Span corridor checked every <=12m, at its
+  centre and +/-8m. This is sampled geometry, not an exact polygon proof.
+- Port-bearing components are destinations. Settlements need at least three
+  buildings and 0.15 square kilometres of land. Other islands
+  >=0.4 square kilometres can be destinations; >=0.08 square kilometres
+  can serve as intermediate landfalls. These are tunable game thresholds.
+- Candidate cost: span +0.6*destination access distance +600*bank grade
+  +5*bank-height difference, with a 2500 preference for cross-island links.
+  Access distance is approximate; this does not lay out finished roads.
+- Join distinct land components into a minimum-cost forest (no cycles).
+  Repeatedly prune small uninhabited leaves. Under the 32-span preview
+  budget, trim low-value leaf branches, strongly preferring port access.
+  Never reject a whole mainland-connected region just because it is large.
+  Islands may have several bridges. No requirement for a mainland end.
+- Mainland shortcuts need distinct nearby port destinations, plus more than
+  2.5km or four spans of land detour (whichever is larger). Cardinal-grid
+  and endpoint allowances make this rejection conservative. At most six
+  such shortcuts, with 700m separation from already chosen crossings.
+- Replace blanket 450m town exclusion with 120m port-origin clearance and
+  no intersection with a 350m quay-facing approach ray. Detailed harbour
+  geometry and navigable clearance are still future design requirements.
+- Landing terrain must be dry; 100m inland samples cap natural grade at
+  40%, and bank difference/span at 8%. Neither is a completed ramp design.
+- Deck centre is max(sea+35m, higher bank+4m), only a preview placeholder.
+
+Limits: 50m connectivity still cannot resolve every tiny neck. Ports and
+settlements imply demand; no regional road network yet exists to validate
+exact journey savings. The rendering remains a siting study, not a finished
+bridge system. F6 scene: scenes/showcases/bridge_showcase.tscn (Space cycles).

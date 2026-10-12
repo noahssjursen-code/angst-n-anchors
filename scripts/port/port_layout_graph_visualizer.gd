@@ -81,13 +81,20 @@ func _rebuild() -> void:
 		child.free()
 	if _graph == null:
 		return
+	var started := Time.get_ticks_usec()
 	_stamp_foundation()
+	_trace_build("foundation", started)
+	started = Time.get_ticks_usec()
 	## Apron props deferred — layout first via asphalt/apron gizmos, then decorate.
 	_stamp_berth_terminals()
 	_stamp_apron_access()
 	_stamp_apron_pads()
 	_stamp_land_structures()
+	_trace_build("structures", started)
+	started = Time.get_ticks_usec()
 	preload("res://scripts/port/harbour_road_surface.gd").build(self,_road_routes)
+	_trace_build("roads", started)
+	started = Time.get_ticks_usec()
 	for instance_id in _graph.module_ids():
 		_stamp_module(_graph.modules[instance_id] as PortPlacedModule)
 	if show_open_slots:
@@ -99,6 +106,11 @@ func _rebuild() -> void:
 	if _harbour != null and not Engine.is_editor_hint() and not PlayerSession.is_remote_voyage():
 		var site := PassengerPortSites.plan(_graph,global_transform,LandField.get_layout())
 		PassengerPortSites.install(self,_harbour,site)
+	_trace_build("equipment_and_passengers", started)
+
+func _trace_build(stage: String, started: int) -> void:
+	if WorldBootstrap.entry_started_usec > 0:
+		print("PORT_BUILD port=",_port_id()," stage=",stage," ms=",(Time.get_ticks_usec()-started)/1000.0)
 
 
 func _port_id() -> String:

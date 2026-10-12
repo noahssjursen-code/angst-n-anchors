@@ -360,8 +360,16 @@ func flatten_zone_records(
 	var spine := foundation.get("spine", []) as Array
 	var graph_bounds := bounds()
 	if not spine.is_empty():
-		## Harbour foundations are extruded meshes — natural terrain is untouched.
-		pass
+		# The foundation hides reclaimed water, but cannot hide a hillside above
+		# its deck. Cut only the built apron, never the future buildable hinterland.
+		records.append({
+			"polygon": forest_clear_polygon(world_position, rotation_y, 2.0),
+			"height": world_position.y + float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) - 0.12,
+			"falloff": 240.0,
+			"clearance_margin": 36.0,
+			"cut_only": true,
+			"facility_id": "%s:foundation_clearance" % port_id,
+		})
 	elif graph_bounds.size.length_squared() > 0.01 and foundation_segments.is_empty():
 		var size_class := PortSizing.normalized_size(int(initial_attributes.get("size", 1)))
 		var seaward := Vector2(-sin(rotation_y), -cos(rotation_y))

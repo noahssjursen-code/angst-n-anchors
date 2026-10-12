@@ -336,7 +336,15 @@ func clear_mooring_integrate() -> void:
 	_mooring_integrate = Callable()
 
 
+func ensure_sounder() -> void:
+	if not Engine.is_editor_hint() and get_node_or_null("ShipSounder") == null:
+		var sounder := Node.new()
+		sounder.set_script(load("res://scripts/ship/ship_sounder.gd"))
+		sounder.name = "ShipSounder"
+		add_child(sounder)
+
 func _ready() -> void:
+	ensure_sounder()
 	# Deck collider and anyone standing on it must see this hull pose before they move.
 	process_priority = -20
 	process_physics_priority = -20

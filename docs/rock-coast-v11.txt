@@ -1,0 +1,42 @@
+Rock coast generation 11 / seabed 4
+
+Research basis
+NGU 2023.008, Fjoeloy/Klosteroey: figures 2.2 and 7.3 show variable coastal
+profiles and broken bedrock relief; sheltered depressions accumulate sediment.
+https://static.ngu.no/upload/Publikasjoner/Rapporter/2023/2023_008.pdf
+MAREANO chapter 3, printed pages 30-33: irregular strandflat cut by channels.
+https://www.mareano.no/resources/images/2015/chapter-3.pdf
+These inform structure, not statistically measured procedural dimensions.
+
+Implementation
+Macro coastline/fjord layout unchanged. Replaces generation-10 identical broad
+near-surface mounds with asymmetric compact crests, lower companion ridges,
+and deeper banks. Regional noise controls related outcrop orientations.
+Crests: 0.7-2.4 m depth; banks: 9-24 m; companion ridges: 12-40 m.
+Length/width parameters describe profile scales, not shallow footprint diameters.
+All mesh/chart/depth samples use the same WorldLayout height function.
+Compact crest samples are inserted into terrain triangles without moving chunk
+boundaries, so 25 m grid spacing cannot omit the summit.
+
+Markers
+Only compact crests receive this single-perch treatment. Candidates walk toward
+the 4 m contour, and point to a checked passage, not just the deepest radial ray.
+The final combined terrain must offer >=6 m sampled depth across a 60 m wide,
+360 m long corridor, 30-90 m on the indicated side, with approaches at both ends.
+Production checks 10 m samples; regression checks 5 m along the passage and
+intermediate cross offsets with a 0.2 m interpolation tolerance.
+This is a design-depth passage, not a guarantee for every ship or wave state.
+Deeper banks do not get misleading single summit poles. No new buoy types added.
+
+Validation
+Seeds 42, 1212599375, 77127: compact 5 m contour radial extent <=32 m.
+Port-filtered poles: 115 / 103 / 97. Deterministic planning and streaming pass.
+Terrain triangle coverage, shared datum and actual summit retention checked.
+Runtime terrain suite: passed; first-chunk profile approximately 19 ms.
+Showcase uses production terrain and marks; moving camera passes in both
+passage directions. This is not a piloted vessel grounding/collision playtest.
+
+Remaining scope
+No raw bathymetric-grid statistical calibration, full glacial basin/sill model,
+new grounding physics, NPC route draft constraints, or universal hazard marking.
+Restart the world to rebuild generation 11. Existing live scene stays unchanged.

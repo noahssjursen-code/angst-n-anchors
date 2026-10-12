@@ -1,0 +1,40 @@
+Crab pots — 12 October 2026
+
+The Coastal Crabber's twelve creels are the traps. Press F while looking at a
+creel. The hands bind to its two handles, the creel comes up, and it is thrown
+over the side. Letting go of F does nothing, because the action is not a hold.
+The trap then sinks on its own. Once it is on the bottom it belongs to the
+company, not to the hull that threw it. Recalling the crabber leaves the buoy
+where it was set. Bringing that crabber, or another crabber of the same company,
+back alongside hauls it. The line boat cannot. It soaks until the next in-game
+day (24 game hours, 24 real minutes). Each buoy shows the hours left. Hauling is
+a second press at the pot hauler, only when that buoy is alongside and the soak
+is finished. The hauler runs until the creel is up; the key does not have to
+stay down. Pots set in about 10–35 m. Catch, bait and saving a deployed pot
+through quit/reload are not part of this interaction. The set-pot record is the
+piece a later server would replicate.
+
+Fishing boat equipment — 12 October 2026
+
+The flat harpe follows the supplied hand-winder photo: moulded handle opening,
+white wound line, green keeper, six small hooks and a red teardrop sinker.
+Its stored tackle is hidden while deployed. The heavy sea rod has a shorter,
+thicker blank and a transverse reel. Its separate chrome pilk has split rings,
+a tapered body and a red-sleeved treble hook, following the supplied pilk photo.
+Blender sources: build_harpe.py, build_heavy_pilk.py, build_fishing_items.py.
+
+Both use RMB to drop/lower directly beneath the equipment tip, LMB to retrieve.
+The line can be set from the surface down to 180 m. Water deeper than that still
+fishes: a 50 m set is allowed over a 254 m seabed, and the line stops at 180 m.
+No charged throw is used by the station. A vertical obstruction check rejects
+lowering through the hull/deck: stand at the rail with the tip over water.
+Initial balance: harpe six hooks, maximum 5 kg each; heavy pilk one fish,
+minimum 1.5 kg. Pilk lowering 6 m/s; harpe 3.5 m/s. These are gameplay tuning
+values, not claims about real fishing gear limits. Actual school specimens are
+filtered before selecting a bite, preserving shared sonar/school positions.
+The fight continues hauling with either control; stay in the white bar.
+
+Harbourmaster Equipment shop purchases and equips harpe for the active vessel.
+The ship stores the selection; its portable mount swaps rod/harpe. Equipping
+while held is rejected. Each harpe fish becomes its own catch-crate lot.
+F6: scenes/showcases/harpe_fishing_showcase.tscn.

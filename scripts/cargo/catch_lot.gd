@@ -16,6 +16,9 @@ var ground_tier: String = "normal"
 var price_multiplier: float = 1.0
 var vessel_id: String = ""
 var owner_id: String = ""
+var specimen := false
+var length_cm := 0.0
+var size_grade := "Standard"
 
 
 static func create(data: Dictionary = {}) -> CatchLot:
@@ -31,6 +34,9 @@ static func create(data: Dictionary = {}) -> CatchLot:
 	lot.price_multiplier = maxf(float(data.get("price_multiplier", 1.0)), 0.0)
 	lot.vessel_id = str(data.get("vessel_id", "")).strip_edges()
 	lot.owner_id = str(data.get("owner_id", "")).strip_edges()
+	lot.specimen = bool(data.get("specimen", false))
+	lot.length_cm = maxf(0, float(data.get("length_cm", 0)))
+	lot.size_grade = str(data.get("size_grade", "Standard"))
 	return lot
 
 
@@ -43,6 +49,8 @@ func duplicate_lot() -> CatchLot:
 
 
 func split(max_mass_kg: float) -> CatchLot:
+	# An individual fish is indivisible. Pumps accumulate a transfer budget.
+	if specimen and max_mass_kg < mass_kg: return CatchLot.new()
 	var taken := minf(maxf(max_mass_kg, 0.0), mass_kg)
 	var out := duplicate_lot()
 	out.mass_kg = taken
@@ -55,6 +63,7 @@ func split(max_mass_kg: float) -> CatchLot:
 func can_merge(other: CatchLot) -> bool:
 	return (
 		other != null
+		and not specimen and not other.specimen
 		and product_id == other.product_id
 		and species_id == other.species_id
 		and ground_tier == other.ground_tier
@@ -89,6 +98,9 @@ func to_dict() -> Dictionary:
 		"price_multiplier": price_multiplier,
 		"vessel_id": vessel_id,
 		"owner_id": owner_id,
+		"specimen": specimen,
+		"length_cm": length_cm,
+		"size_grade": size_grade,
 	}
 
 

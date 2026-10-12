@@ -122,7 +122,7 @@ func _test_livery_material_slots() -> void:
 func _test_prebuilt_catalog_workflow() -> void:
 	var found := false
 	for entry in PrebuiltVesselCatalog.catalog_entries():
-		if str(entry.get("prebuilt_id", "")) != "fishing_trawler":
+		if str(entry.get("prebuilt_id", "")) != "fishing_hook_line":
 			continue
 		found = true
 		_check(int(entry.get("price_marks", -1)) >= 0, "ship SKU owns its shipwright price")
@@ -161,7 +161,7 @@ func _test_prebuilt_catalog_workflow() -> void:
 func _test_shared_hull_power_variants() -> void:
 	var layout: Dictionary = {}
 	for entry in PrebuiltVesselCatalog.catalog_entries():
-		if str(entry.get("prebuilt_id", "")) == "fishing_trawler":
+		if str(entry.get("prebuilt_id", "")) == "fishing_hook_line":
 			layout = (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)
 			break
 	if layout.is_empty():

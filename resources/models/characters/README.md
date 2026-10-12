@@ -13,11 +13,12 @@ Continue from this original in-house mariner. Do not reintroduce those assets.
 `tools/mariner_refinement.py` improves the original hands, cap, sweater and
 trouser topology and weights; it does not replace the character with a new body.
 
-- All parts share the same 42-bone bind pose. Do not attach a second skeleton to
+- All parts share the same 50-bone bind pose. Do not attach a second skeleton to
   each garment. Hands and their rest bones are oriented together in the bind pose:
   palms face the thighs with thumbs forward. Never compensate for a wrong hand
   bind pose by twisting the whole forearm or sleeve 90 degrees. Two joints per
-  finger/thumb provide relaxed curl. Forearm twist bones are available for later
+  thumb and three joints per finger provide relaxed curl and a wrapping grip.
+  Forearm twist bones are available for later
   interaction poses but have no artificial axial twist in the locomotion clips.
   Hand attachment bones inherit this anatomical orientation.
 - Arm and leg shafts use a single segment bone. Blend across the elbow/knee only
@@ -96,3 +97,36 @@ Regression checks cover every imported frame's fixed joint offsets and scale,
 continuous arm rotations, loop seams, opposing arm/leg swing and foot travel.
 `mesh_stats.json` records Blender counts; imported vertex counts may grow at UV
 and material seams. Retired character JSON models must remain deleted.
+
+12 October hand rebuild: the original Blender mesh now has a thinner palm,
+palm-facing thumb opposition, palm-facing relaxed finger curvature and three
+finger phalanges. Nail surfaces stay on the dorsum. Skin weights blend over
+each joint instead of abruptly switching from palm to finger.
+Body-shape deltas taper through the forearm to stable wrist/finger proportions,
+shared by bare arms, cuffs and hands. This keeps digits aligned with their bind
+joints at maximum body settings instead of rotating displaced fingers around
+the old joints. It applies in the authored Blender shape keys in every pose.
+
+Hand and digit rolls explicitly use +Y along the digit and +Z through the
+knuckles. Neutral palms face inward and thumbs forward. `hand_contacts.json`
+contains palm contact points and their four morph deltas, measured from the
+Blender model. `hand_grips.json` contains the bone-local finger poses; matching
+Fishing_RodGrip and Fishing_CrankGrip actions are saved in `mariner.blend`.
+`tools/mariner_hand_grips.py` fits the finger chain to the 24 mm handle section.
+RodHandPose solves arms with fixed lengths, seats the actual palm surface on
+each socket and applies the authored finger poses. The crank has a real axial
+knob and an independent socket, with its palm contact staying above the knob
+as the crank rotates. The rod carry frame originates at the torso, not the
+camera. Rebuild with `tools/build_character_blender.py`.
+
+Hand-specific verification:
+- `tools/review_blender_hands.py -- final`: six separate cameras on the saved
+  Blender hands (left/right palm, back and side).
+- `scenes/showcases/rod_fishing_showcase.tscn -- --shipyard-playtest --hands-close-review`:
+  separate cameras on each live skinned hand at rest and gripping equipment.
+  Only the other hand's triangles and the occluding body are omitted from the
+  diagnostic layer; production skin, vertices, weights and morphs are retained.
+- The same scene with `--hands-test` checks both camera modes, aiming motion,
+  a full crank turn, fixed arm lengths, skin/handle clearance, maximum-morph
+  palm anchors and pose release on stow. `--hands-review` captures full context.
+All review images are saved to the user's machinescreenshots archive.

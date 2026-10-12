@@ -1,0 +1,150 @@
+{
+  "cod": {
+    "name": "Atlantic cod",
+    "norwegian_name": "Torsk",
+    "rarity": "Common",
+    "marks_per_kg": 80,
+    "length_cm": [
+      32,
+      105
+    ],
+    "mass_kg": [
+      0.35,
+      12
+    ],
+    "depth_m": [
+      15,
+      160
+    ],
+    "zone": "bottom",
+    "substrate": "rock",
+    "spawn_weight": 1.0,
+    "model": "res://resources/models/fishing_items/cod.glb",
+    "description": "Mottled flanks, three dorsal fins and a chin barbel. Search ledges and broken ground."
+  },
+  "pollack": {
+    "name": "Pollack",
+    "norwegian_name": "Lyr",
+    "rarity": "Uncommon",
+    "marks_per_kg": 110,
+    "length_cm": [
+      30,
+      90
+    ],
+    "mass_kg": [
+      0.3,
+      7
+    ],
+    "depth_m": [
+      10,
+      100
+    ],
+    "zone": "reef",
+    "substrate": "rock",
+    "spawn_weight": 0.65,
+    "model": "res://resources/models/fishing_items/pollack.glb",
+    "description": "Golden flanks and a curved lateral line. Works rocky slopes and kelp edges."
+  },
+  "saithe": {
+    "name": "Saithe",
+    "norwegian_name": "Sei",
+    "rarity": "Common",
+    "marks_per_kg": 55,
+    "length_cm": [
+      30,
+      100
+    ],
+    "mass_kg": [
+      0.3,
+      10
+    ],
+    "depth_m": [
+      8,
+      160
+    ],
+    "zone": "midwater",
+    "substrate": "any",
+    "spawn_weight": 1.0,
+    "model": "res://resources/models/fishing_items/saithe.glb",
+    "description": "Dark back and a straight pale lateral line. Schools hunt above coastal banks."
+  },
+  "mackerel": {
+    "name": "Atlantic mackerel",
+    "norwegian_name": "Makrell",
+    "rarity": "Common",
+    "marks_per_kg": 60,
+    "length_cm": [
+      25,
+      50
+    ],
+    "mass_kg": [
+      0.15,
+      1.4
+    ],
+    "depth_m": [
+      5,
+      180
+    ],
+    "zone": "surface",
+    "substrate": "any",
+    "spawn_weight": 1.2,
+    "model": "res://resources/models/fishing_items/mackerel.glb",
+    "description": "Blue-green back with dark bars. Look for schools high in the water column."
+  },
+  "haddock": {
+    "name": "Haddock",
+    "norwegian_name": "Hyse",
+    "rarity": "Uncommon",
+    "marks_per_kg": 120,
+    "length_cm": [
+      30,
+      85
+    ],
+    "mass_kg": [
+      0.3,
+      6
+    ],
+    "depth_m": [
+      25,
+      180
+    ],
+    "zone": "bottom",
+    "substrate": "sand",
+    "spawn_weight": 0.55,
+    "model": "res://resources/models/fishing_items/haddock.glb",
+    "description": "A black shoulder spot and tall first dorsal fin. Favors deeper sand and mixed ground."
+  },
+  "halibut": {
+    "name": "Atlantic halibut",
+    "norwegian_name": "Kveite",
+    "rarity": "Rare",
+    "marks_per_kg": 250,
+    "length_cm": [
+      55,
+      150
+    ],
+    "mass_kg": [
+      2,
+      45
+    ],
+    "depth_m": [
+      20,
+      180
+    ],
+    "zone": "bottom",
+    "substrate": "sand",
+    "spawn_weight": 0.12,
+    "model": "res://resources/models/fishing_items/halibut.glb",
+    "description": "A broad flatfish with both eyes on its upper side. Search sand beside deeper channels."
+  },
+  "edible_crab": {
+    "name": "Edible crab",
+    "norwegian_name": "Taskekrabbe",
+    "rarity": "Common",
+    "marks_per_kg": 28,
+    "length_cm": [12, 27],
+    "mass_kg": [0.3, 2.4],
+    "model": "res://resources/models/fishing_items/taskekrabbe.glb",
+    "description": "Brick-red carapace with a pie-crust rim and black-tipped claws."
+  }
+}

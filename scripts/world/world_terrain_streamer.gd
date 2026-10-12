@@ -11,8 +11,8 @@ const TERRAIN_FAR_SHADER := preload("res://resources/shaders/terrain_far.gdshade
 const TERRAIN_SURFACE_MAPS := preload("res://scripts/world/terrain_surface_maps.gd")
 
 const CHUNK_SIZE_M := 1000.0
-## The macro SDF itself is 156.25 m, so denser-than-40 m runtime tessellation adds
-## build cost without coastline information. All steps divide 1 km exactly.
+## The macro field is 78.125 m; compact skerry outlines add detail independently
+## at every LOD. All base grid steps divide 1 km exactly.
 ## Far rings use 200 m so a ~20 km visual radius stays affordable.
 ## Nested steps divide CHUNK_SIZE_M (1000); each tier doubles grid spacing.
 ## (Dropped non-nested 40↔50 and 200↔500 which caused T-junction height seams.)
@@ -27,12 +27,12 @@ const REQUEST_MOVE_THRESHOLD_M := 50.0
 const COLLISION_MOVE_THRESHOLD_M := 25.0
 ## Terrain datum sits below sea level so the rock shelf continues underwater.
 ## Port flatten zones still target y=0 and are therefore unchanged.
-const TERRAIN_SINK_M := 2.5
+const TERRAIN_SINK_M := WorldLayout.TERRAIN_DATUM_OFFSET_M
 const SUBMERGED_SHELF_EXTENT_M := 28.0
 ## Submerged terrain is visual bathymetry only. Physical beaching/grounding will
 ## be owned by dedicated gameplay logic rather than hidden terrain collision.
 const COLLISION_COAST_CUTOFF_Y := WaveSurface.WATER_LEVEL
-## Macro terrain remains coarse. Port foundations are extruded meshes — no runtime carve.
+## Macro terrain remains coarse; built harbour foundations cut hills below their deck.
 const BYTES_PER_VERTEX_ESTIMATE := 40
 const BYTES_PER_INDEX_ESTIMATE := 4
 const PORT_PAD_WIDTH_BY_SIZE := PortSizing.TERRAIN_PAD_WIDTH_BY_SIZE
@@ -50,6 +50,7 @@ const PORT_PAD_SEAWARD_SHIFT_M := PortSizing.PAD_SEAWARD_SHIFT_M
 ## Elevated budget while the loading gate waits on the spawn ring.
 const BOOT_BUDGET_MS := 18.0
 const BOOT_MAX_JOBS := 4
+const BOOT_RADIUS_M := 1000.0
 
 var _layout: Object
 var _flatten_zones: Array[Dictionary] = []
@@ -90,7 +91,7 @@ func configure(layout: Object, port_definitions: Array = []) -> void:
 		# Bake surface maps up-front so the first streamed chunk stays cheap.
 		_terrain_material(0)
 		_terrain_material(lod_steps_m.size() - 1)
-		_refresh_requests(WorldReferenceScript.visual_position(get_viewport()))
+		_refresh_requests(_boot_focus if _boot_priority else WorldReferenceScript.visual_position(get_viewport()))
 
 
 func set_layout(layout: Object) -> void:
@@ -134,7 +135,7 @@ func _process(_delta: float) -> void:
 	var collision_position := _boot_focus if _boot_priority \
 			else WorldReferenceScript.gameplay_position(get_tree())
 	var stream_xz := Vector2(stream_position.x, stream_position.z)
-	if _boot_priority or _should_refresh_requests(stream_xz):
+	if _should_refresh_requests(stream_xz):
 		_refresh_requests(stream_position)
 	_process_jobs(collision_position)
 	_sync_collisions(collision_position)
@@ -151,6 +152,7 @@ func begin_boot_priority(focus: Vector3) -> void:
 
 func end_boot_priority() -> void:
 	_boot_priority = false
+	_last_request_xz = Vector2(INF,INF)
 
 
 func is_boot_priority() -> bool:
@@ -213,8 +215,7 @@ func pending_near(world_pos: Vector3, radius_m: float = -1.0) -> int:
 
 
 func _boot_ready_radius_m() -> float:
-	var lod0 := float(lod_distances_m[0]) if lod_distances_m.size() > 0 else collision_radius_m
-	return maxf(collision_radius_m, lod0)
+	return BOOT_RADIUS_M
 
 
 func get_debug_stats() -> Dictionary:
@@ -267,7 +268,7 @@ func _refresh_requests(stream_position: Vector3) -> void:
 	var desired := select_chunk_requests(
 		Vector2(stream_position.x, stream_position.z),
 		float(_layout.half_extent_m),
-		visual_radius_m,
+		BOOT_RADIUS_M if _boot_priority else visual_radius_m,
 		lod_distances_m,
 	)
 	var desired_keys := {}
@@ -440,7 +441,7 @@ func _install_chunk_data(
 	mesh_instance.material_override = _terrain_material(lod)
 	# Coarse ridges still occlude sunlight over coastal water. Geometry LOD
 	# reduces their cost; dropping their shadows makes mountains transparent.
-	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if mesh_instance.mesh.get_aabb().end.y < WaveSurface.WATER_LEVEL else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	root.add_child(mesh_instance)
 
 	var record := {
@@ -681,7 +682,7 @@ static func _zone_influence_bounds(zone: Dictionary) -> Rect2:
 		var radius := half.length()
 		var center := zone.get("center", Vector2.ZERO) as Vector2
 		bounds = Rect2(center - Vector2.ONE * radius, Vector2.ONE * radius * 2.0)
-	var falloff := maxf(float(zone.get("falloff", 0.0)), 0.0)
+	var falloff := maxf(float(zone.get("falloff", 0.0)), 0.0) + float(zone.get("clearance_margin", 0.0))
 	return bounds.grow(falloff) if bounds.size != Vector2.ZERO else bounds
 
 
@@ -784,7 +785,7 @@ static func sample_terrain_height(layout: Object, world_xz: Vector2, flatten_zon
 	return height
 
 
-## Render sample includes a short submerged continuation beyond the SDF coast.
+## Render sample includes the shared continuous seabed beyond the SDF coast.
 ## This lets water cover the shelf instead of meeting a perfectly smooth edge.
 static func sample_render_terrain_height(
 		layout: Object,
@@ -870,9 +871,12 @@ static func _apply_flatten_zones(
 			continue
 		var falloff := maxf(float(zone.get("falloff", 0.001)), 0.001)
 		var edge_distance := _zone_edge_distance(zone, world_xz)
-		var blend := 1.0 - smoothstep(0.0, falloff, maxf(edge_distance, 0.0))
+		var blend := 1.0 - smoothstep(0.0, falloff, maxf(edge_distance - float(zone.get("clearance_margin", 0.0)), 0.0))
 		if edge_distance <= 0.0:
 			blend = 1.0
+		if bool(zone.get("cut_only", false)):
+			height = minf(height, lerpf(height, float(zone["height"]), blend))
+			continue
 		if bool(zone.get("blend_terrain", false)):
 			if signed_distance >= 0.0:
 				continue
@@ -1020,6 +1024,22 @@ static func build_chunk_mesh_data(
 				a, b, c, d, layout, flatten_zones,
 			)
 
+	# Keep the existing clipped coastal shelf exactly, then fill its complement.
+	# Simply spanning shore cells would interpolate hills into the deeper bottom
+	# and change the visible shoreline at coarse LODs.
+	if layout is WorldLayout:
+		var water_distances := PackedFloat32Array()
+		water_distances.resize(clip_distances.size())
+		for i in range(clip_distances.size()): water_distances[i] = -clip_distances[i]
+		for z in range(cells):
+			for x in range(cells):
+				var a := z * side + x
+				_append_cell_land(vertices, colors, indices, water_distances,
+					a, a + 1, a + side, a + side + 1, layout, flatten_zones, true)
+		clip_distances.fill(-1.0)
+	_refine_port_terrain(layout, vertices, colors, indices, flatten_zones, step_m)
+	if layout is WorldLayout:
+		_preserve_rock_crests(layout, origin, vertices, colors, indices, flatten_zones, step_m)
 	var surface_vertex_count := vertices.size()
 	var normals := calculate_terrain_normals(
 		layout,
@@ -1045,6 +1065,175 @@ static func build_chunk_mesh_data(
 	}
 
 
+## Resolve earthworks on the same 25 m lattice used by scenery placement.
+## Only triangles around harbour grading are subdivided; distant wilderness
+## keeps its requested LOD. Never move mesh vertices after height sampling.
+static func _refine_port_terrain(layout: Object, vertices: PackedVector3Array,
+		colors: PackedColorArray, indices: PackedInt32Array, zones: Array, step: float) -> void:
+	if step <= 25.0: return
+	var bounds: Array[Rect2] = []
+	for zone: Dictionary in zones:
+		if zone.get("cut_only", false): bounds.append(_zone_influence_bounds(zone).grow(step))
+	if bounds.is_empty(): return
+	var original := indices.duplicate()
+	indices.clear()
+	var n := ceili(step / 25.0)
+	for t in range(0, original.size(), 3):
+		var a := vertices[original[t]]
+		var b := vertices[original[t+1]]
+		var c := vertices[original[t+2]]
+		var rect := Rect2(Vector2(a.x,a.z),Vector2.ZERO).expand(Vector2(b.x,b.z)).expand(Vector2(c.x,c.z))
+		var refine := false
+		for bound in bounds:
+			if bound.intersects(rect,true): refine=true; break
+		if not refine:
+			indices.append_array(original.slice(t,t+3))
+			continue
+		var rows: Array = []
+		for i in range(n+1):
+			var row := PackedInt32Array()
+			for j in range(n-i+1):
+				var p := a+(b-a)*(float(i)/n)+(c-a)*(float(j)/n)
+				var xz := Vector2(p.x,p.z)
+				p.y=sample_render_terrain_height(layout,xz,zones)
+				row.append(vertices.size());vertices.append(p)
+				colors.append(terrain_color(p.y,layout.sample_signed_distance(xz),xz,zones))
+			rows.append(row)
+		for i in n:
+			for j in range(n-i):
+				indices.append_array(PackedInt32Array([rows[i][j],rows[i+1][j],rows[i][j+1]]))
+				if j<n-i-1:
+					indices.append_array(PackedInt32Array([rows[i+1][j],rows[i+1][j+1],rows[i][j+1]]))
+
+
+## Insert compact crest samples into existing triangles, preserving chunk edges
+## and coastline clipping. Uniformly increasing the whole world's resolution is
+## unnecessary, but losing a shallow summit between grid vertices is misleading.
+static func _preserve_rock_crests(layout: WorldLayout, origin: Vector2,
+		vertices: PackedVector3Array, colors: PackedColorArray,
+		indices: PackedInt32Array, zones: Array, step_m: float) -> void:
+	# Triangles remain inside their original grid cell. Index them once so dense
+	# local detail does not scan every triangle for each inserted sample.
+	var cells := {}
+	for i in range(0,indices.size(),3):
+		var midpoint := (vertices[indices[i]]+vertices[indices[i+1]]+vertices[indices[i+2]])/3.0
+		var key := Vector2i(floori((midpoint.x-origin.x)/step_m),floori((midpoint.z-origin.y)/step_m))
+		if not cells.has(key): cells[key] = []
+		cells[key].append(i)
+	var context := {"cells":cells,"origin":origin,"step":step_m,"points":{}}
+	for feature in layout.rock_features():
+		if feature.get("kind", "") != "crest": continue
+		var center: Vector2 = feature.position
+		if center.x < origin.x-30 or center.y < origin.y-30 or center.x > origin.x+1030 or center.y > origin.y+1030: continue
+		var points := PackedVector2Array([center])
+		for radius in [10.0,20.0,35.0]:
+			for angle in 8: points.append(center+Vector2.from_angle(angle*TAU/8.0)*radius)
+		for point in points:
+			if point.x <= origin.x+.01 or point.y <= origin.y+.01 or point.x >= origin.x+999.99 or point.y >= origin.y+999.99: continue
+			_insert_terrain_sample(layout,point,vertices,colors,indices,zones,context)
+
+	# Skerry geometry exists at every LOD: coarse rings retain the coast and
+	# silhouette; only inner/underwater surface subdivisions increase up close.
+	var bounds := Rect2(origin,Vector2.ONE*CHUNK_SIZE_M)
+	for feature in layout.skerries_in_rect(bounds):
+		var center: Vector2 = feature.position
+		var polygon: PackedVector2Array = feature.polygon
+		var rings := [0.0,.5,1.0,1.5,2.5] if step_m > 25 else [0.0,.25,.5,.75,1.0,1.2,1.5,2.0,2.5]
+		var points := PackedVector2Array()
+		for ring in rings:
+			for vertex in polygon:
+				points.append(center+(vertex-center)*ring)
+			# Add intersections of every ring with chunk edges to BOTH neighbours.
+			# These coordinates do not depend on LOD; include the finest ring set
+			# at the boundary below so coarse/fine neighbours share the same coast.
+		for ring in [0.25,.5,.75,1.0,1.2,1.5,2.0,2.5]:
+			for corner in polygon.size():
+				var a: Vector2 = center+(polygon[corner]-center)*ring
+				var b: Vector2 = center+(polygon[(corner+1)%polygon.size()]-center)*ring
+				var corners := [origin,origin+Vector2(CHUNK_SIZE_M,0),origin+Vector2.ONE*CHUNK_SIZE_M,origin+Vector2(0,CHUNK_SIZE_M)]
+				for edge in 4:
+					var hit: Variant = Geometry2D.segment_intersects_segment(a,b,corners[edge],corners[(edge+1)%4])
+					if hit != null: points.append(hit)
+		for point in points:
+			if point.x < origin.x-.001 or point.y < origin.y-.001 or point.x > origin.x+CHUNK_SIZE_M+.001 or point.y > origin.y+CHUNK_SIZE_M+.001: continue
+			point = point.clamp(origin,origin+Vector2.ONE*CHUNK_SIZE_M)
+			_insert_terrain_sample(layout,point,vertices,colors,indices,zones,context)
+
+	_retriangulate_detail_cells(layout,vertices,colors,indices,zones,context)
+
+
+static func _insert_terrain_sample(_layout: WorldLayout, point: Vector2,
+		_vertices: PackedVector3Array, _colors: PackedColorArray,
+		_indices: PackedInt32Array, _zones: Array, context: Dictionary) -> void:
+	var origin: Vector2 = context.origin
+	var step: float = context.step
+	for dz in [-.001,.001]:
+		for dx in [-.001,.001]:
+			var key := Vector2i(floori((point.x-origin.x+dx)/step),floori((point.y-origin.y+dz)/step))
+			if not context.cells.has(key): continue
+			if not context.points.has(key): context.points[key] = []
+			if not context.points[key].has(point): context.points[key].append(point)
+
+
+static func _retriangulate_detail_cells(layout: WorldLayout,
+		vertices: PackedVector3Array, colors: PackedColorArray,
+		indices: PackedInt32Array, zones: Array, context: Dictionary) -> void:
+	var replaced := {}
+	var added := PackedInt32Array()
+	for key in context.points:
+		var points := PackedVector2Array()
+		var ids := PackedInt32Array()
+		var lookup := {}
+		for triangle in context.cells[key]:
+			replaced[triangle] = true
+			for offset in 3:
+				var id: int = indices[triangle+offset]
+				var point := Vector2(vertices[id].x,vertices[id].z)
+				var quantized := Vector2i(roundi(point.x*100),roundi(point.y*100))
+				if lookup.has(quantized): continue
+				lookup[quantized] = true
+				points.append(point)
+				ids.append(id)
+		for point: Vector2 in context.points[key]:
+			var quantized := Vector2i(roundi(point.x*100),roundi(point.y*100))
+			if lookup.has(quantized): continue
+			lookup[quantized] = true
+			points.append(point)
+			ids.append(vertices.size())
+			var height := sample_render_terrain_height(layout,point,zones)
+			vertices.append(Vector3(point.x,height,point.y))
+			colors.append(terrain_color(height,layout.sample_signed_distance(point),point,zones))
+		# Local coordinates avoid precision loss in triangulation at 20+ km.
+		var cell_origin: Vector2 = context.origin + Vector2(key)*float(context.step)
+		var local := PackedVector2Array()
+		for point in points: local.append(point-cell_origin)
+		# Guard points keep cell-edge wedges away from the triangulator's
+		# finite super-triangle. Discard only faces using these outer points.
+		var guarded := local.duplicate()
+		var extent: float = context.step * 1000.0
+		guarded.append_array(PackedVector2Array([Vector2(-extent,-extent),Vector2(extent,-extent),Vector2(extent,extent),Vector2(-extent,extent)]))
+		var raw := Geometry2D.triangulate_delaunay(guarded)
+		var triangles := PackedInt32Array()
+		for i in range(0,raw.size(),3):
+			if raw[i] < local.size() and raw[i+1] < local.size() and raw[i+2] < local.size():
+				triangles.append_array(PackedInt32Array([raw[i],raw[i+1],raw[i+2]]))
+
+		for i in range(0,triangles.size(),3):
+			var a := triangles[i]
+			var b := triangles[i+1]
+			var c := triangles[i+2]
+			if (local[b]-local[a]).cross(local[c]-local[a]) < 0:
+				added.append_array(PackedInt32Array([ids[a],ids[c],ids[b]]))
+			else: added.append_array(PackedInt32Array([ids[a],ids[b],ids[c]]))
+	var retained := PackedInt32Array()
+	for i in range(0,indices.size(),3):
+		if not replaced.has(i): retained.append_array(PackedInt32Array([indices[i],indices[i+1],indices[i+2]]))
+	indices.clear()
+	indices.append_array(retained)
+	indices.append_array(added)
+
+
+
 ## Corner order for mask bits: a=bit0, b=bit1, d=bit2, c=bit3 (CW from -Z/-X).
 static func _append_cell_land(
 		vertices: PackedVector3Array,
@@ -1057,6 +1246,7 @@ static func _append_cell_land(
 		d: int,
 	layout: Object,
 	flatten_zones: Array,
+	fill_saddle: bool = false,
 ) -> void:
 	var da := signed_distances[a]
 	var db := signed_distances[b]
@@ -1081,6 +1271,9 @@ static func _append_cell_land(
 		3: poly = PackedInt32Array([a, b, edge_bd, edge_ca])
 		4: poly = PackedInt32Array([d, edge_dc, edge_bd])
 		5:
+			if fill_saddle:
+				_fan_poly(indices, PackedInt32Array([a, edge_ab, edge_bd, d, edge_dc, edge_ca]))
+				return
 			# Ambiguous saddle: fixed lower-left split matching contour extraction.
 			_fan_poly(indices, PackedInt32Array([a, edge_ab, edge_ca]))
 			_fan_poly(indices, PackedInt32Array([d, edge_dc, edge_bd]))
@@ -1090,6 +1283,9 @@ static func _append_cell_land(
 		8: poly = PackedInt32Array([c, edge_ca, edge_dc])
 		9: poly = PackedInt32Array([a, edge_ab, edge_dc, c])
 		10:
+			if fill_saddle:
+				_fan_poly(indices, PackedInt32Array([b, edge_bd, edge_dc, c, edge_ca, edge_ab]))
+				return
 			_fan_poly(indices, PackedInt32Array([b, edge_bd, edge_ab]))
 			_fan_poly(indices, PackedInt32Array([c, edge_ca, edge_dc]))
 			return
@@ -1128,6 +1324,10 @@ static func _shore_edge_vertex(
 	if a.x>b.x or (a.x==b.x and a.y>b.y):
 		var swap:=a;a=b;b=swap
 		var distance_swap:=da;da=db;db=distance_swap
+	# Both land and inverted water clips must solve the same physical root.
+	# Using inverted endpoint signs with a non-inverted midpoint opened holes.
+	da = sample_effective_signed_distance(layout,a,flatten_zones)-SUBMERGED_SHELF_EXTENT_M
+	db = sample_effective_signed_distance(layout,b,flatten_zones)-SUBMERGED_SHELF_EXTENT_M
 	for iteration in 12:
 		var middle:=(a+b)*.5
 		var distance:=sample_effective_signed_distance(layout,middle,flatten_zones)-SUBMERGED_SHELF_EXTENT_M

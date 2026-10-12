@@ -1,0 +1,23 @@
+Fishing schools and blue sounder — 12 October 2026
+
+The same FishingHabitat members drive individual meshes, sonar targets, bait attraction and catch depletion. Bait uses a 70 m horizontal radius around the school centre, a 6 m vertical tolerance around a live member, and local terrain samples to reject attraction through land/reefs. This is a gameplay attraction model, not an acoustic or fish-behaviour simulator. Proximity queries are bounded; no global population is instantiated.
+
+The downward sounder has a 20-degree half-angle. Fish return range is sqrt(vertical_depth^2 + horizontal_offset^2), which produces arches from actual movement through the beam. The UI additionally shows current schools' mean vertical depths as Fish ... m for line payout. Historical echoes may remain after leaving a school. Right edge is newest. Large number is current seabed depth. No fictional voltage is displayed because vessels do not expose battery voltage.
+
+SonarDisplay renders 90 half-second intervals, plus one predecessor ping for smooth interpolation. One cached 360 x 294 texture, only four new columns per ordinary ping, native image blit for retained history. Full repaint only for history/range/ship changes. Scroll is render-rate; habitat ping remains 2 Hz. MSDF font copy keeps large instrument text crisp without changing shared UI fonts.
+
+F3 -> G -> Fish schools & catch areas: actual fish marks, coloured 70 m radius cylinders/depth bands and grouped school labels, visible through water. A cylinder is an attraction envelope; terrain can occlude parts. Disabled layer performs no habitat work. Active review is limited to 16 schools within 350 m and updates at 2 Hz.
+
+Run scenes/showcases/sonar_showcase.tscn (F6; automatically isolated). Left/right cycle deep/empty/shallow grounds; Space pauses transmission. --capture verifies measured returns, 65 m offset bait access, incremental/full raster equivalence, smooth interpolation, pause and ship-change clearing. Actual gameplay integration also verified in shipyard_playtest on a cargo vessel: sonar defaults on, displays in helm HUD and measures generated seabed. At the helm, N cycles the sounder through full size, chart size and hidden. Transmission keeps running in every size. The display sits on the dashboard, immediately left of the minimap.
+
+Validation this pass:
+- fishing_school_test: six species from 72 m sonar readings; twelve bearings at 69.9 m; outside radius/wrong depth/reef rejection; three consecutive catches; exact identity and depletion.
+- rod_fishing_test: six habitats/models, casting, bite/miss, fight, individual saves and catch prices.
+- rod_fishing_showcase --capture: real deck movement, pickup, casting, RMB payout/LMB retrieval, first/third person line attachment, bite/fight, fish mouth attachment, crate library, save and shore landing. About 60 distinct depth updates/sec.
+- sonar_showcase --capture: all assertions pass. Normal incremental UI update approx. 0.4 ms; initial full history + 91 fixture habitat pings approx. 23 ms. These are isolated test timings, not whole-world frame benchmarks.
+- blender_character_test and rod_fishing_showcase --hands-test: palms inward, 50-bone rig, fixed arm lengths, hand surface/handle clearance, full crank rotation, aiming, both cameras and maximum body morphs. Original .blend and exported .glb changed; separate Blender and Godot hand cameras archived. Hand test emits an ObjectDB cleanup warning at exit; assertions pass.
+
+References:
+https://www8.garmin.com/manuals/webhelp/GUID-C3C9935A-44AD-4A64-8690-B6176625C6BC/EN-US/GUID-8B6EAEE7-022D-4B20-A7A5-6AF7A1D83C60.html
+https://static.garmin.com/pumac/cs1522_OM_EN-SG.pdf
+The user's supplied Garmin screen specifies the blue palette/layout. Numbered circles are documentation annotations, not instrument controls.

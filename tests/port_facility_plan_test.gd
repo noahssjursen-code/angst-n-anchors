@@ -46,6 +46,7 @@ func _ready() -> void:
 	check(not constrained.unmet.is_empty(),"Constrained site reports unmet needs instead of overlap")
 	var no_berth := PortFacilityPlan.build(foundation,{"quay_stations":[]},profile,0)
 	check(no_berth.facilities.size()==1,"Missing berths cannot invent operational cargo facilities")
+	verify_crossing_regression()
 	verify_road_union()
 	print("FACILITY PLAN fixtures=3 families=",plan.facilities.size()," constrained_unmet=",constrained.unmet.size()," elapsed_ms=",Time.get_ticks_msec()-start)
 	if not failed: print("PORT FACILITY PLAN PASS")
@@ -97,3 +98,33 @@ func validate(plan: Dictionary) -> void:
 			var b := (Vector2(r.b[0],r.b[1])-center).rotated(float(f.get("rotation_y",0)))
 			check(not PortFacilityPlan.segment_rect(a,b,rect.grow(r.width*.5)),"Route clear of facility footprint")
 		polygons.append(parcel)
+
+func verify_crossing_regression() -> void:
+	# Captured from generation 12, seed 1850239324, port-2. Its rounded boundary
+	# has a near-return crossing at (111.79737,19.89099), rejected by ear clipping.
+	var fixture: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/harbour_road_crossing.json"))
+	var broken := PackedVector2Array()
+	for point in fixture.polygon: broken.append(Vector2(point[0],point[1]))
+	check(Geometry2D.triangulate_polygon(broken).is_empty(),"Fixture reproduces the road triangulation failure")
+	var repaired := HarbourRoadSurface.triangulable_boundaries(broken)
+	check(repaired.size()==1,"Crossing repair preserves the connected road envelope")
+	var repaired_area := 0.0
+	for polygon in repaired:
+		check(not Geometry2D.triangulate_polygon(polygon).is_empty(),"Repaired crossing triangulates")
+		repaired_area += polygon_area(polygon)
+	check(absf(repaired_area-polygon_area(broken)) < .01,"Repair preserves paved area within 0.01 square metres")
+	var routes := []
+	for r in fixture.routes:
+		routes.append({"a":Vector3(r.a[0],r.a[1],r.a[2]),"b":Vector3(r.b[0],r.b[1],r.b[2]),"width":r.width})
+	for polygon in HarbourRoadSurface.footprint(routes):
+		check(not Geometry2D.triangulate_polygon(polygon).is_empty(),"Actual generated road routes produce triangulable boundaries")
+	var root := Node3D.new()
+	add_child(root)
+	HarbourRoadSurface.build(root,routes)
+	check(not root.find_children("JoinedRoadSurface*","MeshInstance3D",false,false).is_empty(),"Failing harbour now builds its road mesh")
+	root.free()
+
+func polygon_area(polygon: PackedVector2Array) -> float:
+	var area := 0.0
+	for i in polygon.size(): area += polygon[i].cross(polygon[(i+1)%polygon.size()])
+	return absf(area)*.5

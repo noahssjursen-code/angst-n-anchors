@@ -1,16 +1,15 @@
 class_name ChartLayerManager
 extends RefCounted
 
-## Shared chart state. Navigation is the display profile; Weather and Fishing
-## are independent overlays and may be enabled together.
+## Shared navigation chart state. Weather is optional; fish locations are never revealed.
 
 enum Preset { NAVIGATION, WEATHER, FISHING }
 ## Legacy saved `chart_profile` value for the removed Harbour tab.
 const LEGACY_HARBOUR_PROFILE := 3
 
-const PRESET_NAMES: Array[String] = ["Navigation", "Weather", "Fishing"]
+const PRESET_NAMES: Array[String] = ["Navigation", "Weather"]
 const LAYER_ORDER: Array[String] = [
-	"base", "weather", "fishing", "routes", "approaches",
+	"base", "weather", "routes", "approaches",
 	"traffic", "nav_vectors", "annotations",
 ]
 
@@ -34,14 +33,12 @@ func _init() -> void:
 
 func apply_preset(next_preset: int) -> void:
 	## Old saves may still store Harbour (3) — fold into Navigation.
-	if next_preset == LEGACY_HARBOUR_PROFILE:
+	if next_preset == LEGACY_HARBOUR_PROFILE or next_preset == Preset.FISHING:
 		next_preset = Preset.NAVIGATION
-	preset = clampi(next_preset, Preset.NAVIGATION, Preset.FISHING)
+	preset = clampi(next_preset, Preset.NAVIGATION, Preset.WEATHER)
 	match preset:
 		Preset.WEATHER:
 			_layers["weather"] = true
-		Preset.FISHING:
-			_layers["fishing"] = true
 		_:
 			_layers["routes"] = true
 			_layers["traffic"] = true
@@ -51,6 +48,7 @@ func apply_preset(next_preset: int) -> void:
 
 
 func is_visible(layer_name: String) -> bool:
+	if layer_name == "fishing": return false
 	return bool(_layers.get(layer_name, false))
 
 

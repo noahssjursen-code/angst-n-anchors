@@ -58,6 +58,7 @@ var _world_traffic_service: WorldTrafficService
 
 
 func _ready() -> void:
+	WorldBootstrap.trace_entry("world_scene_ready")
 	if not Engine.is_editor_hint():
 		add_to_group("world")
 		var settings := get_node_or_null("/root/GameSettings")
@@ -78,7 +79,7 @@ func _rebuild() -> void:
 	LandDecorCache.clear()
 	IMPOSTOR_SERVICE.clear()
 	MeshBuilder.clear_material_cache()
-	WORLD_LAYOUT_GENERATOR.clear_cache()
+	# The home-port picker already generated this immutable layout. Reuse it.
 	## PortCatalog is the live world's directory. Discard stale records from a
 	## previous world or any presentation scene before generating contracts.
 	if not Engine.is_editor_hint():
@@ -132,6 +133,7 @@ func _rebuild() -> void:
 			push_warning("World: recovered the exact layout shown by the legacy home-port picker")
 	_layout_generation_usec = Time.get_ticks_usec() - layout_started
 	_layout_checksum = _world_layout.layout_checksum
+	WorldBootstrap.trace_entry("geography_ready")
 	if t != null:
 		t.end_load_event(layout_handle)
 	var settings := get_node_or_null("/root/GameSettings")
@@ -147,7 +149,10 @@ func _rebuild() -> void:
 		)
 
 	_add_world_renderer()
+	WorldBootstrap.trace_entry("ocean_ready")
+	var stage_started := Time.get_ticks_usec()
 	var defs := _generate_definitions()
+	print("BOOT_COST ports_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
 
 	if not Engine.is_editor_hint():
 		var positions: Array[Vector3] = []
@@ -167,24 +172,50 @@ func _rebuild() -> void:
 			for child in get_children():
 				_own_subtree(child)
 	else:
+		stage_started=Time.get_ticks_usec()
 		var flatten_zones := WORLD_TERRAIN_STREAMER.make_flatten_zones(
 			defs, 0.0, world_seed, _world_layout
 		)
+		FishingField.configure_habitat(_world_layout,flatten_zones)
+		print("BOOT_COST port_zones_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
 		var settlements := CoastalSettlements.new()
 		settlements.name = "CoastalSettlements"
 		add_child(settlements)
+		stage_started=Time.get_ticks_usec()
 		var settlement_plan := CoastalSettlementPlan.build(_world_layout, defs, flatten_zones)
+		print("BOOT_COST settlement_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
 		settlements.configure(_world_layout, settlement_plan, flatten_zones)
 		# Clear actual occupied footprints only. Settlement scenery must not
 		# flatten terrain, move a quay or erase woodland around the entire town.
 		flatten_zones.append_array(settlement_plan.exclusions)
+		stage_started=Time.get_ticks_usec()
 		ForestField.initialize(_world_layout, world_seed, flatten_zones)
-		_add_terrain_streamer(defs)
-		_add_forest_streamer(flatten_zones)
-		_add_atmospheric_effects()
+		print("BOOT_COST forest_field_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
+		# Register home before streaming so all initial work uses the harbour,
+		# never the temporary camera-less reference at the world's origin.
+		stage_started=Time.get_ticks_usec()
 		_setup_ports(defs)
+		print("BOOT_COST setup_ports_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
+		_add_terrain_streamer(defs)
+		var seamarks := CoastalSeamarks.new()
+		var bridges := CoastalBridges.new()
+		bridges.name = "CoastalBridges"
+		var bridge_roads:Array=settlement_plan.roads.duplicate()
+		bridge_roads.append_array(preload("res://scripts/world/bridge_road_connector.gd").port_roads(_world_layout,defs))
+		bridges.configure(_world_layout, defs, settlement_plan.buildings, flatten_zones, bridge_roads)
+		bridges.structures_ready.connect(_on_bridge_structures_ready)
+		add_child(bridges)
+		seamarks.name = "CoastalSeamarks"
+		stage_started=Time.get_ticks_usec()
+		seamarks.configure_async(_world_layout, defs)
+		print("BOOT_COST seamarks_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
+		add_child(seamarks)
+		_add_forest_streamer(flatten_zones)
+		WorldBootstrap.trace_entry("world_plans_ready")
+		_add_atmospheric_effects()
 		_bake_berth_lanes(t, defs)
 		_build_shipping_lane_network(t, defs)
+		WorldBootstrap.trace_entry("navigation_ready")
 		call_deferred("_spawn_player")
 
 	if t != null:
@@ -313,7 +344,29 @@ func _add_terrain_streamer(defs: Array[PortDefinition]) -> void:
 	_terrain_streamer.name = "WorldTerrainStreamer"
 	_terrain_streamer.add_to_group("world_terrain_streamer")
 	add_child(_terrain_streamer)
+	var home := get_node_or_null("HomePort") as PortPlot
+	if home != null: _terrain_streamer.begin_boot_priority(home.get_spawn_position())
 	_terrain_streamer.configure(_world_layout, defs)
+
+
+func _on_bridge_structures_ready(structures: Array) -> void:
+	if not is_instance_valid(_forest_streamer) or structures.is_empty(): return
+	var exclusions: Array = []
+	for structure: Dictionary in structures:
+		var points:=PackedVector2Array([Vector2(structure.approaches[0].x,structure.approaches[0].z),structure.a,structure.b,Vector2(structure.approaches[1].x,structure.approaches[1].z)])
+		for i in range(points.size()-1):
+			var a:=points[i];var b:=points[i+1]
+			var side:=(b-a).normalized().orthogonal()*11
+			exclusions.append({"polygon":PackedVector2Array([a+side,b+side,b-side,a-side]),"forest_clear_only":true})
+		for link: Array in structure.get("road_links",[]):
+			if link.size()<2: continue
+			var polygon:=PackedVector2Array()
+			for section:Dictionary in link: polygon.append(Vector2(section.left.x,section.left.z))
+			for i in range(link.size()-1,-1,-1): polygon.append(Vector2(link[i].right.x,link[i].right.z))
+			for expanded:PackedVector2Array in Geometry2D.offset_polygon(polygon,3.0):
+				exclusions.append({"polygon":expanded,"forest_clear_only":true})
+	ForestField.add_exclusions(exclusions)
+	_forest_streamer.add_exclusions(exclusions)
 
 
 func _add_forest_streamer(flatten_zones: Array) -> void:
@@ -321,6 +374,8 @@ func _add_forest_streamer(flatten_zones: Array) -> void:
 	_forest_streamer.name = "WorldForestStreamer"
 	_forest_streamer.add_to_group("world_forest_streamer")
 	add_child(_forest_streamer)
+	var home := get_node_or_null("HomePort") as PortPlot
+	if home != null: _forest_streamer.boot_focus = home.get_spawn_position()
 	_forest_streamer.configure(_world_layout, flatten_zones)
 
 
@@ -432,14 +487,18 @@ func _generate_definitions() -> Array[PortDefinition]:
 
 
 func _spawn_player() -> void:
+	GameMenu.set_loading_stage("Preparing your harbour…")
 	var home := get_node_or_null("HomePort") as PortPlot
 	# PortPlot builds its graph visualizer deferred. Do not create the player
 	# until both the port deck and streamed terrain collision exist.
 	if home != null and home.get_node_or_null("PortLayoutGraph") == null:
 		await home.rebuild_completed
+	WorldBootstrap.trace_entry("home_port_built")
+	GameMenu.set_loading_stage("Preparing nearby terrain…")
 	var spawn_hint := home.get_spawn_position() if home != null else Vector3.ZERO
 	if _terrain_streamer != null:
 		await _await_spawn_terrain(spawn_hint)
+	WorldBootstrap.trace_entry("spawn_terrain_ready")
 	await get_tree().physics_frame
 	var spawn_pos := _safe_spawn_position(home)
 
@@ -457,10 +516,20 @@ func _spawn_player() -> void:
 
 	# Bake far-LOD impostors before boot completes (buildings + village houses).
 	await _warm_impostors()
+	# Keep spawn focus pinned until the player's camera has actually updated.
+	# Releasing before creating the player queued terrain around world (0,0,0).
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if _terrain_streamer != null: _terrain_streamer.end_boot_priority()
+	WorldBootstrap.trace_entry("player_ready")
+	if _forest_streamer != null:
+		_forest_streamer.boot_focus = Vector3(INF,INF,INF)
+		_forest_streamer._last_request_xz = Vector2(INF,INF)
 
 	var port_loader := get_node_or_null("ProximityLoader")
 	if port_loader != null: port_loader.set_process(true)
 	boot_finished.emit()
+	WorldBootstrap.entry_started_usec = 0
 
 
 func _warm_impostors() -> void:
@@ -477,7 +546,6 @@ func _await_spawn_terrain(spawn_pos: Vector3) -> void:
 			push_warning("World: spawn terrain ring timed out; continuing boot")
 			break
 		await get_tree().process_frame
-	_terrain_streamer.end_boot_priority()
 
 
 ## Resolve a safe spawn position for the player. Prefers HomePort.get_spawn_position()

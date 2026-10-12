@@ -189,6 +189,11 @@ static func ledger_vessel_record(record: Dictionary) -> Dictionary:
 		)), 1.0),
 		"brick_layout": layout,
 	}
+	# Omission matters: partial vessel updates must not erase purchased stores.
+	if record.has("equipped_fishing_item"):
+		out["equipped_fishing_item"] = str(record.equipped_fishing_item)
+	if record.has("purchased_items"):
+		out["purchased_items"] = VesselEquipment.normalize(record.purchased_items)
 	## New records spawn by hull_id. Keep scene_path only for frozen hand-scene hulls.
 	if not scene_path.is_empty():
 		out["scene_path"] = scene_path

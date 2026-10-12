@@ -42,7 +42,7 @@ func _test_catalog_and_inheritance() -> void:
 
 func _official_trawler() -> Dictionary:
 	for entry in PrebuiltVesselCatalog.catalog_entries():
-		if str(entry.get("prebuilt_id", "")) == "fishing_trawler":
+		if str(entry.get("prebuilt_id", "")) == "fishing_hook_line":
 			return entry
 	return {}
 

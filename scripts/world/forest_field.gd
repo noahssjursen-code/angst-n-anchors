@@ -44,6 +44,14 @@ static func clear() -> void:
 	_initialized = false
 
 
+## Main-thread installation of infrastructure corridors after background planning.
+## Worker canopy jobs own copies, so existing work never reads a mutated array.
+static func add_exclusions(zones: Array) -> void:
+	_flatten_zones = _flatten_zones.duplicate()
+	_flatten_zones.append_array(zones)
+	_zone_chunks.clear()
+
+
 static func is_initialized() -> bool:
 	return _initialized
 
@@ -98,6 +106,14 @@ static func bake_coverage_map() -> ImageTexture:
 	if _layout == null:
 		image.generate_mipmaps()
 		return ImageTexture.create_from_image(image)
+	var cache_key := ""
+	if _layout is WorldLayout:
+		cache_key="forest-coverage-v1:%s:%d:%s" % [_layout.layout_checksum,world_seed,WorldGenerationCache.digest(_flatten_zones)]
+		var cached := WorldGenerationCache.read(cache_key)
+		if cached.get("pixels") is PackedByteArray and cached.pixels.size()==COVERAGE_MAP_SIZE*COVERAGE_MAP_SIZE:
+			image=Image.create_from_data(COVERAGE_MAP_SIZE,COVERAGE_MAP_SIZE,false,Image.FORMAT_R8,cached.pixels)
+			image.generate_mipmaps()
+			return ImageTexture.create_from_image(image)
 	var half := _world_half_extent_m
 	var denom := float(COVERAGE_MAP_SIZE)
 	for y in range(COVERAGE_MAP_SIZE):
@@ -106,6 +122,7 @@ static func bake_coverage_map() -> ImageTexture:
 			var world_x := lerpf(-half, half, (float(x) + 0.5) / denom)
 			var density := sample(Vector2(world_x, world_z))
 			image.set_pixel(x, y, Color(density, density, density))
+	if not cache_key.is_empty(): WorldGenerationCache.write(cache_key,{"pixels":image.get_data()})
 	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)
 

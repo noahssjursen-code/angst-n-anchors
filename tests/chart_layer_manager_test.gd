@@ -19,12 +19,12 @@ func _initialize() -> void:
 	assert(layers.revision == revision + 1)
 
 	layers.apply_preset(LayersClass.Preset.FISHING)
-	assert(layers.is_visible("fishing"))
+	assert(not layers.is_visible("fishing"))
 	assert(layers.is_visible("weather"))
 
 	layers.apply_preset(LayersClass.Preset.NAVIGATION)
 	assert(layers.is_visible("weather"))
-	assert(layers.is_visible("fishing"))
+	assert(not layers.is_visible("fishing"))
 	assert(layers.is_visible("routes"))
 
 	## Legacy Harbour profile (3) folds into Navigation.

@@ -164,6 +164,8 @@ func apply_brick_layout(layout: Dictionary) -> void:
 		_walk_deck.collision_layer = 0
 		_walk_deck.queue_free()
 		_walk_deck = null
+	var rod_station := get_node_or_null("RodFishingStation")
+	if rod_station != null: rod_station.free()
 	for part in part_roots: part.free()
 	part_roots.clear()
 	moving_colliders.clear()
@@ -370,12 +372,27 @@ func _add_interactions(part: Node3D, state: ShipPartState) -> void:
 				nearest=distance;fishing.authored_gantry=candidate
 		if fishing.authored_gantry!=null:fishing.authored_gantry.set_meta("trawl_rig_owner",part)
 		part.add_child(fishing)
+	elif style == "hook_line" and not has_node("RodFishingStation"):
+		var rod := RodFishingStation.new()
+		rod.name = "RodFishingStation"
+		rod.authored_station = part
+		add_child(rod)
 	elif style == "catch_tank":
 		var hold := CatchHoldComponent.new()
 		hold.name = "CatchHold"
 		hold.configure("tank_%d" % part_roots.find(part), 600.0)
 		hold.authored_visual = part
 		part.add_child(hold)
+	elif style == "pot_hauler" and not has_node("CrabPotStation"):
+		var creels := 0
+		for candidate in part_roots:
+			if str(candidate.get_meta("asset_id", "")) == "crab_creel":
+				creels += 1
+		if creels > 0:
+			var pots = (load("res://scripts/ship/crab_pot_station.gd") as GDScript).new()
+			pots.name = "CrabPotStation"
+			add_child(pots)
+			pots.bind(self, part)
 	if not part.find_children("WheelPivot*", "Node3D", true, false).is_empty():
 		var eye := Node3D.new()
 		eye.name = "HelmEye"

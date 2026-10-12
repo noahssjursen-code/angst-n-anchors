@@ -13,9 +13,9 @@ const STARTER_WAREHOUSE_CAPACITY_UNITS := 24
 
 const STARTER_VESSELS := {
 	"fishing": {
-		"prebuilt_id": "fishing_trawler",
-		"label": "Coastal trawler",
-		"role": "14 × 5 m · Stern trawl gear\nTwo 600 kg catch tanks",
+		"prebuilt_id": "fishing_hook_line",
+		"label": "Coastal line fisher",
+		"role": "14 × 5 m · Hook, line and sinker\n600 kg catch tank",
 		"career": "Fishing",
 	},
 	"general_cargo": {

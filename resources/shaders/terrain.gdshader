@@ -34,6 +34,12 @@ void fragment() {
     // Canopy is only a distant coverage substitute; near trees sit on soil.
     float canopy=smoothstep(600.0,1300.0,length(VERTEX))*habitat.y;
     albedo=mix(albedo,canopy_colour(world_pos.xz),canopy);
+    // The same sourced stone/soil textures continue beneath the water.
+    // Broad sediment basins replace terrestrial heath on the ocean floor.
+    float submerged=1.0-smoothstep(-3.5,-2.5,world_pos.y);
+    float sediment=smoothstep(25.0,100.0,-world_pos.y)*smoothstep(.55,.92,n.y);
+    vec3 bottom=mix(rock*vec3(.52,.56,.52),soil*vec3(.52,.48,.39),sediment);
+    albedo=mix(albedo,bottom,submerged);
     ALBEDO=albedo;
     SPECULAR=.25;
     ROUGHNESS=mix(.92,.48,wet);

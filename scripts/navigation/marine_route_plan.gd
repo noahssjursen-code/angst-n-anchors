@@ -4,7 +4,7 @@ extends RefCounted
 ## Serializable deterministic voyage route. World identity + algorithm version
 ## let MP clients verify that reconstructing the route locally is safe.
 
-const ALGORITHM_VERSION := 1
+const ALGORITHM_VERSION := 2
 
 var route_id := ""
 var layout_checksum := ""

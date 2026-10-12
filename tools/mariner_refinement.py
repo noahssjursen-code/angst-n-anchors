@@ -97,6 +97,7 @@ def _hands(obj):
     for v in obj.data.vertices:
         if v.co.z>.931:v.co.z+=.024*min(1,(v.co.z-.931)/.016)
     bm=bmesh.new();bm.from_mesh(obj.data)
+    bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
     nails=[f for f in bm.faces if obj.data.materials[f.material_index].name=='Nails']
     nail_mesh=bpy.data.meshes.new('Retained mariner nails');bm.to_mesh(nail_mesh)
     nb=bmesh.new();nb.from_mesh(nail_mesh)

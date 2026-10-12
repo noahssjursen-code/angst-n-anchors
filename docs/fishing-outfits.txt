@@ -1,0 +1,140 @@
+COASTAL FISHING — research and implementation, 12 October 2026
+
+CURRENT REVISION — supersedes the historical controls and lineup below
+Rod fishing takes place on deck. F picks up/returns the carried rod. Hold LMB
+then release to cast; once cast, HOLD RMB lets line out/sinks the tackle, HOLD
+LMB reels in, and releasing both holds depth. Both buttons together hold too.
+No automatic retrieval. LMB strikes a bite. Sonar remains on every boat's helm
+HUD, enabled by default. The builder playtest uses the bounded coast sandbox.
+
+The smaller fishing HUD receives render-rate updates through LocalPlayerView;
+the general voyage snapshot remains at 10 Hz. Actual D3D12 live tests measured
+about 60 distinct depth updates/second. Habitat probes remain bounded at 4 Hz.
+Six original Blender fish now have skin textures, differentiated anatomy, swim
+rigs, and MouthHook sockets. A hooked fish faces the rod and the line ends at
+its lip at any specimen size. The deck crate shows individual rotatable 3D fish,
+length, weight, rarity, size grade and NOK value. Whole fish cannot be split,
+merged or duplicated; save/load and slow whole-fish shore transfer are tested.
+NOK/kg tuning: cod 80, pollack 110, saithe 55, mackerel 60, haddock 120, halibut 250.
+Internal legacy marks fields remain only for data compatibility.
+
+Additional references: IMR species pages (https://www.hi.no/en/hi/temasider/species),
+PENN Pursuit IV spinning-combo proportions, and the official Fisch description
+(https://www.roblox.com/games/16732694052/Fisch). No claim of playing Fisch or
+copying its assets. Fish art is original and awaits user visual approval.
+The small trawler is retired. Crabber is a distinct builder preset; trap and
+multi-hook gameplay, player inventory and multiplayer fishing are later work.
+Nearby schools now render the same deterministic individuals queried by hooks
+and sonar: six species, stable specimen sizes, 6 m hook attraction radius, and
+actual fish inside the 20-degree sonar cone. Hooked fish leave their school;
+landing removes that individual and escaping releases it. Depletion lasts for
+this world session; persistent population depletion remains future work.
+Rendering is capped at 192 fish within 180 m of the camera, with shared meshes,
+4 Hz position queries and render-frame interpolation. School fish currently use
+rigid swimming silhouettes; articulated swimming is used for the hooked fish.
+
+Rod visuals run after player/camera positioning each rendered frame. A 25-point
+constrained visual rope replaces the straight ray; it is not a full rope/collision
+simulation. Rod flex responds to tension. Third-person equipment is anchored to
+the player rather than the orbit camera. LMB after landing begins another cast.
+Blender hand/digit bones now explicitly define +Y fingers and +Z knuckles;
+fishing grips use that authored frame rather than guessing wrist orientation.
+Rebuilt mariner.blend/GLB and verified neutral palms, morphs and animation lengths.
+
+12 October follow-up validation: fishing_school_test (three consecutive catches,
+sonar cone, hook proximity, stable specimen and idempotent depletion, rope anchors),
+rod_fishing_test, blender_character_test, and rendered rod_fishing_showcase with
+camera switching, live catch/crate flow, and water-hidden school capture.
+
+Verified: rod_fishing_test, rod_fishing_showcase (actual deck input, manual line
+controls, HUD frequency, bite/fight/reveal, crate/model/NOK/save/pump), production
+shipyard_playtest (helm/sonar/walking/drive/deck rod/reset), voyage_ui_test (52
+checks), catch_hold_test and fishing_presets_test. Run with --shipyard-playtest.
+Sources/rebuild: resources/models/_source/fishing_items/build_fishing_items.py
+and build_fish_meshes.py. Inspect fish_pool_showcase and rod_fishing_showcase.
+Actual screenshots are archived under Pictures/machinescreenshots.
+
+HISTORICAL INITIAL STUDY FOLLOWS
+
+Requested progression: hook / line / sinker, then crab traps, then trawler.
+All three reuse the existing 14 x 5 m imported hull and wheelhouse. This is
+an original game arrangement inspired by Norwegian sjarks, not a dimensional
+replica of a MALO or a claim that any arbitrary hull can safely carry any gear.
+
+REFERENCES
+Jemar Norpower: https://www.jemar.no/malo-sjark
+MALO 36: 10.99 m x about 4.45 m, working deck, configurable fishing equipment.
+The smaller 23 ft pot boat also illustrates an open working deck and exterior
+steering position. These support the layout choice, not our hull's ratings.
+Photograph: https://www.jemar.no/uploads/oHC9CbQx/IMG_6969.jpg
+
+Hydema: https://www.hydema.no/products/fish-farming-products/pot-haulers/
+Column-mounted side hauler reference. Game module is an original simplified
+pedestal, davit and powered sheave; no manufacturer logos or copied geometry.
+
+FAO handlining: https://www.fao.org/4/t0511e/T0511E01.htm
+Hook, line, sinker and bait; finding fish and setting tackle depth matter.
+This supports a manual starter loop rather than granting automatic catches.
+
+Belitronic: https://w97151.shop.textalk.se/en/bj5000-ex/jigging-machine-bj5000ex.html
+Commercial electric jigging is a distinct machine, with line routing through
+pulleys. It is not the manual rod fitted in this first implementation.
+
+Mustad: https://mustadautoline.com/coastal-hydrelic-systems/
+Coastal longlining needs hauling, baiting and hook/line storage equipment.
+Future multi-hook upgrades must represent that handling rather than treating
+a longline as a visually unchanged rod with a bigger catch multiplier.
+
+Seafish methods: https://training.seafish.co.uk/wp-content/uploads/2024/10/basic-fishing-methods.pdf
+Pot fleets depend on working deck, seabed and gear handling; trawling uses a
+different set of hauling gear. Reference only, not copied artwork.
+
+DELIVERED THIS PASS
+- Six reusable Blender assets: hook-line station with reel, terminal hook/sinker,
+  bait table, crab creel, side pot hauler, rope coil and buoy (last two together).
+- Shared approved marine material profiles, editable individual placements.
+- Hook-line boat is canonical fishing starter stock; old owned vessels unchanged.
+- Crab arrangement is an inspectable example, not purchasable inert stock.
+- Existing trawler remains available; no new progression unlock policy yet.
+- Rod gameplay requires installed hook_line equipment and a catch tank.
+- Sounder samples local seabed and bounded analytic cod groups. No map heatmap.
+- Cod catches use existing CatchLot, holds, serialization and shore transfer.
+
+CONTROLS AND REVIEW
+O cast/strike/recover; U lower; hold Y reel; N sounder, while at the helm.
+scenes/showcases/fishing_family_showcase.tscn: 1/2/3 outfits, arrows orbit,
+4 close deck / 5 whole boat. Safe F6 isolated from captain saves.
+scenes/showcases/rod_fishing_showcase.tscn: isolated live rod/sounder scene.
+--capture automates actual input, strike, reeling, catch and landing assertions.
+All review screenshots archive in Pictures/machinescreenshots.
+
+VERIFICATION
+Rod session tests: depth, sounder, missed strikes, controlled fight, catch
+inventory roundtrip, species valuation, local depletion.
+Starter fleet: company grant, full placement save/ledger, remote hydration,
+spawn, rod/no trawl distinction and one catch tank.
+Live hook boat: production input -> fish -> hold -> landing pump -> price.
+Harbour routing regression passed with existing end-of-test ObjectDB warning.
+
+LIMITATIONS / NEXT
+Rod operates from helm; no hand/rod animation or visible fish model yet.
+Schools are bounded analytic populations, depletion is session-only; catches
+are persistent through existing inventory. Multiplayer fishing commands are
+not implemented; hide the rod instrument for remote sessions.
+Crab trapping and longlining gameplay are pending. Crab outfit is a visual
+equipment study; detailed hatch, lashings, hydraulics and working animation
+still need development before it is a finished operational crab boat.
+Existing trawl catches use habitat productivity, not the rod's school depletion.
+Species prices and habitat curves are game tuning, not real market/stock data.
+No global school objects or whole-map fish bake added; local queries only.
+
+REVISION — distinct small fishing boats
+Small trawler stock deleted at Noah's request. Retain geometry for owned save
+compatibility and the retired catch fixture; do not regenerate small trawler stock.
+Future trawler should use a substantially larger vessel.
+Crabber is now a draft catalog preset visible in the actual builder menu.
+It has an authored open-sided shelter, twelve creels, two tanks and orange/cream
+paint. The starter has an open working deck, one tank and blue hull.
+Draft catalog entries are available to authoring; unfinished crabber stays out
+of sale stock. Builder selection/capture, starter save/refit tests and retired
+owned-trawler catch regression passed. This supersedes the earlier lineup notes.

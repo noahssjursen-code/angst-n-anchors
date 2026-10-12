@@ -177,3 +177,23 @@ Northline factory-engine balance update (10 October 2026): the old
 replacement on deployment, with no save-file rewrite, new vessel grant, or
 replacement of layout/paint/cargo data. Authored stock now records the new ID.
 Explicit `feeder_2100` choices remain unchanged. No save version bump is needed.
+
+
+### Purchased vessel equipment (optional, backward-compatible)
+
+Owned vessel records and their active mirror may contain `purchased_items`, an
+array of `{uid, item_id, quantity, purchased_at_unix}` lots. The vessel UUID is
+its owner; these stores are separate from installed `brick_layout` equipment,
+cargo and caught fish. Legacy records without the field have no purchased stores.
+Omitting the field in a partial vessel update preserves the existing stores.
+The canonical captain save commits purchases and company debits together;
+failed persistence restores both. Equipment purchases are local-authority only.
+Catalogue prices are NOK; legacy account field names retain `marks` internally.
+Harbourmaster → Equipment shop buys one item per click for the active selected
+vessel. Optional `equipped_fishing_item` selects `fishing_rod` or owned `harpe`.
+Selection survives partial updates and saves; the live mount swaps its portable
+model. Swapping while held is rejected. Harpe supports six distinct lighter
+fish (up to 5 kg each); the heavy-pilk rod targets individuals from 1.5 kg.
+Both lower vertically with RMB and retrieve with LMB. Trap consumable use remains
+outside this fishing-boat feature.
+Tests: vessel_equipment_test, voyage_ui_test; F6 equipment_shop_showcase.

@@ -50,7 +50,6 @@ var hover_layer_revision := -1
 var title_label: Label
 var hint_label: Label
 var weather_button: Button
-var fishing_button: Button
 var center_button: Button
 var close_button: Button
 
@@ -75,6 +74,10 @@ func _ready() -> void:
 	_refresh_pick_panel()
 
 
+func _exit_tree() -> void:
+	ChartBaseRaster.finish_pending_detail()
+
+
 func set_data_snapshot(snapshot) -> void:
 	data = snapshot
 	renderer.set_snapshot(data)
@@ -91,10 +94,8 @@ func enter_home_port_pick_mode(preselect_port_id: String = "") -> void:
 	layers.apply_preset(ChartLayerManager.Preset.NAVIGATION)
 	layers.set_visible("routes", false)
 	layers.set_visible("approaches", false)
-	## Weather stays off during onboarding; fishing grounds stay on so captains
-	## can judge open-water access when picking a home harbour.
+	## Home-port selection shows geography, not hidden fish populations.
 	layers.set_visible("weather", false)
-	layers.set_visible("fishing", true)
 	_apply_mode_ui()
 	_refresh_mode_buttons()
 	_refresh_pick_panel()
@@ -179,6 +180,8 @@ func _process(delta: float) -> void:
 		return
 	if not ensure_live_data():
 		return
+	if ChartBaseRaster.poll_detail():
+		queue_redraw()
 	if interaction_settle > 0.0:
 		interaction_settle = maxf(interaction_settle - delta, 0.0)
 		if interaction_settle <= 0.0:
@@ -290,9 +293,6 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif key.keycode == KEY_W and mode != Mode.HOME_PORT_PICK:
 		_toggle_overlay("weather")
-		get_viewport().set_input_as_handled()
-	elif key.keycode == KEY_F:
-		_toggle_overlay("fishing")
 		get_viewport().set_input_as_handled()
 
 
@@ -498,10 +498,8 @@ func _build_toolbar() -> void:
 	weather_button = Ui.button("Weather", "chip")
 	weather_button.pressed.connect(_toggle_overlay.bind("weather"))
 	bar.add_child(weather_button)
-
-	fishing_button = Ui.button("Fishing", "chip")
-	fishing_button.pressed.connect(_toggle_overlay.bind("fishing"))
-	bar.add_child(fishing_button)
+	var depth_key := Ui.caption("Depth m: light <10 / 25 / 50 / 100 / 200+ dark")
+	bar.add_child(depth_key)
 
 	center_button = Ui.button("Center", "secondary", _home)
 	bar.add_child(center_button)
@@ -521,9 +519,6 @@ func _apply_mode_ui() -> void:
 			hint_label.text = "Click a harbour for details, then confirm"
 	if weather_button != null:
 		weather_button.visible = not picking
-	if fishing_button != null:
-		## Available during home-port pick so fishing grounds stay inspectable.
-		fishing_button.visible = true
 	if center_button != null:
 		center_button.visible = not picking
 	if close_button != null:
@@ -537,12 +532,10 @@ func _apply_mode_ui() -> void:
 func _refresh_mode_buttons() -> void:
 	if weather_button != null:
 		weather_button.set_pressed_no_signal(layers.is_visible("weather"))
-	if fishing_button != null:
-		fishing_button.set_pressed_no_signal(layers.is_visible("fishing"))
 
 
 func _toggle_overlay(layer_name: String) -> void:
-	if mode == Mode.HOME_PORT_PICK and layer_name != "fishing":
+	if mode == Mode.HOME_PORT_PICK:
 		return
 	layers.toggle(layer_name)
 	_refresh_mode_buttons()
@@ -557,11 +550,11 @@ func _load_layer_preferences() -> void:
 	var settings := get_node_or_null("/root/GameSettings")
 	if settings == null:
 		return
-	## Preset first, then overlay prefs so Weather/Fishing toggles always win.
+	## Legacy fishing preferences are ignored.
 	layers.apply_preset(int(settings.get("chart_profile")))
 	layers.set_overlay_preferences(
 		bool(settings.get("chart_weather_enabled")),
-		bool(settings.get("chart_fishing_enabled")),
+		false,
 	)
 	_refresh_mode_buttons()
 
@@ -571,7 +564,7 @@ func _persist_chart_settings() -> void:
 	if settings == null:
 		return
 	settings.set("chart_weather_enabled", layers.is_visible("weather"))
-	settings.set("chart_fishing_enabled", layers.is_visible("fishing"))
+	settings.set("chart_fishing_enabled", false)
 	settings.set("chart_profile", layers.preset)
 	if settings.has_method("save_settings"):
 		settings.call("save_settings")

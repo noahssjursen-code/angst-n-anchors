@@ -108,13 +108,28 @@ func _process_modification_with_delta(delta: float) -> void:
 	_support = support
 	if dt > 0.0:
 		_advance(dt, normal)
+	# A carried creel solves the arms itself. Keep that pose through the bind reset.
+	var carried_arms: Array[String] = []
+	var carried_pose: Array[Transform3D] = []
+	for child in skeleton.get_children():
+		if child.name == "TrapHandPose" and child.get("active"):
+			for suffix: String in [".L", ".R"]:
+				for part: String in ["upper_arm", "forearm"]:
+					var key: String = part + suffix
+					carried_arms.append(key)
+					carried_pose.append(skeleton.get_bone_pose(_bones[key]))
+			break
 	# Reconstruct from bind every time: never integrate a solved pose back into itself.
 	for bone: int in _bones.values():
 		skeleton.set_bone_pose(bone, skeleton.get_bone_rest(bone))
 	_pose_body(skeleton)
 	for i in 2:
 		_solve_leg(skeleton, i, normal)
-	_pose_arms(skeleton)
+	if carried_arms.is_empty():
+		_pose_arms(skeleton)
+	else:
+		for i in carried_arms.size():
+			skeleton.set_bone_pose(_bones[carried_arms[i]], carried_pose[i])
 
 func _cache(skeleton: Skeleton3D) -> bool:
 	var node: Node = self

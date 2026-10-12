@@ -1404,9 +1404,9 @@ func _setup_drafts() -> void:
 	for index in CompanyContracts.starter_options().size():
 		draft_menu.add_item(CompanyContracts.starter_options()[index].label, 100 + index)
 	var starter_ids: Array = CompanyContracts.starter_options().map(func(option: Dictionary) -> String: return option.prebuilt_id)
-	var stock := PrebuiltVesselCatalog.for_sale_entries().filter(func(entry: Dictionary) -> bool: return not starter_ids.has(entry.prebuilt_id))
-	if not stock.is_empty(): draft_menu.add_separator("Larger vessels — editable copies")
-	for index in stock.size(): draft_menu.add_item(stock[index].display, 200 + index)
+	var stock := PrebuiltVesselCatalog.catalog_entries(true).filter(func(entry: Dictionary) -> bool: return not starter_ids.has(entry.prebuilt_id))
+	if not stock.is_empty(): draft_menu.add_separator("Vessel presets — editable copies")
+	for index in stock.size(): draft_menu.add_item(str(stock[index].display) + (" (equipment draft)" if stock[index].is_draft else ""), 200 + index)
 	draft_menu.id_pressed.connect(func(id: int) -> void:
 		if id >= 200:
 			var entry: Dictionary = stock[id - 200]

@@ -1,7 +1,7 @@
 extends Node
 
 const HelmMinimapScript := preload("res://scripts/ui/chart/helm_minimap.gd")
-enum Screen { NONE, MAP, PANEL }
+enum Screen { NONE, MAP, PANEL, CATCH }
 var _screen: Screen = Screen.NONE
 var _prev_mouse_mode := Input.MOUSE_MODE_VISIBLE
 var _helm_active := false
@@ -13,6 +13,7 @@ var _map: MapOverlay
 var _minimap
 var _panel: VoyagePanel
 var _hud: VoyageHud
+var _catch_library: CatchLibrary
 var _loading: Label
 
 func _ready() -> void:
@@ -64,11 +65,22 @@ func open_service(npc: NpcInteractable) -> void:
 	_panel.selected=""
 	_panel.show_service(npc)
 
+func open_catch_library(hold_id: String) -> void:
+	if LocalPlayerView.get_catch_library(hold_id).is_empty(): return
+	_set_screen(Screen.CATCH)
+	if is_instance_valid(_catch_library): _catch_library.free()
+	_catch_library=CatchLibrary.new();_catch_library.hold_id=hold_id
+	_catch_library.close_requested.connect(func():_set_screen(Screen.NONE))
+	_menu_layer.add_child(_catch_library)
+
 func open_tablet() -> void:
 	_set_screen(Screen.PANEL)
 	_panel.show_tablet()
 
 func _input(event: InputEvent) -> void:
+	if is_instance_valid(_loading):
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_echo(): return
 	var focused := get_viewport().gui_get_focus_owner()
 	if (focused is LineEdit or focused is TextEdit) and not event.is_action_pressed("ui_cancel"):
@@ -94,6 +106,8 @@ func _unhandled_input(_event: InputEvent) -> void:
 
 func _set_screen(screen: Screen) -> void:
 	var was_modal := is_modal_open()
+	if screen!=Screen.CATCH and is_instance_valid(_catch_library):
+		_catch_library.queue_free();_catch_library=null
 	_screen=screen
 	var modal := is_modal_open()
 	if modal and not was_modal:
@@ -142,6 +156,7 @@ func _on_node_added(node: Node) -> void:
 func show_loading() -> void:
 	if is_instance_valid(_loading): _loading.queue_free()
 	_loading=VoyageStyle.label("Preparing the coast…\nBuilding nearby terrain, harbour and vessel services.",28,VoyageStyle.LIGHT)
+	_loading.mouse_filter=Control.MOUSE_FILTER_STOP
 	_loading.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_loading.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	_loading.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
@@ -150,10 +165,16 @@ func show_loading() -> void:
 	set_gameplay_hud_visible(true)
 
 func _world_ready() -> void:
-	if is_instance_valid(_loading): _loading.queue_free()
-	_loading=null
+	hide_loading()
 	set_gameplay_hud_visible(true)
 	Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
+
+func hide_loading() -> void:
+	if is_instance_valid(_loading): _loading.queue_free()
+	_loading=null
+
+func set_loading_stage(text: String) -> void:
+	if is_instance_valid(_loading): _loading.text=text
 
 func _on_helm_on() -> void:
 	_helm_active=true

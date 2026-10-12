@@ -26,6 +26,9 @@ var _mouse_mode_before_debug_cursor: int = Input.MOUSE_MODE_CAPTURED
 ## Master playtest flag — every `world_gizmo` node + PortPlot site overlays follow this.
 var world_gizmos_enabled := false
 var gizmo_layers: Dictionary = {
+	WorldGizmos.LAYER_FISHING: false,
+	WorldGizmos.LAYER_BRIDGES: false,
+	"hide_ocean": false,
 	WorldGizmos.LAYER_GENERAL: false,
 	WorldGizmos.LAYER_PORT_LAYOUT: false,
 	WorldGizmos.LAYER_CRANES: false,
@@ -79,8 +82,8 @@ func set_all_gizmo_layers(enabled: bool) -> void:
 
 
 func _any_gizmo_layer_enabled() -> bool:
-	for enabled in gizmo_layers.values():
-		if bool(enabled):
+	for id in gizmo_layers:
+		if id != "hide_ocean" and bool(gizmo_layers[id]):
 			return true
 	return false
 
@@ -214,6 +217,11 @@ func _apply_world_gizmos() -> void:
 func _apply_gizmo_layer(layer_id: String, enabled: bool) -> void:
 	var tree := get_tree()
 	if tree == null:
+		return
+	if layer_id == "hide_ocean":
+		for renderer in tree.get_nodes_in_group("world_renderer"):
+			if renderer.has_method("set_ocean_hidden"):
+				renderer.set_ocean_hidden(enabled)
 		return
 	WorldGizmos.apply_layer(tree, layer_id, enabled)
 	if layer_id == WorldGizmos.LAYER_PORT_LAYOUT:

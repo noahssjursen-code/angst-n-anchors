@@ -10,9 +10,11 @@ static func active() -> bool:
 	if OS.get_cmdline_user_args().has(FLAG):
 		return true
 	for arg in OS.get_cmdline_args():
+		if arg.replace("\\", "/").get_file() in ["fish_pool_showcase.tscn", "sonar_showcase.tscn", "equipment_shop_showcase.tscn", "harpe_fishing_showcase.tscn"]:
+			return true
 		if arg.replace("\\", "/").ends_with("scenes/showcases/container_feeder_showcase.tscn"):
 			return true
-		if arg.replace("\\", "/").get_file() in ["gameplay_ui_showcase.tscn", "company_tablet_ui_showcase.tscn", "helm_ui_showcase.tscn", "title_ui_showcase.tscn", "audio_library_showcase.tscn", "spatial_audio_showcase.tscn"]:
+		if arg.replace("\\", "/").get_file() in ["fishing_family_showcase.tscn", "rod_fishing_showcase.tscn", "gameplay_ui_showcase.tscn", "company_tablet_ui_showcase.tscn", "helm_ui_showcase.tscn", "title_ui_showcase.tscn", "audio_library_showcase.tscn", "spatial_audio_showcase.tscn", "skerry_showcase.tscn"]:
 			return true
 		if arg.replace("\\", "/").ends_with("tests/player_gait_test.tscn") or arg.replace("\\", "/").ends_with("tests/player_ik_visual.tscn"):
 			return true
