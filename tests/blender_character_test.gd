@@ -7,7 +7,7 @@ func _ready() -> void:
 	var other := NpcBase.new()
 	add_child(other)
 	var visual := actor.visual
-	assert(visual.skeleton.get_bone_count() == 42)
+	assert(visual.skeleton.get_bone_count() == 50)
 	assert(visual.get_hand_anchor("left") != null)
 	assert(visual.get_hand_anchor("right") != null)
 	for clip in ["idle", "walk", "run", "seated"]:
@@ -64,9 +64,12 @@ func _ready() -> void:
 		var bind_normal := Quaternion(bind_axis,sign*PI/2.0) * Vector3(0,0,-1)
 		var nails := (pose * rest.inverse() * bind_normal).normalized()
 		var outward := Vector3.RIGHT if side == "L" else Vector3.LEFT
+		assert(rest.z.normalized().dot(outward)>.75,"Blender knuckle axis must face outward: "+side)
 		assert(nails.dot(outward) > .75, "Palms must face thighs at rest: " + side)
 		assert(visual.skeleton.find_bone("forearm_twist."+side) >= 0)
 		assert(visual.skeleton.find_bone("index_02."+side) >= 0)
+		for digit in ["index","middle","ring","little"]:
+			assert(visual.skeleton.find_bone(digit+"_03."+side)>=0,"Independent fingertip joint: "+digit+side)
 	# Imported clips must keep the bind lengths through the entire cycle. This
 	# catches the old translated elbow/wrist animation, including at loop seams.
 	var rig := visual.skeleton
@@ -149,5 +152,5 @@ func _ready() -> void:
 	assert(not visual.get_part("Top_Sweater").visible)
 	for folder in ["res://resources/data/models/characters", "res://resources/data/meshes/characters"]:
 		assert(not DirAccess.dir_exists_absolute(folder), "Do not restore retired JSON geometry")
-	print("BLENDER CHARACTER PASS: 42 bones, fixed joint positions/scales, continuous FK arms, seamless loops, palms inward, foot travel, morphs, coverage and save round-trip")
+	print("BLENDER CHARACTER PASS: 50 bones, articulated fingertips, fixed joint positions/scales, continuous FK arms, seamless loops, palms inward, foot travel, morphs, coverage and save round-trip")
 	get_tree().quit()

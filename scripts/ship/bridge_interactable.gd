@@ -51,6 +51,8 @@ func _boarding_player() -> CharacterBody3D:
 	var boat := _boat_rigid_body()
 	if boat == null:
 		return null
+	var rod := boat.get_node_or_null("RodFishingStation") as RodFishingStation
+	if rod != null and rod.working: return null
 	for node: Node in get_tree().get_nodes_in_group("player"):
 		var body := node as CharacterBody3D
 		if body == null or bool(body.get_meta("vehicle_occupied", false)):

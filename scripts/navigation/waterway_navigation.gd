@@ -8,6 +8,8 @@ const UNREACHABLE_DISTANCE := INF
 const EPSILON := 0.001
 const ROUTE_PROBE_STEP_M := 60.0
 const ROUTE_SHORE_CLEARANCE_M := 12.0
+const DETAIL_GRID_STEP_M := 10.0
+const DETAIL_ROUTE_LIMIT_M := 4000.0
 
 var layout_checksum := ""
 var _layout: Variant
@@ -142,13 +144,18 @@ func route_points(from_xz: Vector2, to_xz: Vector2, max_access_distance: float =
 		return PackedVector2Array()
 	var sea_route := _sea_grid_route(from_xz, to_xz, start, finish)
 	if sea_route.size() >= 2:
-		return _smooth_water_route(sea_route)
+		return _guard_detail_route(_smooth_water_route(sea_route))
+	# A narrow skerry passage may be valid water while conservative 78 m
+	# occupancy closes it. Resolve only that local passage at finer spacing.
+	var local_route := _detail_grid_route(from_xz, to_xz)
+	if local_route.size() >= 2:
+		return _smooth_water_route(local_route)
 	var route := PackedVector2Array([from_xz, start["point"]])
 	if str(start["waterway_id"]) == str(finish["waterway_id"]) \
 			and int(start["segment_index"]) == int(finish["segment_index"]):
 		_append_distinct(route, finish["point"])
 		_append_distinct(route, to_xz)
-		return route
+		return _guard_detail_route(route)
 	var node_path := _shortest_node_path(start, finish)
 	if node_path.is_empty():
 		return PackedVector2Array()
@@ -156,7 +163,76 @@ func route_points(from_xz: Vector2, to_xz: Vector2, max_access_distance: float =
 		_append_distinct(route, _nodes[node_index])
 	_append_distinct(route, finish["point"])
 	_append_distinct(route, to_xz)
-	return _smooth_water_route(route)
+	return _guard_detail_route(_smooth_water_route(route))
+
+
+## Never let the coarse graph fallback turn a newly exposed rock into a
+## straight access leg. Refine only obstructed local legs; retain ordinary
+## port-anchor handling for the existing macro terrain.
+func _guard_detail_route(route: PackedVector2Array) -> PackedVector2Array:
+	if route.size() < 2 or _layout == null or not _layout.has_method("skerry_segment_clear"):
+		return route
+	var result := PackedVector2Array([route[0]])
+	for i in range(1, route.size()):
+		if bool(_layout.call("skerry_segment_clear", route[i-1], route[i], ROUTE_SHORE_CLEARANCE_M)):
+			_append_distinct(result, route[i])
+			continue
+		var local := _detail_grid_route(route[i-1], route[i])
+		if local.size() < 2:
+			return PackedVector2Array()
+		for point in _smooth_water_route(local): _append_distinct(result, point)
+	return result
+
+
+func _detail_grid_route(from: Vector2, to: Vector2) -> PackedVector2Array:
+	var length := from.distance_to(to)
+	if length > DETAIL_ROUTE_LIMIT_M or _layout == null:
+		return PackedVector2Array()
+	var margin := clampf(length * 0.25, 350.0, 700.0)
+	var bounds := Rect2(from, Vector2.ZERO).expand(to).grow(margin)
+	bounds.position = (bounds.position / DETAIL_GRID_STEP_M).floor() * DETAIL_GRID_STEP_M
+	var dimensions := Vector2i((bounds.size / DETAIL_GRID_STEP_M).ceil()) + Vector2i.ONE
+	var grid := AStarGrid2D.new()
+	grid.region = Rect2i(Vector2i.ZERO, dimensions)
+	grid.cell_size = Vector2.ONE * DETAIL_GRID_STEP_M
+	grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	grid.update()
+	# Half a cell diagonal preserves clearance between neighbouring nodes as
+	# well as at their sample positions. The grid is temporary and local.
+	var clearance := ROUTE_SHORE_CLEARANCE_M + DETAIL_GRID_STEP_M * 0.707107
+	for y in range(dimensions.y):
+		for x in range(dimensions.x):
+			var p := bounds.position + Vector2(x, y) * DETAIL_GRID_STEP_M
+			if float(_layout.call("sample_signed_distance", p)) < clearance:
+				grid.set_point_solid(Vector2i(x, y), true)
+	var start := _detail_grid_endpoint(grid, bounds.position, from)
+	var finish := _detail_grid_endpoint(grid, bounds.position, to)
+	if start.x < 0 or finish.x < 0:
+		return PackedVector2Array()
+	var ids: Array[Vector2i] = grid.get_id_path(start, finish)
+	if ids.is_empty():
+		return PackedVector2Array()
+	var result := PackedVector2Array([from])
+	for id in ids: _append_distinct(result, bounds.position + Vector2(id) * DETAIL_GRID_STEP_M)
+	_append_distinct(result, to)
+	return result
+
+
+func _detail_grid_endpoint(grid: AStarGrid2D, origin: Vector2, at: Vector2) -> Vector2i:
+	var center := Vector2i(((at-origin) / DETAIL_GRID_STEP_M).round())
+	for radius in range(9):
+		for y in range(center.y-radius, center.y+radius+1):
+			for x in range(center.x-radius, center.x+radius+1):
+				if radius > 0 and x != center.x-radius and x != center.x+radius \
+						and y != center.y-radius and y != center.y+radius: continue
+				var id := Vector2i(x, y)
+				if not grid.is_in_boundsv(id) or grid.is_point_solid(id): continue
+				var point := origin + Vector2(id) * DETAIL_GRID_STEP_M
+				if _layout.has_method("skerry_segment_clear") \
+						and not bool(_layout.call("skerry_segment_clear", at, point, ROUTE_SHORE_CLEARANCE_M)):
+					continue
+				return id
+	return Vector2i(-1, -1)
 
 
 ## The centerline graph describes generated fjord topology, but its open-ocean
@@ -431,6 +507,8 @@ func _smooth_water_route(route: PackedVector2Array) -> PackedVector2Array:
 
 
 func _has_water_line(a: Vector2, b: Vector2) -> bool:
+	if _layout != null and _layout.has_method("skerry_segment_clear"):
+		if not bool(_layout.call("skerry_segment_clear",a,b,ROUTE_SHORE_CLEARANCE_M)): return false
 	var distance := a.distance_to(b)
 	var probes := maxi(1, ceili(distance / ROUTE_PROBE_STEP_M))
 	## Graph nodes themselves can lie on a narrow channel's raster edge. They are

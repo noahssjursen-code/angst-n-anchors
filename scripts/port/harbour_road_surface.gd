@@ -31,12 +31,26 @@ static func footprint(routes: Array) -> Array[PackedVector2Array]:
 				for p in closed:
 					if clean.is_empty() or clean[-1].distance_to(p)>.04: clean.append(p)
 				if clean.size()>2 and clean[-1].distance_to(clean[0])<.04: clean.remove_at(clean.size()-1)
-				if clean.size()>2: finished.append(simplify_boundary(clean))
+				if clean.size()>2:
+					finished.append_array(triangulable_boundaries(simplify_boundary(clean)))
 	return finished
+
+## Round offsets followed by simplification can leave an almost coincident
+## crossing at a return bend. Ear clipping requires a simple boundary. A boolean
+## self-union resolves crossings at their intersections without widening roads,
+## replacing concavities with a hull, or discarding an entire road surface.
+static func triangulable_boundaries(polygon: PackedVector2Array) -> Array[PackedVector2Array]:
+	if not Geometry2D.triangulate_polygon(polygon).is_empty():
+		return [polygon]
+	return Geometry2D.merge_polygons(polygon, polygon)
+
 
 static func build(parent: Node3D, routes: Array) -> void:
 	if routes.is_empty(): return
 	var polygons := footprint(routes)
+	# Connectivity is a property of route endpoints, independent of every
+	# perimeter edge. Recomputing this inside that loop made large ports cubic.
+	var caps := exposed_end_caps(routes)
 	var y: float=routes[0].a.y
 	for polygon in polygons:
 		var mesh := ArrayMesh.new()
@@ -58,23 +72,7 @@ static func build(parent: Node3D, routes: Array) -> void:
 		parent.add_child(surface)
 		for i in polygon.size():
 			var a := polygon[i]; var b := polygon[(i+1)%polygon.size()]
-			var end_cap := false
-			for r in routes:
-				var direction := Vector2(r.b.x-r.a.x,r.b.z-r.a.z).normalized()
-				for end in [r.a,r.b]:
-					var point := Vector2(end.x,end.z)
-					var connected := false
-					for other in routes:
-						if other==r: continue
-						var closest := Geometry2D.get_closest_point_to_segment(point,Vector2(other.a.x,other.a.z),Vector2(other.b.x,other.b.z))
-						if closest.distance_to(point)<.2: connected=true; break
-					if connected: continue
-					var midpoint := (a+b)*.5
-					if midpoint.distance_to(point)>float(r.width)*.5+.15: continue
-					# End caps are not road-edge paint, including fragmented/curved caps.
-					var inward := direction if end==r.a else -direction
-					if (midpoint-point).dot(inward)<.1: end_cap=true
-			if end_cap: continue
+			if is_end_cap((a+b)*.5,caps): continue
 			HarbourEnvironmentKit.line(parent,Vector3(a.x,y,a.y),Vector3(b.x,y,b.y),.16)
 	for r in marking_routes(routes):
 		var a: Vector3=r.a; var b: Vector3=r.b
@@ -98,6 +96,27 @@ static func build(parent: Node3D, routes: Array) -> void:
 					var q := Geometry2D.get_closest_point_to_segment(Vector2(p.x,p.z),Vector2(other.a.x,other.a.z),Vector2(other.b.x,other.b.z))
 					if q.distance_to(Vector2(p.x,p.z))<float(other.width)*.5+.5: blocked=true
 			if not blocked: HarbourEnvironmentKit.line(parent,pa,pb,.16)
+
+static func exposed_end_caps(routes: Array) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for r in routes:
+		var direction := Vector2(r.b.x-r.a.x,r.b.z-r.a.z).normalized()
+		for end in [r.a,r.b]:
+			var point := Vector2(end.x,end.z)
+			var connected := false
+			for other in routes:
+				if other==r: continue
+				var closest := Geometry2D.get_closest_point_to_segment(point,Vector2(other.a.x,other.a.z),Vector2(other.b.x,other.b.z))
+				if closest.distance_to(point)<.2: connected=true; break
+			if not connected:
+				result.append({"point":point,"inward":direction if end==r.a else -direction,"radius":float(r.width)*.5+.15})
+	return result
+
+static func is_end_cap(midpoint: Vector2, caps: Array[Dictionary]) -> bool:
+	for cap in caps:
+		if midpoint.distance_to(cap.point)<=cap.radius and (midpoint-cap.point).dot(cap.inward)<.1:
+			return true
+	return false
 
 static func marking_routes(routes: Array) -> Array:
 	var remaining := routes.duplicate(true)

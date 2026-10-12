@@ -7,16 +7,17 @@ extends RefCounted
 const SEA := Color(0.035, 0.075, 0.12, 1.0)
 const LAND := Color(0.73, 0.70, 0.55, 1.0)
 const COAST := Color(0.12, 0.16, 0.15, 1.0)
-const MIN_RESOLUTION := 256
+const MIN_RESOLUTION := 512
 const MAX_RESOLUTION := 512
-const DETAIL_RESOLUTION := 256
-## When overview metres/pixel exceed this, bake a viewport tile instead.
-const DETAIL_MPP_THRESHOLD := 90.0
+const DETAIL_RESOLUTION := 512
 const DETAIL_CACHE_LIMIT := 8
 
 static var _textures: Dictionary = {}
 static var _detail_textures: Dictionary = {}
 static var _detail_order: PackedStringArray = PackedStringArray()
+## At most one pending detail bake across charts. Worker owns only immutable
+## layout data and an Image; texture upload and cache mutation stay on main.
+static var _pending_detail: Dictionary = {}
 
 var texture: ImageTexture
 var world_rect := Rect2()
@@ -48,7 +49,7 @@ func prepare(layout: WorldLayout) -> void:
 	_layout = layout
 	var half := float(layout.half_extent_m)
 	var res := resolution_for_half_extent(half)
-	var next_key := "%s:%d" % [str(layout.layout_checksum), res]
+	var next_key := "%s:%d:bed%d" % [str(layout.layout_checksum), res, WorldLayout.SEABED_VERSION]
 	if next_key.is_empty() or str(layout.layout_checksum).is_empty():
 		next_key = "%d:%d" % [layout.get_instance_id(), res]
 	if next_key == cache_key and _overview_texture != null:
@@ -74,6 +75,7 @@ func prepare(layout: WorldLayout) -> void:
 
 
 func prepare_visible(visible_world: Rect2) -> void:
+	poll_detail()
 	if _layout == null or _overview_texture == null:
 		return
 	var clipped := visible_world.intersection(_overview_rect)
@@ -82,7 +84,7 @@ func prepare_visible(visible_world: Rect2) -> void:
 		return
 	var overview_mpp := _overview_rect.size.x / float(_overview_resolution)
 	var view_span := maxf(clipped.size.x, clipped.size.y)
-	if overview_mpp <= DETAIL_MPP_THRESHOLD or view_span >= _overview_rect.size.x * 0.55:
+	if overview_mpp <= view_span * 1.36 / float(DETAIL_RESOLUTION) * 1.5 or view_span >= _overview_rect.size.x * 0.55:
 		_use_overview()
 		return
 	## Pad so pan/zoom does not rebuild every pixel.
@@ -111,24 +113,51 @@ func prepare_visible(visible_world: Rect2) -> void:
 		world_rect = _detail_rect
 		_resolution = _detail_resolution
 		return
+	if not _detail_textures.has(next_key):
+		if _pending_detail.is_empty():
+			var state := {}
+			var immutable_layout := _layout
+			var resolution := DETAIL_RESOLUTION
+			var task := WorkerThreadPool.add_task(func():
+				var started := Time.get_ticks_usec()
+				state["image"] = _bake_region_image(immutable_layout,tile,resolution)
+				state["usec"] = Time.get_ticks_usec()-started
+			)
+			_pending_detail = {"key":next_key,"task":task,"state":state}
+		# Keep the overview available while panning into an uncached region.
+		_use_overview()
+		return
 	_detail_key = next_key
 	_detail_rect = tile
 	_detail_resolution = DETAIL_RESOLUTION
-	if _detail_textures.has(next_key):
-		_detail_texture = _detail_textures[next_key] as ImageTexture
-	else:
-		var started := Time.get_ticks_usec()
-		_detail_texture = _bake_region(_layout, tile, _detail_resolution)
-		_detail_textures[next_key] = _detail_texture
-		_detail_order.append(next_key)
-		while _detail_order.size() > DETAIL_CACHE_LIMIT:
-			var old := _detail_order[0]
-			_detail_order.remove_at(0)
-			_detail_textures.erase(old)
-		build_usec = Time.get_ticks_usec() - started
+	_detail_texture = _detail_textures[next_key] as ImageTexture
 	texture = _detail_texture
 	world_rect = _detail_rect
 	_resolution = _detail_resolution
+
+
+## Called by the chart process loop even when it otherwise needs no redraw.
+static func poll_detail() -> bool:
+	if _pending_detail.is_empty(): return false
+	var task: int = _pending_detail.task
+	if not WorkerThreadPool.is_task_completed(task): return false
+	WorkerThreadPool.wait_for_task_completion(task)
+	var key: String = _pending_detail.key
+	_detail_textures[key] = ImageTexture.create_from_image(_pending_detail.state.image)
+	_detail_order.append(key)
+	while _detail_order.size() > DETAIL_CACHE_LIMIT:
+		_detail_textures.erase(_detail_order[0])
+		_detail_order.remove_at(0)
+	_pending_detail = {}
+	return true
+
+
+## Join before chart teardown / engine shutdown. Hiding the map does not tear
+## it down; normal pan/zoom never waits for the worker.
+static func finish_pending_detail() -> void:
+	if _pending_detail.is_empty(): return
+	WorkerThreadPool.wait_for_task_completion(int(_pending_detail.task))
+	_pending_detail = {}
 
 
 func draw(
@@ -176,6 +205,12 @@ func _use_overview() -> void:
 
 
 static func _bake_region(layout: WorldLayout, rect: Rect2, resolution: int) -> ImageTexture:
+	return ImageTexture.create_from_image(_bake_region_image(layout,rect,resolution))
+
+
+static func _bake_region_image(layout: WorldLayout, rect: Rect2, resolution: int) -> Image:
+	var depths := PackedFloat32Array()
+	depths.resize(resolution * resolution)
 	var land_mask := PackedByteArray()
 	land_mask.resize(resolution * resolution)
 	for y in range(resolution):
@@ -184,7 +219,11 @@ static func _bake_region(layout: WorldLayout, rect: Rect2, resolution: int) -> I
 				lerpf(rect.position.x, rect.end.x, (float(x) + 0.5) / float(resolution)),
 				lerpf(rect.position.y, rect.end.y, (float(y) + 0.5) / float(resolution)),
 			)
-			land_mask[y * resolution + x] = 1 if layout.is_land(world) else 0
+			var depth := layout.sample_water_depth(world, WaveSurface.WATER_LEVEL)
+			# Shared elevation already determines dry land. Avoid doing a second
+			# polygon query per pixel when baking zoom tiles.
+			land_mask[y * resolution + x] = 1 if depth <= 0.0 else 0
+			depths[y * resolution + x] = depth
 	var image := Image.create(resolution, resolution, false, Image.FORMAT_RGBA8)
 	for y in range(resolution):
 		for x in range(resolution):
@@ -201,5 +240,14 @@ static func _bake_region(layout: WorldLayout, rect: Rect2, resolution: int) -> I
 					if land_mask[ny * resolution + nx] == 0:
 						edge = true
 						break
-			image.set_pixel(x, y, COAST if edge else (LAND if land else SEA))
-	return ImageTexture.create_from_image(image)
+			image.set_pixel(x, y, COAST if edge else (LAND if land else depth_colour(depths[idx])))
+	return image
+
+
+static func depth_colour(depth_m: float) -> Color:
+	if depth_m < 10.0: return Color("7da6ac")
+	if depth_m < 25.0: return Color("547f91")
+	if depth_m < 50.0: return Color("365e77")
+	if depth_m < 100.0: return Color("26455e")
+	if depth_m < 200.0: return Color("1b334b")
+	return SEA

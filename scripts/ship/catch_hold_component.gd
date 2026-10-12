@@ -11,6 +11,7 @@ signal fill_changed(state: CatchHoldState)
 
 var authored_visual: Node3D
 var state := CatchHoldState.new()
+var _inspect_area: Area3D
 var _fill_root: Node3D
 var _boat: BoatBody
 var _pump_connection: Node3D
@@ -24,6 +25,7 @@ func _ready() -> void:
 	if not state.changed.is_connected(_on_state_changed):
 		state.changed.connect(_on_state_changed)
 	_build_visual()
+	_build_inspection.call_deferred()
 	_sync_payload_mass()
 
 
@@ -230,3 +232,29 @@ func _update_fill_visual() -> void:
 		tail.position = Vector3(0.21, 0.0, 0.0)
 		tail.rotation_degrees = Vector3(0.0, 0.0, 90.0)
 		fish_root.add_child(tail)
+
+func _build_inspection() -> void:
+	if Engine.is_editor_hint() or authored_visual==null:return
+	_inspect_area=Area3D.new();_inspect_area.name="CatchCrateInteraction"
+	_inspect_area.collision_layer=16;_inspect_area.collision_mask=0
+	authored_visual.add_child(_inspect_area);_inspect_area.position=Vector3(0,.65,0)
+	var shape:=CollisionShape3D.new();var box:=BoxShape3D.new();box.size=Vector3(1.35,1.2,1.0);shape.shape=box;_inspect_area.add_child(shape)
+
+func can_inspect() -> bool:
+	if Engine.is_editor_hint() or not is_instance_valid(_inspect_area) or not _inspect_area.is_inside_tree() or GameMenu.is_modal_open() or LocalPlayerView.is_helming():return false
+	if WorldGateway.is_remote() or LocalPlayerView.get_active_ship()!=_boat:return false
+	var player:=get_tree().get_first_node_in_group("player") as CharacterBody3D
+	if player==null or player.is_vehicle_occupied():return false
+	var rod:=_boat.get_node_or_null("RodFishingStation") as RodFishingStation
+	if rod!=null and rod.working and rod.session.phase!="stowed":return false
+	var camera:=player.get_node("Camera3D") as Camera3D
+	if camera.global_position.distance_to(_inspect_area.global_position)>3.5:return false
+	var query:=PhysicsRayQueryParameters3D.create(camera.global_position,camera.global_position-camera.global_basis.z*3.5,21)
+	query.exclude=[player.get_rid()];query.collide_with_areas=true
+	var hit:=get_world_3d().direct_space_state.intersect_ray(query)
+	var collider:Node=hit.get("collider")
+	return collider==_inspect_area or (collider!=null and authored_visual.is_ancestor_of(collider))
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("interact") and can_inspect():
+		GameMenu.open_catch_library(hold_id);get_viewport().set_input_as_handled()

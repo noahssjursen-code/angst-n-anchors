@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "units": "metres",
+  "axis": "Godot -Z",
+  "deck_length": 20,
+  "deck_width": 12,
+  "families": [
+    "girder",
+    "arch",
+    "cantilever",
+    "suspension"
+  ],
+  "source": "Original Blender-authored geometry; finishes use existing SurfaceMaterialLibrary CC0 sources."
+}

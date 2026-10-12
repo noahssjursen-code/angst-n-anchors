@@ -713,3 +713,44 @@ func _lot_index(lot_id: String) -> int:
 		if typeof(lots[index]) == TYPE_DICTIONARY and str((lots[index] as Dictionary).get("id", "")) == lot_id:
 			return index
 	return -1
+
+
+func purchase_equipment(command: Dictionary) -> Dictionary:
+	if _player==null or _player.company.is_empty():
+		return CompanyContracts.result_error("company_missing","Create a company first.")
+	var request_id:=str(command.get("request_id","")).strip_edges()
+	if request_id.is_empty():return CompanyContracts.result_error("request_missing","Purchase requires an order ID.")
+	var cached:=_processed_result(request_id)
+	if not cached.is_empty():
+		if str(cached.get("item_id",""))!=str(command.get("item_id","")) or str(cached.get("vessel",{}).get("uid",""))!=str(command.get("vessel_id","")) or int(cached.get("quantity",0))!=int(command.get("quantity",1)):
+			return CompanyContracts.result_error("order_conflict","This order ID already belongs to another purchase.")
+		return CompanyContracts.result_ok(cached)
+	var record:=_player.find_owned_vessel(str(command.get("vessel_id","")))
+	if record.is_empty():return CompanyContracts.result_error("vessel_missing","Choose a vessel you own.")
+	var stock:=VesselEquipment.item(str(command.get("item_id","")))
+	if stock.is_empty():return CompanyContracts.result_error("stock_missing","That equipment is unavailable.")
+	var quantity:=int(command.get("quantity",1))
+	if quantity<1 or quantity>12:return CompanyContracts.result_error("quantity_invalid","Choose between 1 and 12 items.")
+	var price:=int(stock.price_nok)*quantity
+	var payment:=post_transaction({"request_id":request_id+":payment","amount_marks":-price,"category":"equipment_purchase","description":"Purchased "+str(stock.name),"related_entity_id":record.uid})
+	if not bool(payment.get("ok",false)):return payment
+	var stores:=VesselEquipment.normalize(record.get("purchased_items",[]))
+	stores.append({"uid":PlayerData.new_uuid(),"item_id":stock.id,"quantity":quantity,"purchased_at_unix":int(Time.get_unix_time_from_system())})
+	record["purchased_items"]=stores
+	_player.upsert_owned_vessel(record)
+	var result:={"item_id":stock.id,"quantity":quantity,"vessel":record,"price_nok":price,"message":"Purchased %s × %d for %s. Stored aboard."%[stock.name,quantity,VesselSpawn.vessel_name_of(record)]}
+	_mark_processed(request_id,result)
+	return CompanyContracts.result_ok(result)
+
+
+func equip_fishing_item(command:Dictionary)->Dictionary:
+	if _player==null:return CompanyContracts.result_error("missing_player","No captain.")
+	var record:=_player.find_owned_vessel(str(command.get("vessel_id","")))
+	var id:=str(command.get("item_id",""))
+	if record.is_empty() or not VesselEquipment.has_mount(record):return CompanyContracts.result_error("missing_mount","This vessel needs a fishing-equipment mount.")
+	if id not in ["fishing_rod","harpe"]:return CompanyContracts.result_error("wrong_tool","Choose a rod or harpe.")
+	# The original rod is included with the authored mount on existing vessels.
+	if id=="harpe" and VesselEquipment.count(record,id)<1:return CompanyContracts.result_error("not_owned","Purchase a harpe for this ship first.")
+	record["equipped_fishing_item"]=id
+	_player.upsert_owned_vessel(record)
+	return CompanyContracts.result_ok({"vessel":record,"message":"Equipped "+str(VesselEquipment.item(id).name)})

@@ -86,6 +86,8 @@ func plan_departure(
 		var point := raw_point as Vector3
 		points.append(Vector2(point.x, point.z))
 	var passage := plan(points[-1], to_xz, origin_port_id, destination_port_id)
+	if not passage.is_valid():
+		return MarineRoutePlan.new()
 	for point in passage.waypoints:
 		if not points[-1].is_equal_approx(point):
 			points.append(point)
@@ -124,6 +126,8 @@ func plan_berth_to_berth(
 	var arrival_outer := arrival[-1] as Vector3
 	var water_end := Vector2(arrival_outer.x, arrival_outer.z)
 	var water_points := _navigation.route_points(points[-1], water_end)
+	if water_points.size() < 2:
+		return MarineRoutePlan.new()
 	for point in water_points:
 		if not points[-1].is_equal_approx(point):
 			points.append(point)

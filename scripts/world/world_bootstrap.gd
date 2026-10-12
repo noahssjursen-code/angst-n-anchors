@@ -9,6 +9,19 @@ const WORLD_SCENE := "res://scenes/world.tscn"
 const PORT_OVERHAUL_PREVIOUS_GENERATION := 5
 const TERRAIN_COAST_PREVIOUS_GENERATION := 6
 const FJORD_WIDTH_PREVIOUS_GENERATION := 7
+static var entry_started_usec := 0
+static var entry_stage_usec := 0
+
+static func begin_entry() -> void:
+	entry_started_usec = Time.get_ticks_usec()
+	entry_stage_usec = entry_started_usec
+
+static func trace_entry(stage: String) -> void:
+	if entry_started_usec == 0: return
+	var now := Time.get_ticks_usec()
+	print("WORLD_ENTRY stage=", stage, " stage_ms=", (now-entry_stage_usec)/1000.0,
+		" total_ms=", (now-entry_started_usec)/1000.0)
+	entry_stage_usec = now
 
 
 static func roll_seed() -> int:
@@ -134,6 +147,7 @@ static func enter_world(
 		multiplayer: bool = false,
 		authority_prepared: bool = false,
 ) -> void:
+	if entry_started_usec == 0: begin_entry()
 	var config := tree.root.get_node_or_null("ServerConfig")
 	if config != null:
 		config.set("is_multiplayer_mode", multiplayer)
@@ -148,5 +162,7 @@ static func enter_world(
 			network.call("end_multiplayer_session", true)
 	var menu := tree.root.get_node_or_null("GameMenu")
 	if menu != null and menu.has_method("set_gameplay_hud_visible"):
-		menu.set_gameplay_hud_visible(true)
+		menu.show_loading()
+	trace_entry("session_ready")
 	tree.change_scene_to_file(WORLD_SCENE)
+	trace_entry("scene_requested")

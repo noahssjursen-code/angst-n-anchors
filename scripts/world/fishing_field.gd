@@ -5,6 +5,7 @@ extends RefCounted
 ## Sampled at trawl time for catch rate/value and on the sea chart for overlay.
 
 static var world_seed: int = 0
+static var habitat: FishingHabitat = null
 
 const FEATURE_SCALE_M := 5500.0
 ## Stay off beaches and quay edges. Open fjord and coastal water is fishable.
@@ -46,7 +47,15 @@ static func allows_trawling(world_pos: Vector3) -> bool:
 	return true
 
 
+static func configure_habitat(layout: WorldLayout, zones: Array = []) -> void:
+	habitat=FishingHabitat.new()
+	habitat.configure(layout,zones)
+
 static func sample(world_pos: Vector3) -> Dictionary:
+	if habitat!=null and habitat.layout.seed==world_seed:
+		var ground:=habitat.sample(Vector2(world_pos.x,world_pos.z))
+		var allowed:=allows_trawling(world_pos) and float(ground.depth_m)>12
+		return {"tier_id":"normal","tier_label":"Groundfish","price_mul":1.0,"catch_mul":float(ground.cod)*1.5 if allowed else 0.0,"open_water":allowed}
 	_ensure_noise()
 	var noise_val := _ground_noise.get_noise_2d(
 		world_pos.x / FEATURE_SCALE_M,

@@ -50,9 +50,9 @@ static func load_presets() -> Dictionary:
 
 
 static func recommend_raster_resolution(world_size_m: float) -> int:
-	## ~156 m/cell at 40 km / 257. Cap for boot cost on huge maps.
+	## ~78 m/cell at 40 km / 513. Cap for boot cost on huge maps.
 	var size := validate_size_m(world_size_m)
-	var target_cell := 156.25
+	var target_cell := 78.125
 	var res := int(round(size / target_cell)) + 1
 	if res % 2 == 0:
 		res += 1

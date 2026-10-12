@@ -1,0 +1,58 @@
+MODULAR NORWEGIAN BRIDGES — 12 October 2026
+
+Authoring: tools/build_bridge_kit.py, executed in Blender 5.2.2.
+Ten separate editable .blend files in resources/models/_source/bridges.
+Ten separate GLBs and kit manifest in resources/models/bridges.
+Units metres. Godot -Z along bridge; origin on starting deck datum.
+SocketStart/SocketEnd are exported. Unit structural members are dimensioned
+by the generator; the road module is 20 x 12 m with 9.4 m roadway, raised
+footpaths, edge/centre markings and railings. No whole-bridge asset is stored.
+Original authored geometry; runtime finishes reuse SurfaceMaterialLibrary:
+concrete_cast, asphalt, brushed_steel, roof_enamel (markings). Existing CC0
+source URLs/licenses remain in resources/textures/marine's manifest.
+
+Families: girder (<220 m), arch (220–420 m), cantilever (420–820 m),
+suspension (820 m+). Terrain/navigation checks override these initial bands.
+References: Risoy deck arch, Raftsund concrete cantilever, Bomla/Stord
+suspension. These are game proportions, not engineering certifications.
+Girder supports <=65 m spacing; cantilever <=280 m; suspension main span
+<=1310 m. Reject foundations deeper than 90 m; reject supports within 60 m
+of mapped waterway intersections; reserve deck height sea+64 m over those
+waterways so the concrete underside remains above 55 m. Arch sites crossing
+a mapped waterway switch to suspension. Invalid concrete support sites try
+suspension before rejecting. Larger impossible spans remain unbuilt.
+
+Approaches search up to 1200 m outward on dry terrain, maximum grade 8.5%.
+Piers follow sampled ground and finish below the deck. Approach corridors
+clear forest without flattening terrain. They do not yet join settlement
+road graphs. No NPC road traffic, tunnels, chart bridge symbols or vessel
+air-draft route planning was added in this pass. Shipping opening checks
+use the geographic waterway centreline graph, not every possible ship route.
+
+Runtime: CoastalBridges plans records on a worker, then assembles one bridge
+per frame. BridgeAssembler stamps imported Blender parts and combines them
+into four material batches per bridge. Shared metre-space textures avoid
+stretching the finishes with unit members. Visual range 12 km. Static deck,
+rail, pier, arch-rib and anchor collision is included; cables are visual.
+No captain save modification or independent economy/world singleton.
+F3 G bridge layer retains candidate/rejection diagnostics; finished bridges
+are visible independently of debug settings.
+
+F6: scenes/showcases/bridge_kit_showcase.tscn (Space cycles four families).
+F6: scenes/showcases/bridge_showcase.tscn (Space cycles real terrain sites).
+Use -- --shipyard-playtest --capture for archived Godot captures.
+All machine captures saved under C:/Users/noahs/Pictures/machinescreenshots.
+
+Validation: tests/bridge_structure_test.tscn checks imported part dimensions,
+four families, material batches, physical deck rays, approach grades, supports,
+three generated worlds and worker/world visibility without gizmos.
+Seeds 42 / 1850239324 / 1212599375 accept 12 / 15 / 15 bridges with port-only
+demand inputs. Live settlement demand may change counts.
+tests/port_world_boot_test.tscn -- --shipyard-playtest --wait-bridges exercises
+the actual world integration and forest corridor installation.
+
+Reference pages:
+https://www.vegvesen.no/globalassets/fag/fokusomrader/miljo-og-omgivelser/vakre-vegers-pris/svv-08.03.risoy-3.korr.pdf
+https://www.aaj.no/prosjekt/raftsundbrua-2/
+https://forumarkitekter.no/prosjekt/trekantsambandet/
+https://www.vegvesen.no/nn/vegprosjekt/fullfort/hardangerbrua/

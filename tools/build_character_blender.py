@@ -30,11 +30,13 @@ for s,side in [(-1,'R'),(1,'L')]:
     bone('forearm_twist.'+side,twist_head,(s*.39,.025,.935),'forearm.'+side)
     bone('hand.'+side,(s*.39,.025,.935),(s*.41,.03,.82),'forearm_twist.'+side)
     for k,digit in enumerate(['index','middle','ring','little']):
-        x=s*(.382+k*.021);tip=.793+[.012,0,.004,.02][k]
-        bone(digit+'_01.'+side,(x,.03,.86),(x,.036,.829),'hand.'+side)
-        bone(digit+'_02.'+side,(x,.036,.829),(x,.043,tip),digit+'_01.'+side)
-    bone('thumb_01.'+side,(s*.375,.04,.913),(s*.353,.05,.889),'hand.'+side)
-    bone('thumb_02.'+side,(s*.353,.05,.889),(s*.347,.061,.862),'thumb_01.'+side)
+        x=s*(.382+k*.021);tip=.775+[.012,0,.005,.023][k]
+        pip=.860-(.860-tip)*.46;dip=.860-(.860-tip)*.77
+        bone(digit+'_01.'+side,(x,.029,.860),(x,.024,pip),'hand.'+side)
+        bone(digit+'_02.'+side,(x,.024,pip),(x,.019,dip),digit+'_01.'+side)
+        bone(digit+'_03.'+side,(x,.019,dip),(x,.015,tip),digit+'_02.'+side)
+    bone('thumb_01.'+side,(s*.380,.018,.917),(s*.352,.003,.870),'hand.'+side)
+    bone('thumb_02.'+side,(s*.352,.003,.870),(s*.351,-.010,.846),'thumb_01.'+side)
     bone('thigh.'+side,(s*.105,0,.93),(s*.11,.02,.51),'hips')
     bone('shin.'+side,(s*.11,.02,.51),(s*.11,0,.12),'thigh.'+side)
     bone('foot.'+side,(s*.11,0,.12),(s*.11,.13,.05),'shin.'+side)
@@ -61,6 +63,13 @@ def morph(p,kind):
             q.z-=.008*math.exp(-((z-1.59)/.06)**2)
         # Small posture change; no extreme hunch that invalidates the shared rig.
         q.y+=.015*max(0,min(1,(z-1.25)/.3))
+    # Body mass/frame changes taper through the forearm to a stable wrist.
+    # Moving finger vertices away from fixed bind joints makes them orbit those
+    # joints when curled. Wrists/fingers retain their anatomical proportions for
+    # every appearance, including neutral poses; cuffs use this same taper.
+    if abs(x)>.27 and .70<z<1.16:
+        t=max(0,min(1,(z-1.00)/.16))
+        q=Vector(p)+(q-Vector(p))*(t*t*(3-2*t))
     return q
 
 for o in objects:
@@ -86,16 +95,24 @@ for o in objects:
     for vert in o.data.vertices:
         p=vert.co; x,y,z=p; side='L' if x>=0 else 'R'
         if o.name == 'Hands':
-            if abs(x)<.369 and z<.917:
-                candidates=['hand.'+side,'thumb_01.'+side,'thumb_02.'+side]
-            elif z<.854:
+            def smooth_weight(low,high,value):
+                t=max(0,min(1,(value-low)/(high-low)));return t*t*(3-2*t)
+            if abs(x)<.373 and z<.917:
+                proximal=smooth_weight(.374,.350,abs(x))
+                distal=smooth_weight(.880,.856,z)
+                weights={'hand':1-proximal,'thumb_01':proximal*(1-distal),'thumb_02':proximal*distal}
+            elif z<.881:
                 digit=min(range(4),key=lambda k:abs(abs(x)-(.382+k*.021)))
+                tip=.775+[.012,0,.005,.023][digit]
+                pip=.860-(.860-tip)*.46;dip=.860-(.860-tip)*.77
                 digit=['index','middle','ring','little'][digit]
-                candidates=['hand.'+side,digit+'_01.'+side,digit+'_02.'+side]
-            else: candidates=['hand.'+side]
-            ds=sorted([(distance(p,*bones[n]),n) for n in candidates])[:2]
-            weights=[math.exp(-d*140) for d,n in ds];total=sum(weights)
-            for (d,n),w in zip(ds,weights):o.vertex_groups[n].add([vert.index],w/total,'REPLACE')
+                proximal=smooth_weight(.881,.847,z)
+                middle=smooth_weight(pip+.006,pip-.006,z)
+                distal=smooth_weight(dip+.005,dip-.005,z)
+                weights={'hand':1-proximal,digit+'_01':proximal*(1-middle),digit+'_02':proximal*middle*(1-distal),digit+'_03':proximal*middle*distal}
+            else: weights={'hand':1.0}
+            for name,w in weights.items():
+                if w>0:o.vertex_groups[name+'.'+side].add([vert.index],w,'REPLACE')
             continue
         if .9 <= z <= 1.52:
             # Continuous shoulder blend. Do not let nearest hand/forearm bones
@@ -159,15 +176,36 @@ for i,v in enumerate(hands.data.vertices):v.co=hands.data.shape_keys.key_blocks[
 bpy.context.view_layer.objects.active=rig
 bpy.ops.object.mode_set(mode='EDIT')
 for b in arm_data.edit_bones:
-    if b.name.split('.')[0] in ['hand','index_01','index_02','middle_01','middle_02','ring_01','ring_02','little_01','little_02','thumb_01','thumb_02']:
+    if b.name.split('.')[0] in ['hand','index_01','index_02','index_03','middle_01','middle_02','middle_03','ring_01','ring_02','ring_03','little_01','little_02','little_03','thumb_01','thumb_02']:
         wrist,rotation=hand_bind[b.name.split('.')[-1]]
         from mathutils import Matrix
         b.transform(Matrix.Translation(wrist)@rotation.to_matrix().to_4x4()@Matrix.Translation(-wrist))
+        # Anatomical frame: +Y along digit, +Z out through the knuckles.
+        # Runtime grips must not assume Blender's automatically chosen bone roll.
+        b.align_roll(rotation @ Vector((0,1,0)))
         bones[b.name]=(b.head.copy(),b.tail.copy())
 bpy.ops.object.mode_set(mode='OBJECT')
+# Measured contact on the palm under the MCP row, in the hand bone frame.
+# Keep it in the Blender source and export the values used by the equipment IK.
+hand_contacts={}
+for side,s in [('L',1),('R',-1)]:
+    wrist,rotation=hand_bind[side]
+    palm=wrist+rotation@(Vector((s*.413,.016,.871))-wrist)
+    local=rig.data.bones['hand.'+side].matrix_local.inverted()@palm
+    morph_deltas={key:list(rig.data.bones['hand.'+side].matrix_local.to_3x3().inverted()@(morph(palm,key)-palm)) for key in ['Build','Belly','Frame','Age']}
+    hand_contacts[side]={'palm_contact':list(local),'morph_deltas':morph_deltas,'knuckles_axis':[0,0,1],'fingers_axis':[0,1,0]}
+    marker=bpy.data.objects.new('PalmContact.'+side,None)
+    bpy.context.collection.objects.link(marker)
+    marker.empty_display_type='SPHERE';marker.empty_display_size=.004
+    marker.parent=rig;marker.parent_type='BONE';marker.parent_bone='hand.'+side
+    # Blender bone-parent origin is at the tail; world placement is explicit.
+    bpy.context.view_layer.update();marker.matrix_world.translation=palm
+(OUT/'hand_contacts.json').write_text(json.dumps(hand_contacts,indent=2),encoding='utf-8')
 # Bake constrained foot contact and anatomical hand poses into standard clips.
 from mariner_animation import author
 author(rig,bones,OUT)
+from mariner_hand_grips import author_grips
+author_grips(rig,hand_contacts,OUT)
 bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE/'mariner.blend'))
 for tr in rig.animation_data.nla_tracks: tr.mute=False
 bpy.ops.object.select_all(action='DESELECT')

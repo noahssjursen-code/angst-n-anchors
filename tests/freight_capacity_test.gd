@@ -40,7 +40,7 @@ func run() -> void:
 		harbour.plug_ship(berth.berth_id, ship)
 		var offers := FreightService.eligible_offers_at("capacity-origin", ship)
 		print("FREIGHT CAPACITY STOCK ", entry.prebuilt_name, " ", offers.map(func(o: Dictionary): return {"cargo":o.commodity_id,"quantity":o.quantity,"pay":o.pay_marks}))
-		if str(entry.prebuilt_id) == "fishing_trawler":
+		if str(entry.prebuilt_id) == "fishing_hook_line":
 			check(offers.is_empty(), "trawler without freight equipment gets no cargo offers")
 		elif str(entry.prebuilt_id) == "28_10_m":
 			check(not offers.is_empty() and offers[0].quantity == 2, "Harbour Cargo gets a two-container job")

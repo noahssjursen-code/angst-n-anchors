@@ -1,0 +1,90 @@
+COASTAL SKERRIES / GENERATION 12
+12 October 2026
+
+Goal
+Keep the broad fjord geography and add the smaller exposed islands and fragments
+missing between mainland and open water. These are terrain, not decorative props.
+
+Implemented
+- A deterministic, spatially indexed coastal feature layer, independent of the
+  78.125 m macro raster. Patchy groups have a parent islet, smaller fragments,
+  bent/notched outlines, short submerged feet, and real intervening water gaps.
+- 675 / 764 / 781 exposed features for seeds 42 / 1212599375 / 77127.
+  527 / 556 / 566 of these belong to groups of at least three.
+- One geographic source feeds visible terrain, depth, land checks, chart outlines,
+  navigation occupancy, and physical collision. Ports remain on the macro coast.
+- Existing main shipping corridors stay clear. Navigation detects sub-grid rocks,
+  refines difficult short passages, and refuses invalid routes rather than
+  stitching an unchecked straight line through land.
+- Distant terrain retains exposed outlines. Nearby streamed chunks add more
+  subdivisions; detailed meshes are built on workers. No full-resolution global
+  terrain mesh or giant fine world raster is generated.
+- Detail triangulation now preserves full chunk coverage and shared edge samples.
+- Submerged formations superseded by a new island are removed from the active
+  formation set, preventing compact hazard records becoming broad island shores.
+- Close-up map tiles bake on one bounded background worker, with an eight-tile
+  cache and an overview available while baking. Worker shutdown is explicitly joined.
+
+Research basis
+NGU seabed mapping and MAREANO imagery informed the distinction between fractured
+bedrock groups, exposed highs, submerged companions, and intervening depressions.
+These are procedural design parameters, not measurements calibrated to a raw
+Karmoy bathymetric grid and not an exact recreation of the reference location.
+https://static.ngu.no/upload/Publikasjoner/Rapporter/2023/2023_008.pdf
+https://www.mareano.no/resources/images/2015/chapter-3.pdf
+https://static.ngu.no/Mareano/Landskap.html
+
+Godot's documented visibility/LOD approach informed retaining silhouettes while
+reducing distant surface complexity and keeping expensive detail local.
+https://docs.godotengine.org/en/4.6/tutorials/3d/visibility_ranges.html
+https://docs.godotengine.org/en/4.6/classes/class_arraymesh.html
+
+Verification
+- Independent critic wrote the acceptance tests and reviewed chart and 3D captures.
+- Three-seed acceptance passed: shoreline/depth agreement, chart coast and pixels,
+  navigation occupancy, 36 actual routes, 106,236 shipping-corridor probes with
+  zero new obstructions, near/far mesh footprints, chunk coverage, and LOD seams.
+- Worst tested near/far boundary height difference: 0.382 m.
+- World layout and terrain streamer regression tests passed.
+- Seabed test passed; compact shoal test passed across three seeds, maximum
+  measured radius of water shallower than 5 m was 30 / 32 / 32 m.
+- Seamark placement and streaming tests passed: 111 / 98 / 93 poles with verified
+  deeper-side passages, spacing, port clearance and pointer orientation.
+- Live Godot physics: 24 downward probes hit exposed small/medium/large skerries.
+- Chart integration passed through a scene/autoload adapter (the direct SceneTree
+  CLI path has pre-existing autoload compile issues). Updated its obsolete
+  click-to-confirm expectation to match the current select-then-confirm UI.
+- Existing chart navigation and marine autopilot tests passed after route fixes.
+- Editor import/parse and diff whitespace checks passed.
+- Production renderer reviewed from regional, local, moving/turning sea-level,
+  close sea-level, underwater, and chart views on two seeds. This is not a
+  whole-game player/vessel FPS benchmark.
+
+Representative timing (this machine, development build; not frame-time claims)
+- Full layout generation: about 9.8 seconds including the existing macro generator.
+- Densest sampled 1 km chunk: 20 islets.
+  Base spacing 25 / 50 / 100 / 200 m:
+  worker mesh build 243 / 116 / 63 / 39 ms;
+  triangles 7484 / 2987 / 2196 / 1932.
+- Uncached close chart detail: about 1.8 seconds of background work.
+  Initial main-thread request: 0.036 ms; cached request: 0.016 ms.
+- Overview chart still builds once synchronously: about 1.24-1.28 seconds.
+
+Review / remaining limits
+The critic found no remaining geographic blocker. Some tops still look too grassy
+and smooth, and some medium silhouettes share an elongated family. That material
+and small surface-relief work remains an art refinement. Do not claim scan accuracy.
+Routing still uses the existing fixed shore clearance, not vessel-specific draft.
+Geometry is rebuilt on demand; this pass does not add persistent mesh files on disk.
+
+Trying it
+Restart the world so it uses generation 12 (seabed cache version 5). A currently
+loaded generation 11 world cannot acquire the new geography in place.
+Run scenes/showcases/skerry_showcase.tscn for an isolated review:
+1 / 2 / 3 switches seeds; arrows orbit/zoom; M toggles chart; O toggles ocean.
+The showcase activates the existing isolated playtest mode before autoloads.
+All review captures are archived under C:/Users/noahs/Pictures/machinescreenshots.
+
+Final lifecycle verification: background tile completion and closing during an
+in-flight bake passed. The final production-renderer capture run exited cleanly.
+

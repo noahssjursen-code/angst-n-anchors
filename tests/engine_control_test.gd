@@ -39,6 +39,18 @@ func run() -> void:
 	audio._process(1.0)
 	check(prop.engine_running and audio._heard_running, "Leaving helm preserves engine idle")
 	controller.activate()
+	controller.set_throttle_stage_idx(4)
+	controller._physics_process(2.0)
+	var ordered: float = prop.throttle
+	check(ordered < -0.5, "Full ahead reaches the propeller")
+	controller.deactivate()
+	check(controller.get_throttle_stage_idx() == 4 and is_equal_approx(prop.throttle, ordered), "Leaving helm keeps the engine order")
+	controller.activate()
+	controller.set_throttle_stage_idx(1)
+	controller._throttle = 0.0
+	controller._push_to_components()
+	controller.deactivate()
+	controller.activate()
 	controller.toggle_engine()
 	audio._process(1.0)
 	check(not prop.engine_running and not audio._heard_running, "Explicit stop shuts down audio and machinery")

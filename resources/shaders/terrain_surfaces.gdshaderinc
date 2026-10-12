@@ -37,6 +37,7 @@ vec3 terrain_gradient(sampler2D map,vec3 p,vec3 w) {
 vec3 terrain_habitat(vec3 p,vec3 n,float coast,float forest,vec3 macro) {
     float slope=1.0-clamp(n.y,0.0,1.0);
     float stone=smoothstep(.065,.32,slope);
+    stone=max(stone,(1.0-smoothstep(-.5,4.5,p.y)));
     stone=max(stone,coast*(1.0-smoothstep(1.0,12.0,p.y)));
     stone=max(stone,smoothstep(.65,.84,macro.r)*.55);
     float woodland=clamp(forest*1.35,0.0,1.0)*(1.0-stone);

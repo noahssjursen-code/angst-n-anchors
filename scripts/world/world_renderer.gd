@@ -73,6 +73,7 @@ var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid u
 var _wake_field:            OceanWakeField
 var _fft_maps_bound:        bool = false
 var _ocean_debug_false_color := false
+var _ocean_hidden := false
 var _camera_water_signed_distance := 10.0
 var _underwater_environment_active := false
 var _underwater_camera: Camera3D
@@ -110,6 +111,9 @@ func _ready() -> void:
 		add_child(_wake_field)
 		_build_ocean()
 	_build_screen_effects()
+	var debug := get_node_or_null("/root/DebugHud")
+	if debug != null:
+		set_ocean_hidden(debug.is_gizmo_layer_enabled("hide_ocean"))
 	_connect_weather_lighting()
 	_apply_weather_lighting()
 	# A newly entered rainy world is already damp; subsequent changes accumulate.
@@ -163,6 +167,14 @@ func get_lighting_debug_state() -> Dictionary:
 			else 0.0
 		),
 	}
+
+
+## Debug presentation only: wave simulation and buoyancy keep running.
+func set_ocean_hidden(hidden: bool) -> void:
+	_ocean_hidden = hidden
+	for surface in [_ocean_clipmap, _ocean_mesh, _ocean_mesh_mid, _ocean_mesh_outer]:
+		if is_instance_valid(surface):
+			surface.visible = not hidden
 
 
 func set_ocean_ring_debug(enabled: bool) -> void:
@@ -280,6 +292,12 @@ func _follow_camera_xz() -> void:
 
 
 func _update_underwater_effect() -> void:
+	if _ocean_hidden:
+		_camera_water_signed_distance = 10.0
+		if _screen_material != null:
+			_screen_material.set_shader_parameter("camera_water_signed_distance", 10.0)
+		_update_underwater_environment(get_viewport().get_camera_3d())
+		return
 	if _screen_material == null:
 		return
 	var camera := get_viewport().get_camera_3d()

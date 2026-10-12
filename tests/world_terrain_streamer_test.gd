@@ -66,7 +66,7 @@ func _test_shared_borders(layout: WorldLayout) -> void:
 
 func _test_water_and_shoreline(layout: WorldLayout) -> void:
 	var open_water := STREAMER.build_chunk_mesh_data(layout, Vector2i(-16, 14), 50.0)
-	_check((open_water["indices"] as PackedInt32Array).size() == 0, "fully submerged chunk excludes terrain")
+	_check((open_water["indices"] as PackedInt32Array).size() > 0, "fully submerged chunk includes seabed")
 
 	var shoreline_found := false
 	for z in range(-16, 16):
@@ -290,7 +290,7 @@ func _test_empty_water_retention(layout: WorldLayout) -> void:
 	var coord := Vector2i(-16, 14)
 	streamer._build_chunk(coord, 1, Vector3.ZERO)
 	var record := streamer._chunks[coord] as Dictionary
-	_check(record.get("node", null) == null, "open-water chunk creates no scene node")
+	_check(record.get("node", null) != null, "open-water chunk creates seabed presentation")
 	_check((record.get("surface_data", {}) as Dictionary).is_empty(), "open-water chunk drops CPU mesh arrays")
 	streamer.free()
 

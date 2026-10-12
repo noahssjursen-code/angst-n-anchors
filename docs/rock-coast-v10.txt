@@ -1,0 +1,34 @@
+Rock coast and shoals - generation 10
+
+Replaced the uniform near-shore 3 m apron with varied exponential rock faces.
+Above-water shelves narrowed from 36-220 m to 5-35 m; steeper rock faces rise
+behind them. Historical port-site acceptance is still separate from rendered
+terrain; existing port terrain overrides remain in place.
+
+Seeded submerged bedrock formations extend the actual elevation surface around
+islands and farther offshore. Narrow elongated crests are 0.7-3.2 m deep, with
+steep flanks merging into the basin. Indexed 1 km bins avoid scanning the complete
+feature set on every terrain query. Mesh, charts, depth queries and markers all
+sample the same surface. These are not decorative rock props or chart-only dots.
+
+Poles target those formations, not arbitrary coastline contours. Sites must be
+80 m offshore, 1.5-4 m deep and outside port exclusion zones. The pointer sector
+must deepen to 12 m or more within 160 m. Pole streaming remains camera based.
+Checks with ports produced 151 / 163 / 144 marks for seeds 42 / 1212599375 / 77127.
+The same seeds include 69 / 71 / 72 formations over 1 km offshore and 7 / 7 / 9
+shallow crests between opposing shores 1 km apart. 196 of 200 tested coast samples
+per seed exceeded 15 m depth 50 m offshore, rather than a blanket shallow apron.
+
+Fixed water-side clipping using inverted endpoint signs against a non-inverted
+midpoint, which opened mesh holes. Complementary saddle cells now fill the middle
+instead of leaving gaps. Regression checks sum projected triangle area to verify
+a complete 1 km terrain chunk and preserve the existing terrain test suite.
+
+Chart zoom now requests detail by actual resolution gain, instead of treating
+all 512-pixel world overviews as detailed enough. Detail tiles are 512 pixels.
+
+Verified: rock_shelves_test, coastal_seamarks_test, seabed_test,
+world_terrain_streamer_test, world_layout_generator_test; in-engine water-on,
+water-off and chart captures archived in Pictures/machinescreenshots.
+Generation 10 changes world identity. Reload the world for the new terrain.
+This work does not add seabed grounding physics or vessel draft-aware navigation.

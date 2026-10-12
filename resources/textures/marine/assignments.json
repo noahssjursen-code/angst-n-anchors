@@ -164,6 +164,12 @@
       "Paint": "machinery_enamel",
       "Steel": "working_steel",
       "LightFinish": "cabin_enamel"
+    },
+    "harpe": {
+      "EVA grip": "rubber",
+      "Anodised reel": "anodized",
+      "Guide stainless": "brushed_steel",
+      "Olive braided line": "rope_fibre"
     }
   }
 }

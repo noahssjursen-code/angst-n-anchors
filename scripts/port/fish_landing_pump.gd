@@ -25,6 +25,7 @@ var _initial_mass_kg := 0.0
 var _landed_mass_kg := 0.0
 var _landed_value_marks := 0.0
 var _landed_lots := 0
+var _transfer_credit := 0.0
 var _hose_root: Node3D
 var _hose_mesh: MeshInstance3D
 var _receiver_fill: MeshInstance3D
@@ -50,6 +51,7 @@ func start_unload(ship: BoatBody) -> bool:
 	_landed_mass_kg = 0.0
 	_landed_value_marks = 0.0
 	_landed_lots = 0
+	_transfer_credit = 0.0
 	_elapsed = 0.0
 	_set_state(STATE_CONNECTING)
 	set_process(true)
@@ -94,7 +96,7 @@ func get_status_lines() -> PackedStringArray:
 		"Landing plant  %s" % _state,
 		"Flow  %.0f kg/s" % pump_rate_kg_s,
 		"Ashore  %.2f t  ·  remaining %.2f t" % [_landed_mass_kg / 1000.0, remaining / 1000.0],
-		"Landing value  %d marks" % landed_value_marks(),
+		"Landing value  %s" % PlayerData.format_money(landed_value_marks()),
 	])
 	if _receiver != null:
 		lines.append(
@@ -123,9 +125,7 @@ func _process(delta: float) -> void:
 			_update_hose(1.0)
 			_transfer_mass(pump_rate_kg_s * delta)
 			_update_receiver_fill()
-			if _ship_catch_mass(_ship) <= CatchLot.MASS_EPS_KG or (
-				_receiver != null and _receiver.available_kg() <= CatchLot.MASS_EPS_KG
-			):
+			if not _has_transferable_catch():
 				_elapsed = 0.0
 				_set_state(STATE_FLUSHING)
 		STATE_FLUSHING:
@@ -143,8 +143,19 @@ func _process(delta: float) -> void:
 				transfer_completed.emit(report)
 
 
+func _has_transferable_catch() -> bool:
+	var room := _receiver.available_kg() if _receiver != null else INF
+	if room <= CatchLot.MASS_EPS_KG: return false
+	for hold in _ship.get_catch_holds():
+		var lots: Array[CatchLot] = hold.get_state().lots
+		if not lots.is_empty() and (not lots[0].specimen or lots[0].mass_kg <= room):
+			return true
+	return false
+
+
 func _transfer_mass(max_mass_kg: float) -> void:
-	var remaining := maxf(max_mass_kg, 0.0)
+	_transfer_credit += maxf(max_mass_kg, 0.0)
+	var remaining := _transfer_credit
 	if _receiver != null:
 		remaining = minf(remaining, _receiver.available_kg())
 	for hold in _ship.get_catch_holds():
@@ -162,13 +173,9 @@ func _transfer_mass(max_mass_kg: float) -> void:
 				continue
 			_landed_mass_kg += accepted_kg
 			_landed_lots += 1
-			_landed_value_marks += (
-				accepted_kg / 100.0
-				* FishingLandingService.MARKS_PER_100_KG
-				* clampf(lot.quality, 0.0, 1.0)
-				* maxf(lot.price_multiplier, 0.0)
-			)
+			_landed_value_marks += FishingLandingService.lot_value(lot,accepted_kg)
 			remaining -= accepted_kg
+			_transfer_credit = maxf(0, _transfer_credit - accepted_kg)
 
 
 func _report() -> Dictionary:

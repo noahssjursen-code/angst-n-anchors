@@ -1,0 +1,32 @@
+Coastal terrain pass - generation 9
+
+Preserves original mainland and branching fjord graph. Adds shelf-attached island
+clusters and anisotropic coastal rock/fracture deformation. The final signed
+shore field drives exposed land, seabed shelves, charts, ports and seamarks.
+A two-pass distance transform restores metre-scale distances after deformation;
+otherwise noise slopes compress shelves and invalidate fixed placement offsets.
+Central fjord corridors remain open; existing minimum-width tests are retained.
+Standard geography is now 513 samples (78.125 m) instead of 257 (156.25 m).
+Tiny metre-scale isolated rocks are still below this resolution.
+
+Removed the independent bank-noise shallow patches. Sea-level datum now agrees
+with the signed shoreline: land samples are physically above mean water level.
+Low shoreline/skerry surfaces reuse the rock material across near/far terrain.
+Chart overview increased to 512 pixels. Zoom tiles remain cached.
+
+Pole spacing and port-anchor exclusion reduced from 700/1000 m to 450/450 m.
+Placement searches the physical shelf; direction still validates a deeper sector.
+Showcase now uses the production streaming layer, not a manually placed prop.
+It captures the streamed pole, boat approach, aerial terrain and production chart.
+
+Checks: world_layout_generator_test, seabed_test, coastal_seamarks_test,
+coastal_terrain_review across seeds 42, 1212599375, 77127. Each has 35 ports;
+204, 216 and 246 poles respectively. Determinism, fjord continuity, water/land
+agreement, mesh edges, depth/chart agreement, pole yaw and streaming checked.
+Generation test measured about 11 seconds and about 1 microsecond per query.
+These are generation/query timings, not an FPS benchmark.
+
+Generation version bumped from 8 to 9: this intentionally changes geography,
+checksums and seeded port placement. Restart/reload the world to generate it.
+Existing version-8 equivalence fixture remains a historical baseline, not a v9
+acceptance fixture. No captain saves were edited during isolated tests.

@@ -25,7 +25,9 @@ func _build() -> void:
 	box.add_child(Ui.header("World", "Gizmo layers",
 		"Select only the infrastructure you need. Choices stay on when this menu closes."))
 	box.add_child(Ui.rule())
-	for definition in WorldGizmos.LAYERS:
+	var controls := WorldGizmos.LAYERS.duplicate()
+	controls.append({"id":"hide_ocean", "label":"Disable ocean", "hint":"Hide the water surface and underwater haze to inspect the seabed."})
+	for definition in controls:
 		var layer_id := str(definition.get("id", ""))
 		var button := Ui.toggle(str(definition.get("label", layer_id)))
 		button.tooltip_text = str(definition.get("hint", ""))

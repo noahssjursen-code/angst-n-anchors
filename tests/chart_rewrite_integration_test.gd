@@ -48,6 +48,10 @@ func _run() -> void:
 	## Zoom tile path samples layout SDF only (no terrain meshes).
 	base.prepare_visible(Rect2(-2500.0, -2500.0, 5000.0, 5000.0))
 	assert(base.texture != null)
+	var detail_deadline := Time.get_ticks_msec()+10000
+	while base.world_rect.size.x >= float(snapshot.layout.world_size_m) and Time.get_ticks_msec()<detail_deadline:
+		await process_frame
+		base.prepare_visible(Rect2(-2500.0, -2500.0, 5000.0, 5000.0))
 	assert(base.world_rect.size.x < float(snapshot.layout.world_size_m))
 
 	var weather = RasterClass.new(RasterClass.Kind.WEATHER)
@@ -65,7 +69,7 @@ func _run() -> void:
 	overlay.renderer.prepare_overlays(bounds, overlay.layers, 0.0)
 	var readout: Array[String] = overlay.renderer.overlay_readout(Vector2.ZERO, overlay.layers, 0.0)
 	assert(readout.any(func(row: String) -> bool: return row.begins_with("Wind")))
-	assert(readout.any(func(row: String) -> bool: return row.begins_with("Fishing")))
+	assert(not readout.any(func(row: String) -> bool: return row.begins_with("Fishing")))
 	overlay.home_port_confirmed.connect(func(port_id: String) -> void: _picked = port_id)
 	var first: Dictionary = snapshot.ports[0]
 	var position := first["position"] as Vector3
@@ -77,6 +81,8 @@ func _run() -> void:
 		(position.z - bounds.position.y) / bounds.size.y * chart.size.y,
 	)
 	overlay.call("_click_chart", screen)
+	assert(overlay.selected_port == str(first["id"]))
+	overlay.call("_confirm_home_port")
 	assert(_picked == str(first["id"]))
 	print(
 		"Marine chart rewrite integration/performance tests passed (base=%d us weather=%d us)"

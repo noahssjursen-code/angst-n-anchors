@@ -8,7 +8,7 @@ const DEFAULT_CONFIG_PATH := "res://resources/data/world/norway_coast.json"
 const LAYOUT_SCRIPT := preload("res://scripts/world/world_layout.gd")
 const WORLD_CONFIG := preload("res://scripts/world/world_config.gd")
 ## Increment whenever deterministic generation logic changes incompatibly.
-const GENERATION_VERSION := 8
+const GENERATION_VERSION := 12
 const CACHE_LIMIT := 4
 
 static var _layout_cache: Dictionary = {}
@@ -21,7 +21,7 @@ static func generate(
 		world_size_m: float = -1.0,
 ) -> WorldLayout:
 	var size_hint := world_size_m if world_size_m > 0.0 else WORLD_CONFIG.REFERENCE_SIZE_M
-	var cache_key := "%d:%d:%.0f:%s" % [GENERATION_VERSION, layout_seed, size_hint, config_path]
+	var cache_key := "layout-v1:%d:%d:%.0f:%s:%s" % [GENERATION_VERSION, layout_seed, size_hint, config_path,FileAccess.get_sha256(config_path)]
 	if _layout_cache.has(cache_key):
 		return _layout_cache[cache_key] as WorldLayout
 	var config := WORLD_CONFIG.resolve(size_hint, config_path)
@@ -40,8 +40,14 @@ static func generate(
 		"tilt": rng.randf_range(-0.055, 0.055),
 	}
 	var waterways := _build_waterways(rng, config, coast_shape, half)
-	var island_lobes := _build_island_lobes(rng, config, half)
-	var field_data := _bake_field(layout_seed, config, coast_shape, waterways, island_lobes)
+	var island_lobes := _build_island_lobes(rng, config, half, coast_shape)
+	var cached := WorldGenerationCache.read(cache_key)
+	var field_data: Dictionary
+	if cached.get("distances") is PackedFloat32Array and cached.get("regions") is PackedByteArray and cached.distances.size()==resolution*resolution and cached.regions.size()==resolution*resolution:
+		field_data=cached
+	else:
+		field_data=_bake_field(layout_seed, config, coast_shape, waterways, island_lobes)
+		WorldGenerationCache.write(cache_key,field_data)
 	var distances: PackedFloat32Array = field_data["distances"]
 	var regions: PackedByteArray = field_data["regions"]
 	var contours := _extract_contours(distances, resolution, size_m)
@@ -257,6 +263,7 @@ static func _build_island_lobes(
 		rng: RandomNumberGenerator,
 		config: Dictionary,
 		half: float,
+		coast_shape: Dictionary,
 ) -> Array[Vector3]:
 	var arch := config["archipelago"] as Dictionary
 	var cluster_count := rng.randi_range(
@@ -279,6 +286,15 @@ static func _build_island_lobes(
 				offset = Vector2.ZERO
 				radius = base_radius
 			lobes.append(Vector3(center.x + offset.x, center.y + offset.y, radius))
+	# Coastal groups belong to the mainland shelf, not a uniform scatter at sea.
+	var scale := WORLD_CONFIG.scale_factor(float(config["world_size_m"]))
+	for group in 14:
+		var z := rng.randf_range(-half*.9,half*.9)
+		var center := Vector2(_coast_x(z,config["mainland"],coast_shape)-rng.randf_range(800,2600)*scale,z)
+		for rock in rng.randi_range(5,10):
+			var offset := Vector2(rng.randf_range(-750,750),rng.randf_range(-1100,1100))*scale
+			var radius := rng.randf_range(130,380)*scale
+			lobes.append(Vector3(center.x+offset.x,center.y+offset.y,radius))
 	return lobes
 
 
@@ -290,6 +306,27 @@ static func _bake_field(
 		island_lobes: Array[Vector3],
 ) -> Dictionary:
 	var resolution := int(config["raster_resolution"])
+	var workers := mini(4,maxi(1,OS.get_processor_count()-2))
+	var threads: Array[Thread] = []
+	for i in workers:
+		var worker := Thread.new()
+		worker.start(_bake_field_rows.bind(layout_seed,config,coast_shape,waterways,island_lobes,i*resolution/workers,(i+1)*resolution/workers))
+		threads.append(worker)
+	var distances := PackedFloat32Array()
+	var regions := PackedByteArray()
+	for worker in threads:
+		var chunk: Dictionary = worker.wait_to_finish()
+		distances.append_array(chunk.distances)
+		regions.append_array(chunk.regions)
+	return {"distances":_redistance(distances,resolution,float(config.world_size_m)/float(resolution-1)),"regions":regions}
+
+
+static func _bake_field_rows(
+		layout_seed: int, config: Dictionary, coast_shape: Dictionary,
+		waterways: Array[Dictionary], island_lobes: Array[Vector3],
+		first_row: int, end_row: int,
+) -> Dictionary:
+	var resolution := int(config["raster_resolution"])
 	var size_m := float(config["world_size_m"])
 	var half := size_m * 0.5
 	var cell := size_m / float(resolution - 1)
@@ -298,10 +335,13 @@ static func _bake_field(
 	var coast_fingers := _make_bake_noise(layout_seed ^ 0x46494e47, 0.00155 / maxf(scale, 0.25), 3, 0.50)
 	var island_erosion := _make_bake_noise(layout_seed ^ 0x49534c45, 0.00095 / maxf(scale, 0.25), 3, 0.48)
 	var island_bite := _make_bake_noise(layout_seed ^ 0x42495445, 0.0022 / maxf(scale, 0.25), 2, 0.45)
+	# One coastal rock field changes the signed surface on BOTH sides of sea level.
+	# Long formations follow the coast; smaller cross fractures make coves/skerries.
+	var coastal_rock := _make_bake_noise(layout_seed ^ 0x534b4552, 0.00095 / maxf(scale, 0.25), 3, 0.38)
 	var distances := PackedFloat32Array()
 	var regions := PackedByteArray()
-	distances.resize(resolution * resolution)
-	regions.resize(resolution * resolution)
+	distances.resize(resolution * (end_row-first_row))
+	regions.resize(resolution * (end_row-first_row))
 	var classification := config["classification"] as Dictionary
 	var fjord_influence := float(classification["fjord_influence_m"])
 	var open_water_x := float(classification["open_water_x_m"])
@@ -328,8 +368,8 @@ static func _bake_field(
 		corridor_bounds.append(bounds.grow(1.0))
 		var largest_width := 0.0
 		for width in widths: largest_width = maxf(largest_width, width)
-		corridor_half_width.append(largest_width * .5 + 1.0)
-	for z_idx in range(resolution):
+		corridor_half_width.append(maxf(largest_width * .5,cell*1.8) + 1.0)
+	for z_idx in range(first_row,end_row):
 		var z := -half + float(z_idx) * cell
 		var coast := _coast_x(z, config["mainland"], coast_shape)
 		for x_idx in range(resolution):
@@ -355,6 +395,7 @@ static func _bake_field(
 				land_distance = minf(land_distance, island_distance)
 			var nearest_waterway := INF
 			var water_cut_distance := INF
+			var channel_core := INF
 			for waterway_index in range(corridor_points.size()):
 				var bounds := corridor_bounds[waterway_index]
 				var outside := Vector2(
@@ -362,7 +403,7 @@ static func _bake_field(
 					maxf(maxf(bounds.position.y-z, z-bounds.end.y), 0.0),
 				)
 				var lower_distance := outside.length()
-				if lower_distance >= nearest_waterway and lower_distance - corridor_half_width[waterway_index] >= water_cut_distance:
+				if lower_distance >= nearest_waterway and lower_distance - corridor_half_width[waterway_index] >= minf(water_cut_distance, channel_core):
 					continue
 				var sample := _distance_and_width_on_polyline(
 					point,
@@ -371,12 +412,20 @@ static func _bake_field(
 					corridor_cumlen[waterway_index],
 				)
 				nearest_waterway = minf(nearest_waterway, float(sample["distance"]))
+				channel_core = minf(channel_core, float(sample["distance"]) - maxf(float(sample["width"])*0.42,cell*1.8))
 				water_cut_distance = minf(
 					water_cut_distance,
 					float(sample["distance"]) - float(sample["width"]) * 0.5,
 				)
-			var signed_distance := maxf(land_distance, -water_cut_distance)
-			var index := z_idx * resolution + x_idx
+			var macro_distance := maxf(land_distance, -water_cut_distance)
+			var envelope := 1.0 - smoothstep(500.0*scale, 2100.0*scale, absf(macro_distance))
+			var rock := coastal_rock.get_noise_2d(x*1.4, z*0.65)*1150.0*scale
+			var fractures := coast_fingers.get_noise_2d(x*2.4,z*1.5)*110.0*scale
+			var signed_distance := macro_distance + (rock + fractures)*envelope
+			# Preserve the central passage of the original fjord graph.
+			if channel_core < 0.0:
+				signed_distance = maxf(signed_distance, -channel_core)
+			var index := (z_idx-first_row) * resolution + x_idx
 			distances[index] = signed_distance
 			if nearest_waterway <= fjord_influence and x > open_water_x:
 				regions[index] = WorldLayout.Region.FJORD
@@ -532,10 +581,11 @@ static func _checksum(
 		waterways: Array[Dictionary],
 ) -> String:
 	var bytes := PackedByteArray()
-	bytes.resize(12)
+	bytes.resize(16)
 	bytes.encode_s32(0, layout_seed)
 	bytes.encode_s32(4, resolution)
 	bytes.encode_s32(8, int(round(size_m)))
+	bytes.encode_s32(12, GENERATION_VERSION)
 	for distance in distances:
 		var offset := bytes.size()
 		bytes.resize(offset + 4)
@@ -566,3 +616,33 @@ static func _checksum(
 	hashing.start(HashingContext.HASH_SHA256)
 	hashing.update(bytes)
 	return hashing.finish().hex_encode()
+
+
+## Re-establish metres from the final shoreline after coastal deformation.
+## Without this, steep noise gradients compress shelves and mislead depth/markers.
+static func _redistance(field: PackedFloat32Array, n: int, cell: float) -> PackedFloat32Array:
+	var result := PackedFloat32Array()
+	result.resize(field.size())
+	result.fill(INF)
+	for y in n:
+		for x in n:
+			var i := y*n+x
+			for offset in [Vector2i(-1,0),Vector2i(1,0),Vector2i(0,-1),Vector2i(0,1)]:
+				var q: Vector2i = Vector2i(x,y)+offset
+				if q.x < 0 or q.y < 0 or q.x >= n or q.y >= n: continue
+				var other := field[q.y*n+q.x]
+				if (field[i] < 0) != (other < 0):
+					result[i] = minf(result[i],cell*absf(field[i])/(absf(field[i])+absf(other)))
+	for reverse in [false,true]:
+		for row in n:
+			var y: int = n-1-row if reverse else row
+			for col in n:
+				var x: int = n-1-col if reverse else col
+				var i := y*n+x
+				for offset in [Vector2i(-1,0),Vector2i(-1,-1),Vector2i(0,-1),Vector2i(1,-1)]:
+					var q: Vector2i = Vector2i(x,y) + (-offset if reverse else offset)
+					if q.x < 0 or q.y < 0 or q.x >= n or q.y >= n: continue
+					result[i] = minf(result[i],result[q.y*n+q.x]+cell*Vector2(offset).length())
+	for i in field.size():
+		if field[i] < 0: result[i] = -result[i]
+	return result

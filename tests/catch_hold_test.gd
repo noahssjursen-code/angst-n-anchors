@@ -129,6 +129,7 @@ func _test_shore_rsw_transfer_and_capacity() -> void:
 	pump.bind_receiver(bank)
 	await get_tree().process_frame
 	_check(pump.start_unload(boat), "landing pump accepts a trawler with catch")
+	pump.call("_process", 0.005) # Halfway through the connecting animation.
 	var hose := pump.get_node_or_null("FlexibleSuctionHose") as Node3D
 	_check(hose != null and hose.visible, "landing hose deploys when unloading starts")
 	pump.stop()
@@ -157,14 +158,9 @@ func _test_shore_rsw_transfer_and_capacity() -> void:
 
 
 func _test_official_trawler_runtime() -> void:
-	var record: Dictionary = {}
-	for entry in PrebuiltVesselCatalog.catalog_entries():
-		if str(entry.get("prebuilt_id", "")) == "fishing_trawler":
-			record = entry
-			break
-	_check(not record.is_empty(), "official fishing trawler exists")
-	if record.is_empty():
-		return
+	# An already-owned retired trawler must remain loadable after its stock is removed.
+	var fixture:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/retired_coastal_trawler.json"))
+	var record:Dictionary={"hull_id":fixture.hull_id,"prebuilt_layout":fixture.brick_layout,"prebuilt_name":fixture.name,"shaft_power_kw":fixture.shaft_power_kw}
 	var vessel_name := str(record.get("prebuilt_name", record.get("display", "Fishing trawler")))
 	var owned_record := VesselSpawn.normalize_record({
 		"uid": VesselSpawn.new_vessel_uid(str(record.get("hull_id", VesselSpawn.TRAWLER_SMALL_ID))),
@@ -185,15 +181,15 @@ func _test_official_trawler_runtime() -> void:
 	var systems := boat.get_fishing_systems()
 	var holds := boat.get_catch_holds()
 	_check(systems.size() == 1, "official trawler mounts one live fishing system")
-	_check(holds.size() == 1, "official trawler mounts one insulated catch hold")
-	if systems.size() == 1 and holds.size() == 1:
+	_check(holds.size() == 2, "official trawler mounts two insulated catch holds")
+	if systems.size() == 1 and holds.size() == 2:
 		var system: FishingSystem = systems[0]
 		boat.freeze = true
 		system.catch_interval_seconds = 0.01
 		system.apply_trawl_desired(true)
 		system.call("_physics_process", 0.02)
 		system.call("_physics_process", 0.01)
-		_check(system.get_activity_status() == "ACTIVE", "official trawler reports active fishing")
+		_check(system.get_activity_status() == system.imported_rig.activity_label(), "Trawler reports its gear deployment animation while setting")
 		_check(is_equal_approx(holds[0].state.total_mass_kg(), 250.0), "official trawler receives catch data")
 	remove_child(boat)
 	boat.free()

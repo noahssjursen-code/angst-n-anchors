@@ -26,7 +26,7 @@ func _run_hard_test() -> void:
 	var vessel_uid := VesselSpawn.new_vessel_uid("hull_28x10")
 	var layout_v1: Dictionary = {}
 	for entry in PrebuiltVesselCatalog.catalog_entries():
-		if str(entry.get("prebuilt_id", "")) == "fishing_trawler":
+		if str(entry.get("prebuilt_id", "")) == "fishing_hook_line":
 			layout_v1 = (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)
 			break
 	_check(not layout_v1.is_empty(), "certified fixture layout is available")

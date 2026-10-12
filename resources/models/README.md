@@ -2002,3 +2002,24 @@ models remain visible across the channel; only near buildings create collision.
 These are closed scenery exteriors, without resident simulation or interiors.
 Inspect via `tests/coastal_building_review.tscn` and the production-world
 `tests/coastal_settlement_review.tscn`, both with `--shipyard-playtest`.
+
+
+## Manual fishing assets (12 October 2026)
+
+Original rod and six fish GLBs live in fishing_items/. Blender sources and
+original skin textures live in _source/fishing_items/. Run
+build_fishing_items.py in Blender background mode to rebuild the portable rod,
+installed hook_line_station and all fish. build_fish_meshes.py rebuilds only fish.
+The older coastal outfit builder alone does not rebuild the portable rod.
+
+Keep FishingRod, RodFlex, LineTip, RightGrip, LeftGrip and ReelCrank pivots.
+LeftGrip follows the crank; runtime arm posing preserves joint lengths. All fish
+have an authored MouthHook at the lip, +X head direction, a tail swim clip and
+original textured skin. Runtime orients the head toward the line and offsets
+from MouthHook after applying specimen scale; never attach line to mesh origin.
+Reference photos were studied, not redistributed as texture maps.
+
+Inspect rod_fishing_showcase and fish_pool_showcase. They support --capture and
+archive Godot screenshots under Pictures/machinescreenshots. Use
+--shipyard-playtest to isolate saves. See docs/fishing-outfits.txt for controls,
+research, test coverage, gameplay tuning and remaining work.

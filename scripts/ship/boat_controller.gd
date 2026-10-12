@@ -88,10 +88,10 @@ func deactivate() -> void:
 		helmed_count = maxi(helmed_count - 1, 0)
 	_active         = false
 	_thruster_mode  = 0
-	_throttle       = 0.0
 	_rudder         = 0.0
 	_lateral        = 0.0
-	_throttle_stage_idx = _nearest_stage_idx(0.0)
+	# Dead slow, half ahead, full ahead and the rest stay latched. Leaving the
+	# wheel centers the rudder; it does not put the engine in neutral.
 	if _boat_body != null:
 		WaveSurface.clear_coupled_vessel_if(_boat_body)
 	if not autopilot_keeps_watch:

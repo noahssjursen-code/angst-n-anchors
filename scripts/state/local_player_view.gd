@@ -8,6 +8,7 @@ signal company_changed(summary: Dictionary)
 signal helm_changed(boat: Node) # null when not helming
 signal contracts_changed(contracts: Array) # kept empty until trade rewrite
 signal voyage_changed(snapshot: Dictionary)
+signal fishing_changed(snapshot: Dictionary)
 
 
 var _session: Node = null
@@ -15,14 +16,19 @@ var _catalog: Node = null
 var _state: Node = null
 var _helmed: Node = null
 var _presentation_tick := 0.0
+var _view_rod: RodFishingStation
 
 
 func _process(delta: float) -> void:
 	if get_tree().get_first_node_in_group("player") == null: return
 	_presentation_tick -= delta
-	if _presentation_tick > 0.0: return
-	_presentation_tick = 0.1
-	voyage_changed.emit(get_voyage_snapshot())
+	if _presentation_tick <= 0.0:
+		_presentation_tick = 0.1
+		voyage_changed.emit(get_voyage_snapshot())
+	# A reaction-based instrument needs render-rate state. Reuse the rod resolved
+	# by the slow ship snapshot; no contracts, habitat scans or tree searches here.
+	if is_instance_valid(_view_rod) and _view_rod.working and not is_helming() and not WorldGateway.is_remote():
+		fishing_changed.emit(_view_rod.snapshot())
 
 
 func service_snapshot(npc: NpcInteractable) -> Dictionary:
@@ -31,11 +37,15 @@ func service_snapshot(npc: NpcInteractable) -> Dictionary:
 
 func get_voyage_snapshot() -> Dictionary:
 	var ship := get_active_ship() as BoatBody
+	_view_rod = ship.get_node_or_null("RodFishingStation") as RodFishingStation if ship != null else null
 	var result := {"helming": is_helming(), "ship": false, "name": "", "objective": "Speak to the shipwright to buy your first vessel."}
 	if ship == null:
 		if _session != null and not _session.data.owned_vessels.is_empty():
 			result.objective = "Ask the harbourmaster to deploy your vessel at a suitable quay."
 		return result
+	var sounder := ship.get_node_or_null("ShipSounder")
+	if sounder != null: result["sonar"] = sounder.snapshot()
+	if _view_rod!=null and not WorldGateway.is_remote():result["fishing"]=_view_rod.snapshot()
 	result.ship = true
 	result.name = VesselSpawn.vessel_name_of(get_active_vessel_record())
 	var local_velocity := ship.global_basis.inverse() * ship.linear_velocity
@@ -81,8 +91,30 @@ func get_voyage_snapshot() -> Dictionary:
 	return result
 
 
+func get_catch_library(hold_id: String) -> Dictionary:
+	for hold in CatchHoldComponent.get_all_for_ship(get_active_ship()):
+		if hold.hold_id!=hold_id:continue
+		var items:Array=[]
+		for lot in hold.state.lots:
+			var item:=lot.to_dict();var species:=FishCatalog.species(lot.species_id)
+			item.merge({"name":species.get("name",lot.species_id.capitalize()),"norwegian_name":species.get("norwegian_name",""),"rarity":species.get("rarity",""),"description":species.get("description","Bulk catch from this vessel."),"value_marks":roundi(FishingLandingService.lot_value(lot,lot.mass_kg))},true)
+			items.append(item)
+		var states:Array[CatchHoldState]=[hold.state]
+		return {"items":items,"mass_kg":hold.state.total_mass_kg(),"capacity_kg":hold.state.capacity_kg,"value_marks":FishingLandingService.quote(states).value_marks}
+	return {}
+
 func get_interaction_hint() -> String:
 	if is_helming(): return "F  Leave helm"
+	var ship := get_active_ship()
+	var rod := ship.get_node_or_null("RodFishingStation") as RodFishingStation if ship != null else null
+	if rod != null:
+		if rod.can_interact(): return rod.equipment_prompt()
+	var pots: Node = ship.get_node_or_null("CrabPotStation") if ship != null else null
+	if pots != null and pots.has_method("hint"):
+		var pot_hint := str(pots.call("hint"))
+		if not pot_hint.is_empty(): return pot_hint
+	for hold in CatchHoldComponent.get_all_for_ship(ship):
+		if hold.can_inspect(): return "F  Inspect catch crate"
 	var player := get_tree().get_first_node_in_group("player") as CharacterBody3D
 	if player == null: return ""
 	for npc: Node in get_tree().get_nodes_in_group("port_service_npc"):

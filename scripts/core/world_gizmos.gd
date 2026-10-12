@@ -10,9 +10,15 @@ const LAYER_PORT_LAYOUT := "port_layout"
 const LAYER_CRANES := "cranes"
 const LAYER_BERTH_LANES := "berth_lanes"
 const LAYER_NAVIGATION := "navigation"
+const LAYER_BRIDGES := "bridges"
+const LAYER_FISHING := "fishing_schools"
 const LAYER_META := &"world_gizmo_layer"
 
 const LAYERS: Array[Dictionary] = [
+	{"id": LAYER_FISHING, "label": "FISH SCHOOLS & CATCH AREAS",
+		"hint": "Fish, school depth and 70 m bait radius. Visible through water; seabed can block attraction."},
+	{"id": LAYER_BRIDGES, "label": "BRIDGE CANDIDATES",
+		"hint": "Cyan / pink landings; yellow island networks, green mainland shortcuts. Plans in background on first use."},
 	{"id": LAYER_NAVIGATION, "label": "SHIPPING TRAFFIC NETWORK",
 		"hint": "Directional lanes, blocks, chain signals, port gates and holding queues"},
 	{"id": LAYER_BERTH_LANES, "label": "LEGACY BERTH CURVES",

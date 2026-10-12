@@ -7,7 +7,7 @@ extends Node3D
 const VesselSpawnScript := preload("res://scripts/ship/vessel_spawn.gd")
 const PrebuiltCatalogScript := preload("res://scripts/ship/prebuilt_vessel_catalog.gd")
 
-const DISPLAY_PREBUILT_ID := "fishing_trawler"
+const DISPLAY_PREBUILT_ID := "fishing_hook_line"
 const STRIP_CHILDREN := ["BoatController", "BoatCamera", "BoatAudio"]
 const VESSEL_START_POSITION := Vector3(15.0, 0.0, 7.0)
 const CAMERA_POSITION := Vector3(-22.0, 6.8, 29.0)

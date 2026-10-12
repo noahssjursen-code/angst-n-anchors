@@ -44,7 +44,7 @@ cabin_seats(trawler,2.92,0)
 # Roof edge outside the walk route. These housings are static equipment.
 add(trawler,'marine_exhaust_stack',1.08,5.228,-.55,colors={'wall':[.21,.28,.29]})
 add(trawler,'wall_vent_louvre',1,2.92,0,180)
-finish(trawler,'fishing_trawler','Coastal Trawler',300,5600)
+# Small trawler stock retired; coastal_fishing/assemble_outfits.py owns fishing stock.
 
 cargo = load('coastal_cargo')
 cargo['parts'] = [p for p in cargo['parts'] if p['asset_id'] not in ['hatch_cover_5x4','hold_coaming_5x8']]

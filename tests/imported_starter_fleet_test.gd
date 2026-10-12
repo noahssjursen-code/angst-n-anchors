@@ -43,10 +43,16 @@ func _ready() -> void:
 		check(absf(drive.rudder.rotation.y) > .1, "Starter rudder responds")
 		match option.id:
 			"fishing":
-				var fishing := boat.get_fishing_systems()[0]
-				for i in 5: fishing._complete_one_haul_crate()
-				check(is_equal_approx(fishing.catch_totals().mass_kg,1200), "Catch fills both 600 kg tanks including split haul")
-				check(fishing.get_activity_status()=="HOLD FULL", "Full vessel catch status")
+				check(boat.get_fishing_systems().is_empty(), "Starter must not mount trawl machinery")
+				check(boat.has_node("RodFishingStation"), "Starter mounts functional hook-line station")
+				check(boat.get_catch_holds().size()==1, "Starter has one catch tank")
+				check(ImportedVesselLayout.has_capability(layout,"fishing"), "Rod and tank qualify for fishing quay")
+				var without_rod:Dictionary=layout.duplicate(true)
+				without_rod.parts=without_rod.parts.filter(func(p:Dictionary)->bool:return p.asset_id!="hook_line_station")
+				boat.apply_brick_layout(without_rod)
+				check(not boat.has_node("RodFishingStation"), "Removing rod removes gameplay and stale socket references")
+				boat.apply_brick_layout(layout)
+				check(boat.has_node("RodFishingStation"), "Refitting rod restores gameplay")
 			"general_cargo":
 				var pads := boat.get_cargo_pads()
 				check(pads.size()==2, "Two working cargo beds")

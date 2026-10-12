@@ -51,6 +51,24 @@ static func place_ports(
 		requested_count: int = DEFAULT_PORT_COUNT,
 		names: PackedStringArray = PackedStringArray(),
 ) -> Array[PortDefinition]:
+	if layout==null or requested_count<=0: return []
+	var key := "ports-v1:%s:%d:%d:%s" % [layout.layout_checksum,PortDefinition.CURRENT_PORT_GENERATION_VERSION,requested_count,str(names)]
+	var cached := WorldGenerationCache.read(key)
+	if cached.has("ports"):
+		var restored: Array[PortDefinition] = []
+		for record: Dictionary in cached.ports: restored.append(PortDefinition.from_dict(record))
+		return restored
+	var generated := _place_ports_uncached(layout,requested_count,names)
+	var records: Array = []
+	for port in generated: records.append(port.to_dict())
+	WorldGenerationCache.write(key,{"ports":records})
+	return generated
+
+
+static func _place_ports_uncached(
+		layout: WorldLayout, requested_count: int = DEFAULT_PORT_COUNT,
+		names: PackedStringArray = PackedStringArray(),
+) -> Array[PortDefinition]:
 	var result: Array[PortDefinition] = []
 	if layout == null or requested_count <= 0:
 		return result
@@ -452,8 +470,9 @@ static func yaw_for_seaward(seaward: Vector2) -> float:
 
 static func _build_candidates(layout: WorldLayout) -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
-	for contour_index in range(layout.coastline_contours.size()):
-		var contour := layout.coastline_contours[contour_index]
+	var coast_contours := layout.macro_coastline_contours()
+	for contour_index in range(coast_contours.size()):
+		var contour := coast_contours[contour_index]
 		if contour.size() < 2:
 			continue
 		var a := contour[0]

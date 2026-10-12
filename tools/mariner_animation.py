@@ -67,7 +67,7 @@ def author(rig,bones,out):
                 rig.pose.bones[upper].rotation_quaternion=adduct @ axis_rotation(upper,(1,0,0),swing)
                 rig.pose.bones[fore].rotation_quaternion=axis_rotation(fore,(1,0,0),elbow)
                 for k,digit in enumerate(['index','middle','ring','little']):
-                    for joint,mult in [('01',1),('02',1.25)]:
+                    for joint,mult in [('01',1),('02',1.25),('03',.75)]:
                         name=digit+'_'+joint+'.'+side
                         bind_axis=(bones['forearm.'+side][1]-bones['forearm.'+side][0]).normalized()
                         curl_axis=Quaternion(bind_axis,sign*math.pi/2)@Vector((1,0,0))
