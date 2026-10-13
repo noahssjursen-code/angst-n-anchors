@@ -1,0 +1,156 @@
+LOCAL MULTIPLAYER BLUEPRINT IMPLEMENTATION — 13 OCTOBER 2026
+
+Repositories
+  Game:   C:\Users\noahs\Documents\angst-n-anchors (web/kontor)
+  Server: C:\Users\noahs\Documents\angst-n-anchors-mp (main)
+  Changes are in the working trees, not deployed to the public server.
+
+LOCAL SERVER
+
+Docker project: angst-anchors-dev
+HTTP: http://127.0.0.1:8080
+Game transport: 127.0.0.1:7777 UDP
+PostgreSQL: 127.0.0.1:5432
+Persistent dev volume: angst-anchors-dev_postgres_data
+Godot's existing multiplayer "Local server" preset targets these addresses.
+
+From the server repository:
+  docker compose -p angst-anchors-dev -f docker-compose.yml -f docker-compose.dev.yml up --build -d --wait
+
+The dev overlay advertises localhost and binds exposed ports to loopback.
+It uses separate container names and a separate project volume. Stopping the
+containers does not delete the dev database. The Docker context excludes .env
+files, logs, binaries and web dependencies.
+
+WHAT NOW WORKS
+
+1. Submit a complete known-parts ship layout with authenticated POST /v1/vessels.
+   The existing captain-owned UUID vessel identity is preserved. This is the
+   existing authoring/registration endpoint, not a new vessel purchase service.
+
+2. The server validates the imported layout and saves an immutable construction
+   in PostgreSQL in the same transaction as the vessel's construction reference.
+   Responses retain brick_layout/layout_hash and add construction_id/catalog_hash.
+
+3. PUT /v1/vessels accepts a new layout for an owned vessel and publishes a new
+   immutable version. Old versions stay fetchable. Rejected edits change neither
+   the saved construction reference nor associated fleet state.
+
+4. GET /v1/vessels?id=<vessel-uuid> supplies the public vessel identity/build fields.
+   GET /v2/constructions?id=<sha256> supplies the exact immutable layout and derived
+   cargo sockets. It supports ETag and immutable HTTP caching.
+
+5. Harbour deployment fetches the accepted vessel and construction before claiming
+   a berth and building. It does not fall back to an unsaved local draft if fetch
+   fails. Delayed replies from cancelled deployments or old sessions are ignored.
+
+6. Ship discovery uses the existing nearby UDP entity stream. Metadata includes
+   vid (durable vessel), cid (immutable construction) and lh (legacy layout hash).
+   The server verifies the publishing captain owns vid and supplies the accepted
+   cid, lh and hull type. A foreign vessel identity is rejected.
+
+7. A cold observer fetches the unknown construction and assembles it using the
+   installed Godot parts. The ship is revealed only after fitting the accepted
+   layout. The cache is bounded to 64 versions, four simultaneous requests, with
+   retries independent of whether the ship is moving. Stale requests cannot
+   overwrite a newer refit, a reused entity or a new server session.
+
+8. Accepted layouts, identity and hashes remain paired in the captain's ledger.
+   Remote save completion is explicit: failure returns an empty record. The ledger
+   is not updated optimistically before server acceptance. Stable local UIDs survive
+   fleet refresh even where imported vessels have no individual scene file.
+
+9. Successful same-hull refits also update the owner's matching live ship and
+   boarding bindings. Changed live construction is blocked with containers, bulk
+   cargo, fish or an occupied helm. If contents change while an HTTP save is in
+   flight, local contents are preserved and the accepted build awaits safe
+   redeployment. Server-side inventory/refit transaction enforcement is still
+   part of the contents migration below.
+
+CONSTRUCTION CONTENT
+
+  schema_version: 1
+  id: SHA256 identifying catalog + normalized layout
+  catalog_hash: exact exported gameplay catalog
+  layout: full authored hull, parts, placement, paint, engine and supported state
+  cargo_slots: stable IDs and local positions derived from actual installed beds
+
+An authored part gets a stable instance_id. A container slot is derived from its
+installed bed and CargoDatum, not from the vessel's display name. There is no
+requirement that another client has seen that combination of parts before.
+
+Validation limits imported publication to known hull/part/engine IDs, compatible
+engine/hull references, supported typed fields, finite bounded placement and valid
+surface polygons. It caps payload size, parts and tessellated surface work.
+All five current stock layouts preserve their authored fields through validation.
+
+REPRODUCIBLE TESTS
+
+From the game repository, using the Godot console executable:
+  ./tools/check_local_multiplayer.ps1 -Godot '<absolute Godot console path>' -CheckPersistence
+
+This checks matching game/server catalog and engine definitions, runs Go tests,
+starts/rebuilds local Docker, optionally runs an isolated PostgreSQL restart test,
+imports Godot scripts, and runs the native regression/integration scenes.
+
+Native flow test:
+  Godot --headless --path . res://tests/mp_blueprint_flow_test.tscn -- --shipyard-playtest
+  Report: .godot/tests/mp_blueprint_flow_report.json
+
+The flow test creates two independent test accounts, reliable sessions and UDP
+peers against local Docker. It publishes a custom layout, discovers it by range,
+uses the real owner builder and remote renderer, verifies part identity/placement,
+paint, engine and two cargo sockets, refits, reconnects and streams out. Test
+credentials and captain data are isolated from the player's saved profiles.
+
+Actual rendered review uses the same test with --capture-blueprint-flow and a
+Forward+ renderer. Captures are archived in C:\Users\noahs\Pictures\machinescreenshots.
+
+Other native checks:
+  tests/vessel_blueprint_replication_test.tscn — stale replies, cached builds,
+    accepted fleet hydration and live owner synchronization.
+  tests/harbour_blueprint_deployment_test.tscn — saved identity, old sessions,
+    cancelled deployment and duplicate berth replies.
+  tests/authority_vessel_assembly_test.tscn — five real builds and cargo socket
+    parity, contents hydration, repeated application and unloading.
+
+Final verification: the combined local check command passed on 13 October 2026.
+The headless integration passed 81 assertions; the rendered run passed 83 including
+two archived captures. It verifies all 128 parts in the custom test ship, production
+registration from an empty ledger, rejected/accepted saves, owner and observer
+refits, forged-metadata correction, foreign-vessel rejection, reconnect and range
+removal. Go tests and vet passed; the live PostgreSQL restart test also passed.
+
+Reviewed images:
+  C:\Users\noahs\Pictures\machinescreenshots\mp-blueprints-2026-10-13T13-56-57-32856-original-owner-and-cold-observer.png
+  C:\Users\noahs\Pictures\machinescreenshots\mp-blueprints-2026-10-13T13-56-58-32856-live-owner-and-observer-refit.png
+
+Server restart test:
+  tests/persistence_integration.ps1 (inside the server repository)
+  Uses its own disposable PostgreSQL container. Publishes/refits an actual ship,
+  restarts the server, checks both immutable versions and the latest vessel
+  reference, account isolation, document revision conflicts and deletion cascade.
+
+BOUNDARIES STILL REQUIRING WORK
+
+This establishes the network construction path for combinations of installed parts.
+It does not add a finished in-world custom-ship commissioning/purchase UI, arbitrary
+uploaded meshes/textures/scripts, authoritative build pricing or complete overlap/
+seaworthiness enforcement. Legacy cell-layout ships remain an explicit compatibility
+path without immutable construction IDs. Changing an existing vessel's hull requires
+a new deployment/entity cycle; same-hull refits are the tested path.
+
+The earlier company/cargo authority foundation remains separate from the current
+captain-owned UUID vessel gameplay path. This work does not claim that live fish,
+crab traps, cargo or all company economy operations have migrated to authoritative
+publication. Construction cargo sockets are derived now; actual dynamic contents
+still need their dedicated command/event integration.
+
+The two-client integration uses independent client stacks in one Godot process,
+not two complete gameplay windows. It exercises real HTTP/UDP/PostgreSQL and real
+Godot assembly. Final full-world usability and network impairment/scale testing
+remain additional acceptance stages.
+
+Keep authored engine_presets.json synchronized with the server copy. The local
+check/build tools reject drift. Gameplay catalog hashes cover the exported catalog,
+not every installed mesh/material binary; asset-pack versioning is future work.

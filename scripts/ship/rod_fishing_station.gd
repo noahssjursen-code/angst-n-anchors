@@ -34,9 +34,18 @@ var _tackle:Node3D
 var _line:MeshInstance3D
 var _reserved_fish:=""
 var _rope:=FishingLineShape.new()
+var _pending_catches: Dictionary = {}
+var remote_player: Node3D
+var remote_pose := Transform3D.IDENTITY
+var remote_hook := Vector3.ZERO
+var visual_hook := Vector3.ZERO
+var _remote_display_pose := Transform3D.IDENTITY
+var _remote_display_hook := Vector3.ZERO
+var _remote_initialized := false
 
 func _init()->void:
 	add_to_group("ship_owner_only")
+	add_to_group("rod_fishing_stations")
 
 func _ready()->void:
 	# Player._process finalizes deck riding and camera pose at priority zero.
@@ -46,7 +55,7 @@ func _ready()->void:
 	while node!=null:
 		if node is BoatBody: _boat=node;break
 		node=node.get_parent()
-	if _boat==null:return
+	if _boat==null and remote_player==null:return
 	assert(authored_station!=null,"Rod gameplay requires installed authored equipment")
 	_interaction = Area3D.new()
 	_interaction.collision_layer = 16
@@ -77,8 +86,9 @@ func _ready()->void:
 	_splash.mesh=ring;var foam:=StandardMaterial3D.new();foam.albedo_color=Color(.85,.94,.93,.7);foam.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
 	_splash.material_override=foam;_splash.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF;add_child(_splash);_splash.hide()
 	_stored_rod=_rod_root
-	PlayerSession.vessels_synced.connect(_refresh_equipment)
-	call_deferred("_refresh_equipment")
+	if remote_player==null:
+		PlayerSession.vessels_synced.connect(_refresh_equipment)
+		call_deferred("_refresh_equipment")
 
 
 func _deck_player() -> CharacterBody3D:
@@ -88,7 +98,8 @@ func _deck_player() -> CharacterBody3D:
 	return player
 
 func can_interact() -> bool:
-	if WorldGateway.is_remote() or GameMenu.is_modal_open(): return false
+	if remote_player!=null:return false
+	if not _authority_available() or GameMenu.is_modal_open(): return false
 	var player := _deck_player()
 	if player == null or player.global_position.distance_to(authored_station.global_position) > 2.4: return false
 	var camera := player.get_node("Camera3D") as Camera3D
@@ -100,6 +111,7 @@ func can_interact() -> bool:
 	return collider == _interaction or (collider != null and authored_station.is_ancestor_of(collider))
 
 func _unhandled_input(event: InputEvent) -> void:
+	if remote_player!=null:return
 	if not event.is_action_pressed("interact") or GameMenu.is_modal_open(): return
 	if working:
 		for hold in CatchHoldComponent.get_all_for_ship(_boat):
@@ -120,7 +132,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _carry(value: bool) -> void:
 	if value:
-		var player := _deck_player()
+		var player:Node3D = remote_player if remote_player!=null else _deck_player()
 		if player == null: return
 		_carried = Node3D.new();player.add_child(_carried)
 		_carried.top_level=true
@@ -149,15 +161,15 @@ func _carry(value: bool) -> void:
 		for joint in _flex:joint.rotation=Vector3.ZERO
 
 func _exit_tree() -> void:
-	if session is HarpeFishingSession:session.release_fish()
-	if FishingField.habitat!=null:FishingField.habitat.set_hooked(_reserved_fish,false)
+	if remote_player==null:
+		if session is HarpeFishingSession:session.release_fish()
+		if FishingField.habitat!=null:FishingField.habitat.set_hooked(_reserved_fish,false)
 	if is_instance_valid(_hand_pose):_hand_pose.release()
 	if is_instance_valid(_carried):
 		# Reparenting during teardown is unsafe. These visuals belong to this ship.
 		_carried.queue_free()
 
 func snapshot()->Dictionary:
-	if WorldGateway.is_remote():return {}
 	return {"total_catch_kg":_batch_mass(),"total_catch_value":_batch_value(),"equipment":equipment_id,"hook_count":session.catches.size() if session is HarpeFishingSession else 0,"working":working,"phase":session.phase,"line_m":session.depth_m,"bottom_m":session._bottom,"line_action":session.line_action,"tension":session.tension,"message":session.message,"charge":session.charge,"control":session.control,"fish_position":session.fish_position,"band_width":session.band_width,"progress":session.progress,"catch":session.catch_data}
 
 func _free_space() -> float:
@@ -177,7 +189,7 @@ func _drop() -> void:
 	session.drop(WaveSurface.WATER_LEVEL-FishingField.habitat.bottom(_cast_at),_free_space())
 
 func _physics_process(delta:float)->void:
-	if _boat==null or FishingField.habitat==null or WorldGateway.is_remote():return
+	if _boat==null or FishingField.habitat==null or not _authority_available():return
 	if LocalPlayerView.get_active_ship()!=_boat and not (inspect_mode and ShipyardPlaytestMode.active()):return
 	var controls:=((working and _deck_player()!=null) or (inspect_mode and ShipyardPlaytestMode.active())) and not LocalPlayerView.is_helming() and not GameMenu.is_modal_open()
 	if working and _deck_player()==null:
@@ -202,7 +214,7 @@ func _physics_process(delta:float)->void:
 	_last_phase=session.phase
 
 func _process(delta: float) -> void:
-	if _boat==null or not is_instance_valid(_tip):return
+	if (_boat==null and remote_player==null) or not is_instance_valid(_tip):return
 	if not working and session.phase=="stowed" and not _line.visible:return
 	_update_visual(delta,working and not GameMenu.is_modal_open())
 
@@ -214,6 +226,21 @@ func _store_catch(data: Dictionary) -> void:
 	var record:=data.duplicate(true)
 	record.merge({"lot_id":PlayerData.new_uuid(),"caught_game_hours":WorldClock.get_game_hours_elapsed(),"caught_position":_cast_at,"vessel_id":str(_boat.get_meta("vessel_uid","")),"owner_id":str(_boat.get_meta("owner_player_id",""))},true)
 	var lot:=CatchLot.create(record)
+	if WorldGateway.is_remote():
+		var service := WorldGateway.fishing_catches
+		if service == null or not _authority_available():
+			session.message = "Server unavailable; catch was not stored"
+			return
+		var vessel_id := str(_boat.get_meta("server_vessel_id", ""))
+		for hold in CatchHoldComponent.get_all_for_ship(_boat):
+			if hold.state.available_kg() - service.pending_mass(vessel_id, hold.hold_id) < lot.mass_kg: continue
+			if not service.catch_finished.is_connected(_on_catch_finished): service.catch_finished.connect(_on_catch_finished)
+			_pending_catches[lot.lot_id] = true
+			service.submit(vessel_id, hold.hold_id, lot.to_dict(), data)
+			session.message = "Storing catch on server…"
+			return
+		session.message = "Crate full; fish released"
+		return
 	for hold in CatchHoldComponent.get_all_for_ship(_boat):
 		if hold.state.available_kg()>=lot.mass_kg:
 			if hold.accept_lot(lot).is_empty():
@@ -222,7 +249,22 @@ func _store_catch(data: Dictionary) -> void:
 				return
 	session.message+=" · Crate full; fish released"
 
+func _authority_available() -> bool:
+	if remote_player!=null:return false
+	if not WorldGateway.is_remote(): return true
+	return WorldGateway.is_ready() and WorldGateway.fishing_catches != null and FishingCatchReplication.owns_ship(_boat)
+
+func _on_catch_finished(lot_id: String, _ok: bool, message: String) -> void:
+	if not _pending_catches.has(lot_id): return
+	_pending_catches.erase(lot_id)
+	session.message = message
+
 func _update_visual(delta: float, controls: bool) -> void:
+	if remote_player!=null:
+		var blend:=1.0-exp(-delta*18.0) if _remote_initialized else 1.0
+		_remote_display_pose=_remote_display_pose.interpolate_with(remote_pose,blend)
+		_remote_display_hook=_remote_display_hook.lerp(remote_hook,blend)
+		_remote_initialized=true
 	var fishing:=session.phase in ["casting","fishing","bite","fighting"]
 	if equipment_id=="harpe":
 		var stored:=_rod_root.find_child("StoredTackle",true,false) as Node3D
@@ -230,11 +272,14 @@ func _update_visual(delta: float, controls: bool) -> void:
 	var time:=float(Time.get_ticks_msec())*.001
 	var target_bend:=.09+.16*session.tension if session.phase=="fighting" else (.045+.015*sin(time*25) if session.phase=="bite" else (.028 if fishing else 0.0))
 	_bend=lerpf(_bend,target_bend,1-exp(-delta*12))
-	var pull:=_rod_root.global_basis.inverse()*(Vector3(_cast_at.x,WaveSurface.WATER_LEVEL-session.depth_m,_cast_at.y)-_tip.global_position).normalized()
+	var pull_target:=remote_player.to_global(_remote_display_hook) if remote_player!=null else Vector3(_cast_at.x,WaveSurface.WATER_LEVEL-session.depth_m,_cast_at.y)
+	var pull:=_rod_root.global_basis.inverse()*(pull_target-_tip.global_position).normalized()
 	var bend_axis:=Vector3.FORWARD.cross(pull).normalized()
 	if bend_axis.length_squared()<.5:bend_axis=Vector3.LEFT
 	for i in _flex.size():_flex[i].quaternion=Quaternion(bend_axis,_bend*float(i+1)/_flex.size())
-	if is_instance_valid(_carried):
+	if is_instance_valid(_carried) and remote_player!=null:
+		_carried.global_transform=remote_player.global_transform*_remote_display_pose
+	elif is_instance_valid(_carried):
 		var player:=_deck_player()
 		if player==null:return
 		var camera:=player.get_node("Camera3D") as Camera3D
@@ -271,6 +316,8 @@ func _update_visual(delta: float, controls: bool) -> void:
 		var sideways:=Vector3(tip.z-hook.z,0,hook.x-tip.x).normalized()
 		hook+=sideways*(session.fish_position-.5)*3.0*remaining
 		hook=hook.lerp(tip-Vector3.UP*1.2,session.progress*session.progress)
+	if remote_player!=null:hook=remote_player.to_global(_remote_display_hook)
+	visual_hook=hook
 	if fishing:
 		_tackle.global_position=hook;_tackle.global_basis=Basis.IDENTITY
 		var slack:=.04 if session.phase=="fighting" else (.65 if session.line_action=="pay" else .20)
@@ -302,7 +349,8 @@ func _update_visual(delta: float, controls: bool) -> void:
 		_fish.scale=Vector3.ONE*float(session.catch_data.length_cm)/100
 		if session.phase=="landed":
 			var camera:=get_viewport().get_camera_3d()
-			_fish.global_transform=Transform3D(camera.global_basis, camera.global_position+camera.global_basis*Vector3(-.10,-.16,-1.35))
+			var anchor:=remote_player.global_transform*Transform3D(Basis.IDENTITY,Vector3(0,1.2,-.8)) if remote_player!=null else Transform3D(camera.global_basis, camera.global_position+camera.global_basis*Vector3(-.10,-.16,-1.35))
+			_fish.global_transform=anchor
 			_fish.scale=Vector3.ONE*minf(1.1,float(session.catch_data.length_cm)/100)
 			_fish.rotate_object_local(Vector3.UP,sin(time*2)*.10)
 			if id=="halibut":_fish.rotate_object_local(Vector3.RIGHT,.85)

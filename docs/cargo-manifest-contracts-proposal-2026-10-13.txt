@@ -1,0 +1,329 @@
+UNIFIED VESSEL MANIFESTS, GOODS AND CONTRACTS
+Code-grounded proposal — 13 October 2026
+Status: DESIGN / REVIEW FIXTURES. New gameplay rules and endpoints below are
+proposed, not implemented by this exploration.
+
+Validation of this exploration
+------------------------------
+The native inspector passed its headless checks for all 32 records: JSON display
+and export round trips, unique IDs, related-record links, search, selection,
+construction hash references and isolation from player saves.
+The proposal examples also passed consistency checks for 20+35=55 windows,
+stock/allocation/manifest quantity agreement, 11+1=12 traps, an independent
+towed vessel, and fish that have no contract.
+Rendered inspector reviewed; screenshot archived at:
+C:/Users/noahs/Pictures/machinescreenshots/godot-data-models-1791894912.png
+These checks validate the review material and inspector, not future gameplay.
+
+Recommendation
+--------------
+Use a common, publicly queryable VesselManifest for every vessel. It is a read
+view assembled by the authority from goods, placement and work records.
+Keep a separate contracts board whose jobs reference those same records.
+
+The manifest answers: what is aboard, where is it, whose is it, and what work
+is this ship doing? A contract answers: who promised what to whom, under what
+conditions, and what earns payment? Fishing without a buyer still creates
+inventory. Buying/owning a container is separate from owning what is inside it.
+NPC and player companies use identical records and validation.
+
+Review this proposal in Godot
+----------------------------
+Open scenes/showcases/data_models_showcase.tscn and run F6.
+The first three groups contain 15 new, explicitly proposed records:
+- Container freight with 35 customer-owned windows aboard.
+- Linked order, delivery contract, allocation and receipt for 55 windows.
+- Fishing catch with individual specimen data, plus a recovered object.
+- Crab equipment: 11 traps aboard and one deployed, retaining the same ID.
+- LNG in a tank; fish-farm supplies/service; offshore deck/tank freight; towing.
+Click related-record buttons or export the selected JSON.
+
+resources/data/showcases/manifest_proposals.json is the reusable fixture file.
+It includes explanatory placeholders for future definitions, builds, companies
+and jobs. These are not live database rows or a complete importable save.
+The existing current-game examples and live authority lab remain separate.
+
+What exists today
+-----------------
+Game:
+- scripts/cargo/cargo_consignment.gd: transport-neutral description, but created
+  from a contract and embeds contract/destination/value/vessel fields.
+- container_unit.gd: one physical box with one commodity, mass, paint, route
+  and contract fields. It cannot describe multiple customer lots in one box.
+- bulk_cargo_lot.gd: commodity, tonnes and consignment, without durable lot
+  identity, owner/custodian or explicit location.
+- catch_lot.gd and catch_hold_state.gd: useful individual fish/lot data, species,
+  size, quality, capacity and provenance. These are local runtime records.
+- scripts/company/company_contracts.gd: another inventory-lot schema for company
+  stock, with ownership, location, quantity and reserved quantity.
+- freight_service.gd: generated offers and accepted jobs largely tied to one
+  selected ship, plus local loading/delivery counters and reservations.
+- scripts/state/local_player_view.gd::_snapshot_into_player_data does not save
+  the vessel's catch holds; serializable objects alone are not persistence.
+- scripts/ship/deployed_crab_pots.gd and crab_pot_station.gd: local trap records
+  and handling, with multiplayer disabled for normal interaction.
+- Old monetary names include marks and value_gold even where displayed currency
+  is NOK. Preserve old saves with an explicit migration, not a currency guess.
+
+Server:
+- internal/gameplay/models.go Cargo is container-shaped: container_type,
+  paint_variant, commodity_id, mass_kg, one contract and yard/vessel location.
+- Vessel.Cargo is slot ID -> cargo ID. Useful for an occupied container socket,
+  insufficient for a tank, multiple fish in a hold, or several lots in a box.
+- Contract has carrier/issuer, two ports, cargo IDs, reward and status. It does
+  not yet model a public offer lifecycle, partial quantities, procurement,
+  mixed objectives, subcontracted legs or service evidence.
+- internal/authority/gameplay.go provides transactional loading/unloading and
+  simple all-goods-delivered settlement. Settlement checks destination records
+  and transfers money, but does not implement general recipient acceptance or
+  the required stock custody/ownership handoff.
+- Public vessel_public currently exposes visible boxes, not the full manifest.
+  Detailed cargo and contracts are currently company-scoped.
+- The live /v1/vessels UUID records and blueprint store coexist with the
+  foundation/lab company-owned vessel projections. They must share one vessel
+  identity and writer before extending live inventory.
+- cargo_manifest_json in the legacy vessel row is not a working public,
+  authoritative manifest service.
+- /v2/contracts is PROTOCOL discovery, not the gameplay contracts board.
+- /v2/commands, /v2/state, /v2/projections and /v2/events already provide a useful
+  reliable transaction/snapshot/subscription foundation. PostgreSQL persists
+  command receipts, events and projections together.
+- ProjectionsFor currently scans/sorts in-memory records and returns all visible
+  matches. It is not yet an indexed, paginated world-market query API.
+- The existing local backend is not feature-parity with the Go gameplay lab.
+  An SP authority must use the same domain rules, or a tested equivalent,
+  before claiming the full game can run data-only in both modes.
+
+Data ownership: a small set of records with distinct jobs
+-------------------------------------------------------
+1. Definitions and construction
+   Item/species definitions say what a thing is, how it is measured, how its
+   appearance is resolved, which handling/storage it requires and which typed
+   components it supports. A physical container is packaging, not a commodity
+   named "containers" substituting for unknown contents.
+   An immutable accepted ship construction derives storage IDs, sockets, usable
+   deck zones, hold/tank capacities and service capabilities from installed
+   parts. New contents must not change the construction hash.
+   Capacities are evaluated data, never arbitrary values the player uploads.
+
+2. Inventory
+   An identified lot or indivisible specimen: definition, owner company,
+   custodian company, quantity, one location, condition and provenance.
+   Units are explicit; counts, grams and millilitres use integer base units.
+   Catalog definitions choose a canonical accounting unit. Tank volume and mass
+   may both matter, but one is accounting quantity and the other is derived or
+   validated through the chosen simulation rules. Never freely edit both.
+   Examples: 35 windows, one 9.2 kg cod, 600 kg feed, LNG, recovered supplies.
+   A specimen retains size/model variation for the catch library. Bulk fish
+   can aggregate; individual trophy fish must remain individually addressable.
+
+3. Physical entities / equipment and placement
+   A reusable container, trap, buoy or palletized machine has a stable identity,
+   definition, owner, custodian, location, appearance and validated components.
+   Existing placed-entity infrastructure should use this same identity.
+   Location is one parent: vessel storage, container interior, facility storage,
+   player's hands or world location. Disallow cyclic containment.
+   Slot-attached entities use stable part-instance/socket IDs. Free deck
+   placements use an accepted vessel-local position/rotation within a valid
+   zone. The public read view can resolve these to a transform for rendering.
+   Tare mass of the box plus descendant inventory mass gives carried mass;
+   do not also add the box's already-computed gross mass a second time.
+   Traps moving to the seabed keep their IDs. Their assigned-vessel reference
+   does not mean they are still aboard. Separate linked buoys keep their IDs.
+
+4. Work contracts
+   Issuer, provider and beneficiary company IDs; public offer/active/completed/
+   failed/cancelled state; typed objectives; locations/targets; acceptance
+   requirements; deadlines; reserved payment and payout policy.
+   Objective families: deliver specified goods, procure compatible goods,
+   perform a service, tow/escort a vessel. A contract may combine objectives.
+   Targets can be ports, warehouses, shipyards, rigs, farms, berths or vessels.
+   Provider assignment is to a company, with one or more vessels/legs over time.
+   Do not lock every job forever to the ship that first accepted it.
+   A single-carrier accepted contract is the first implementation. Large open
+   demands can later issue child jobs to several companies with explicit caps.
+   Define cancellation, failed cargo, return obligations and payment release.
+   Cargo value, asking price, freight reward and realized earnings are distinct.
+   Money proposal: {currency:"NOK", amount_minor:<integer ore>}. Existing whole-NOK
+   authority records need a versioned x100 conversion, not silent reinterpretation.
+
+5. Allocations, deliveries and material requirements
+   Allocations reserve specified quantities against contract objective lines.
+   Sum of active allocations cannot exceed available inventory. They are the
+   authority for reservations; cached totals are derived.
+   Immutable delivery receipts prove accepted quantity, recipient, destination
+   and source operation. They survive later inventory movement/consumption.
+   A build order can require 55 windows without requiring those windows to
+   exist immediately. A procurement job sources them; a transport job carries
+   existing stock. Connect both to that requirement, avoiding duplicate credit.
+   Keep transport-neutral CargoConsignment as a shipment/grouping reference
+   where multiple packages or legs need it. It must not be another stock ledger
+   or a second independent store of payment/progress.
+
+6. Manifest: one public read view
+   vessel_id, construction_id, manifest revision, snapshot cursor, sections:
+   onboard  — physical freight, contents, catch, equipment, supplies
+   work     — linked delivery/service/tow assignments and progress
+   deployed — assigned gear now elsewhere, excluded from onboard mass/capacity
+
+   Rows expose identity, definition, quantity, ownership/custody, placement or
+   storage, relevant typed attributes, destinations, contract references and
+   estimated value where useful. Aggregate rows can link to paginated details.
+   The view may repeat facts for convenient reading, but clients cannot write
+   it back as a replacement inventory. Canonical records are changed by commands.
+   Public here means readable by other game clients, including NPC companies'
+   manifests. Public reading does not grant mutation rights or expose tokens.
+   Full company wallets/membership administration are not part of a manifest.
+
+How each vessel family fits
+---------------------------
+Container vessel: reusable boxes in sockets; customer-owned lots inside.
+Fishing boat: catch specimens/lots in holds; tools; optional sales contracts.
+Crabber: stowed equipment and catch onboard; deployed traps in another section.
+Bulk carrier: quantity-based lots in compatible holds, with split/merge records.
+LNG/tanker: compatible cargo tanks and quantity/condition, distinct from fuel.
+Fish-farm service: feed/spares/gear onboard, plus work at specified farm assets.
+Offshore supply: deck packages, tank goods and return cargo for rig facilities.
+Tug: own supplies/equipment onboard, tow relation and service job under work.
+The towed vessel retains its own build, contents and ownership. Adding it to the
+tug's onboard inventory would give incorrect mass, ownership and reconstruction.
+
+The 55-windows example
+----------------------
+1. Your future ship build requires 55 windows at a specific shipyard.
+2. The requirement produces a public procurement/transport opportunity.
+3. A supplier's existing stock is sold/reserved under authority-approved terms.
+4. A player or NPC carrier accepts a job. Goods remain customer-owned.
+5. Loading moves their location into the carrier's container/hold. Both the
+   vessel manifest and the contract reference the same stock/allocation.
+6. First delivery accepts 20. Receipt records 20; demand still needs 35.
+7. Remaining 35 are shown aboard the next vessel, still linked to the objective.
+8. Final acceptance completes the delivery and makes payment eligible.
+9. Construction consumes the 55 reserved/accepted windows separately.
+   Moving them away before construction must invalidate availability; historical
+   delivery completion alone is not permission to build without the materials.
+
+Underway changes
+----------------
+A validated fishing outcome creates identified catch stock, reduces the relevant
+fish population as required by the simulation, fills compatible storage and
+publishes the revised manifest in one commit. The client does not choose its
+own fish weight, species, price or award count.
+
+Recovering an item moves its existing record from world/other custody to onboard
+storage. Recovery need not grant ownership: customer goods or salvage claims can
+retain existing/unresolved ownership.
+
+A pot catch transfer, trap state update and hold addition commit together.
+Replaying the request cannot duplicate a trap or harvest the same catch twice.
+Timed spoilage/soak/service progress uses world time and recorded outcomes,
+without requiring a rendered ship. No stored frame-by-frame physics is needed.
+
+Commands and publication (proposed extensions)
+---------------------------------------------
+Continue using WorldGateway and the existing server authority. No new parallel
+FleetManager, InventoryManager or ContractBoard autoload.
+
+Authority accepts intents such as contract.accept, inventory.transfer,
+equipment.deploy, equipment.recover and contract.delivery.accept. Validate
+company role, revisions, custody, availability, capability and authoritative
+operation evidence. Catch creation/arrival/service completion are trusted
+simulation outcomes, not a client declaring success. Operation cancellation
+credits only completed transfers; suspended crane cargo has an explicit parent.
+
+Each transaction saves source/destination changes, allocations/receipts, work
+progress, resulting manifests and any settlement together. An existing durable
+request ID returns the original outcome. Concurrent transfers cannot spend the
+same stock twice. A revision alone is not validation of quantities or permission.
+
+Proposed public projections:
+- vessel_manifest by vessel UUID
+- inventory/entity public detail by ID
+- contract_public by contract ID; contract_board paginated/filterable summaries
+- material_requirement/public demand where offered to the market
+These are additions to the existing /v2/projections mechanism, not endpoints
+that currently exist. Do not repurpose /v2/contracts protocol discovery.
+
+For large query lists add indexed, cursor-paginated read queries for owner,
+carrier, vessel, location, commodity, destination and job status. Update query
+indexes in the same commit or expose an explicit indexed-through cursor.
+Bound page size, depth of nested contents and subscription interest count.
+
+Client sequence:
+1. Discover a vessel and fetch its accepted construction, as already supported.
+2. Request its manifest snapshot with a revision and event cursor.
+3. Subscribe to that vessel's public scope and apply subsequent committed events.
+4. Construct visible boxes/gear from item definitions and placements; internal
+   hold details are data until UI/proximity requires their models.
+5. On a cursor gap, resnapshot. Apply multi-record commits as batches.
+6. On leaving rendering range, remove visuals; the server retains the records.
+Publicly queryable does not mean downloading every manifest every frame.
+A board query can reach distant businesses without rendering their ships.
+
+Storage and history
+-------------------
+Keep the existing PostgreSQL authority journal/projections/receipt transaction.
+The logical records above can live as typed JSON projections initially. Add
+indexes/read tables for query hot paths; do not maintain another writable cargo
+blob on vessels alongside those canonical records.
+One current location plus validated transfer commands is the custody authority.
+Slot occupancy and manifest are derived indexes updated atomically.
+
+Keep immutable construction/catalog versions referenced by historical records.
+A complete data snapshot plus committed events rebuilds builds, stock, work and
+balances without rerolling random outcomes. Existing hot-window event streaming
+is not a permanent history export; checkpoint/export and catalog retention still
+need explicit implementation. Replay must use captured outcomes/rule versions,
+not today's fish prices or today's construction definition for yesterday's state.
+
+Migration and implementation order
+----------------------------------
+A. Unify identity and ownership first.
+   Keep existing live UUID vessel IDs; map the local ledger UID and company
+   ownership to them. Adapt the authority lab to those identities. Reconcile
+   legacy captain fleet records and authority projections in a versioned import.
+   Do not create a second economic ship for the same live vessel.
+
+B. First vertical slice: cargo + fish + public manifest.
+   Extend typed inventory/entity/storage records, derive real container and
+   catch-hold capabilities, wire live loading/catch commands and persistence,
+   expose public manifest fetch/subscriptions, bind current views/renderer.
+   Do this in the native data lab before world integration. Uncontracted stock
+   works here. A fishing boat with two actual slots remains a two-slot boat.
+   Retire legacy cargo_manifest_json writes and local authoritative catch state
+   only once that subsystem has cut over. No concurrent dual writers.
+
+C. Contract lifecycle and partial deliveries.
+   Public offers, atomic acceptance/payment reservation, allocations, receipts,
+   partial delivery, settlement and cancellation; NPC and player commands
+   exercise identical rules. Import old consignments/active freight explicitly.
+
+D. Equipment/world items.
+   Authoritative purchase, carry/stow/deploy/recover and trap/buoy linkage.
+   Migrate existing authored trap parts carefully: a mount is construction,
+   removable owned equipment is an entity; never count both as owned traps.
+
+E. Tank/bulk and service extensions.
+   Add typed handling, mixing/compatibility and evidence rules as those gameplay
+   systems are introduced. These reuse the foundation, not separate inventories.
+   Future construction procurement connects material requirements here or after C.
+
+Suggested data-only acceptance scenarios (not claimed implemented here)
+----------------------------------------------------------------------
+- Two clients race for the same contract and last cargo socket: one valid result.
+- Partial stack transfer preserves quantity, mass, ownership and reservations.
+- Mixed-owner lots in one box remain separate through transshipment and delivery.
+- Catch without any contract persists across despawn/server restart.
+- A fish specimen is not split; compatible bulk lots merge with lineage.
+- Twelve traps remain twelve through deploy/recovery/retry/disconnect.
+- Catch cannot exceed hold capacity; inventory cannot exceed tank compatibility
+  or volume/mass limits; refitting occupied storage is rejected or planned safely.
+- The 20+35 windows deliveries count once each and earn exactly one agreed payout.
+- Delivered goods moved away cannot still fund ship construction.
+- Cancel/reassign/return and partial operation failure conserve stock and money.
+- Tug attachment does not transfer the other ship's contents or ownership.
+- Another company can fetch full public manifests but cannot mutate them.
+- A late subscriber and restarted client see the same manifest as the carrier.
+- Simulated NPC operations produce the same records/events as player operations.
+- Snapshot plus event replay equals uninterrupted state, including split lots,
+  inventory movement, contracts and historical build references.

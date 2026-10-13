@@ -1,0 +1,399 @@
+SHIP AND CONTENTS: POSTING, PERSISTENCE, FETCHING AND SUBSCRIPTIONS
+Code audit, 13 October 2026
+
+Reviewed working copies:
+  Game: C:\Users\noahs\Documents\angst-n-anchors
+        web/kontor, HEAD f08b9a9d42a6ecfb901fe92eebba93744e0c6c02
+  Server: C:\Users\noahs\Documents\angst-n-anchors-mp
+          main, HEAD 5da1397fa9bcda479afb16350763a162778ddb58
+Includes the uncommitted authority-foundation work. These HEADs alone do not
+contain all of the implementation described below. This is a source audit, not
+confirmation that a deployed multiplayer server is running these changes.
+
+FINDING
+
+Ship construction can already be published and fetched by another player.
+Complete, durable ship CONTENTS cannot yet be handled that way in normal play.
+The new authority foundation supports container records, slots, purchases and
+freight payment through a real command/event pipeline. Fishing, equipment,
+deployed traps, NPC cargo and the live world renderer have not been migrated.
+Having a serializable class or a demonstration scene is not that integration.
+
+Three paths currently coexist:
+  1. Legacy ship publication and real-time entity presentation.
+  2. Local gameplay components and captain save documents.
+  3. The new typed authority records, exercised by the native gameplay data lab.
+
+CURRENT SHIPS
+
+Singleplayer owns a PlayerData vessel ledger. A record contains uid, hull_id,
+name, the full brick_layout and optional purchased_items/equipped_fishing_item.
+VesselSpawn constructs a scene from that ledger. The imported layout includes
+the authored hull/parts/placements and configuration; it is not just a preset
+name. Keeping that full envelope is essential for customized/UGC vessels.
+
+The current multiplayer ship path is:
+  VesselSync -> POST /v1/vessels -> legacy vessels database row
+  refit -> PUT /v1/vessels with id + brick_layout
+  real-time ship metadata -> vid=<server vessel ID>;lh=<layout hash>
+  observing client -> GET /v1/vessels?id=<ID>
+  ReplicationDrawingService -> apply_brick_layout(layout)
+
+Remote clients initially create a hull and fetch the fit-out asynchronously.
+They cache the layout and refetch when its hash changes. The public response
+includes build/presentation fields, not the owner's operational manifest.
+GET /v1/vessels?captain_id=<ID> is the authenticated owner's fleet query.
+
+The legacy server row has cargo_manifest_json and fleet_state_json fields.
+That does NOT establish a working contents pipeline: the current client ship
+registration sends build fields, fleet-state push functions are no-ops, and
+remote type "cargo" is explicitly ignored by the live entity renderer.
+
+References in the game:
+  scripts/player/player_data.gd:164 (ledger_vessel_record)
+  scripts/player/vessel_sync.gd:54 (layout push), :123 (remote fetch)
+  scripts/network/network_manager.gd:437 (ship metadata)
+  scripts/network/replication_drawing_service.gd:512, :539
+Server: internal/transport/httpapi/server.go:541 onwards.
+
+CURRENT EQUIPMENT AND CRAB TRAPS
+
+Purchased equipment is represented on the local vessel ledger as:
+  purchased_items: [{uid, item_id, quantity, purchased_at_unix}]
+  equipped_fishing_item: <catalog item ID>
+
+This records ownership/quantity/selection. It does not record each individual
+trap's current deck socket, bait, rope, condition or deployed location.
+Equipment purchases and changes explicitly return remote_unavailable in MP.
+The remote captain document also removes owned_vessels and active_vessel;
+it must not be described as the MP equipment inventory transport.
+
+The trap station currently discovers crab_creel PARTS in the ship build and
+creates working slots from those scene parts. Each slot has local state for
+carrying, throwing, sinking, deployment and hauling. Deploying creates a new
+pot ID in DeployedCrabPots and hides the original deck creel. Recovery removes
+the world pot record and restores the deck presentation.
+
+DeployedCrabPots holds owner_id, x/z, depth and ready_hours, plus runtime node
+references. A JSON-friendly snapshot() exists, but there is no connected
+captain save/load or WorldGateway publication path for those deployed records.
+Pots can survive a hull change within the running local world and be adopted
+by another station. That is not persistence across a world/process reload.
+Normal trap interaction/update is explicitly disabled when WorldGateway is
+remote. Other clients do not receive authoritative deployed-pot records.
+
+References:
+  scripts/ship/vessel_equipment.gd:17
+  scripts/player/player_session.gd:704, :779, :798
+  scripts/ship/crab_pot_station.gd:30, :182, :218, :763
+  scripts/ship/deployed_crab_pots.gd:26, :156
+
+CURRENT FISH AND CONTAINERS
+
+Fish already have useful data. CatchHoldState owns a hold_id, capacity_kg and
+CatchLot records. A lot includes:
+  lot_id, product_id, species_id, mass_kg, caught_game_hours, caught_position,
+  quality, ground_tier, price_multiplier, vessel_id, owner_id, specimen,
+  length_cm, size_grade.
+Individual specimens are kept indivisible; compatible bulk lots may merge.
+The catch library reads those records and resolves species/model information.
+Value is calculated from mass, species rate and quality; it is not a durable
+record of a completed sale. Some field/function names still say marks, but
+the game's declared/display currency is NOK. Those names need migration.
+
+Critical gap: CatchHoldState.to_dict()/from_dict() are serialization helpers,
+not a connected save system. LocalPlayerView's actual save capture records
+contracts/time/world identity, clears runtime/port-operation snapshots, and
+does not collect catch holds. The vessel ledger does not include catch lots.
+Do not rely on caught fish surviving despawn/reload. Rod fishing itself exits
+early in remote mode; there is no authoritative fish-caught command yet.
+
+Local containers have ContainerUnit data (identity, type, commodity, mass,
+paint, destination and freight/consignment references). CargoSlotPad owns their
+physical placement while loaded. The current legacy save contract forfeits
+in-transit freight on reload rather than reconstructing a durable manifest.
+The presence of good local data classes does not solve this omission.
+
+References:
+  scripts/cargo/catch_lot.gd:94; scripts/cargo/catch_hold_state.gd:81
+  scripts/cargo/fishing_landing_service.gd:54
+  scripts/ship/rod_fishing_station.gd:178
+  scripts/state/local_player_view.gd:94, :319
+  scripts/player/player_data.gd:72, :370
+  scripts/cargo/container_unit.gd
+
+WHAT THE NEW FOUNDATION ACTUALLY PROVIDES
+
+The server's internal/gameplay/models.go defines separate versioned records:
+  company       Identity, player/NPC controller, members, NOK balance.
+  construction  Immutable normalized layout, catalog hash, derived cargo slots.
+  vessel        Identity, company, construction reference, port, slot->cargo map.
+  cargo         Identity, owner/custodian, type, paint, commodity, mass,
+                destination, contract and current location.
+  contract      Issuer/carrier, cargo IDs, route, reward_nok and status.
+  transaction   Debit/credit companies, amount_nok, reason and related ID.
+
+Build and contents are deliberately separate. One container moving should
+change the manifest/location, not republish the entire hull/fit-out JSON.
+
+An illustrative arrangement using fields implemented TODAY:
+
+  vessel:
+    id: vessel-example
+    company_id: company-example
+    construction_id: <construction content hash>
+    cargo:
+      cargo:bed-a: container-17
+      cargo:bed-b: container-18
+
+  construction.cargo_slots entry:
+    id: cargo:bed-a
+    part_id: bed-a
+    local_position: [<x>, <y>, <z>]
+    container_type: 20ft
+
+  cargo:
+    id: container-17
+    company_id: company-example
+    owner_company_id: customer-example
+    container_type: 20ft
+    paint_variant: 3
+    commodity_id: provisions
+    mass_kg: 4800
+    destination_port_id: port-destination
+    contract_id: contract-example
+    location: {kind: vessel, id: vessel-example, slot_id: cargo:bed-a}
+
+These are illustrative IDs and values, not a claimed current player's cargo.
+The slot name derives from the installed part's stable instance_id. The build
+contains placement/orientation and the server derives usable supported slots.
+Capacity is not inferred from a vessel's name or freely supplied by the client.
+Current support is installed container beds, not arbitrary free placement or
+a general multi-level stacking/container-grid model.
+
+Fourteen containers can therefore be represented by fourteen cargo IDs in
+fourteen valid slots. Two available slots reject a third container. Paint and
+destination are recorded. Freight reward currently belongs to the CONTRACT;
+a separate insured/declared per-container value is not implemented in this
+new Cargo schema. A container's future detailed contents should reference
+consignment/lot records rather than repeat conflicting quantities in several
+objects. Existing CargoConsignment should be preserved through that migration.
+
+WHAT IS POSTED, AND WHAT IS PUBLISHED
+
+Implemented authority commands:
+  vessel.purchase   Client names company, catalog offer and vessel name.
+                    Authority determines build/price and moves funds.
+  cargo.load        Client names vessel, cargo and slot, with revisions.
+  cargo.unload      Authority removes the slot assignment and relocates cargo.
+  freight.settle    Authority verifies completed delivery and posts payment.
+  vessel.arrive     Trusted simulation only, not a client location assertion.
+  vessel.refit      Trusted only until complete UGC validation/pricing exists.
+
+Example request, with illustrative IDs/revisions:
+  POST /v2/commands
+  Authorization: Bearer <world session token>
+  {
+    "contract_version": 1,
+    "request_id": "load-container-17-attempt-1",
+    "name": "cargo.load",
+    "expected_revision": 8,
+    "body": {
+      "vessel_id": "vessel-example",
+      "cargo_id": "container-17",
+      "slot_id": "cargo:bed-a",
+      "cargo_revision": 3
+    }
+  }
+
+The server resolves the actor from authentication, checks company permissions,
+record revisions, co-location and slot compatibility. It updates cargo.location,
+vessel.cargo and the public presentation together. Command receipt, events and
+current projections are committed before publication. Retrying the same request
+ID returns the original receipt, avoiding a second load/payment. Callers must
+not reuse that ID for a different action/body; payload-fingerprint checking is
+not currently implemented.
+
+The event batch has a commit_cursor so clients do not expose half a transaction.
+For example, cargo.loaded, vessel.changed and vessel.presentation.changed can
+arrive in pages but are applied as a completed batch before subscribers react.
+
+Private company projection:
+  vessel plus linked cargo/contract/company details, accessible to members.
+Public vessel_public projection:
+  id, name, construction_id, port_id and cargo[] containing
+  id, slot_id, local_position, container_type, paint_variant, mass_kg.
+  It omits cargo destination, commodity, contract and company balances.
+Whether public mass should remain public is a product decision still to make.
+
+AuthorityVesselAssembly can build the ship and reconcile these public container
+records against actual Godot cargo sockets. It is tested, including repeat
+hydration/removal. It is not yet connected to the normal world's replication
+spawn/update lifecycle; the legacy layout renderer still handles that.
+
+References:
+  Server internal/gameplay/models.go
+  Server internal/authority/gameplay.go:52, :168, :215
+  Server internal/authority/authority.go:293
+  Server internal/db/authority_store.go:117
+  Game scripts/network/authority_vessel_assembly.gd:10, :22
+
+FETCHING AND SUBSCRIBING
+
+  PUT /v2/sessions                   Set interest scopes.
+  GET /v2/state                      Consistent visible snapshot + cursor.
+  GET /v2/projections?kind=...&id=... Fetch particular current records.
+  GET /v2/events?after=...&wait_ms=... Receive subsequent events by long poll.
+
+After interests are confirmed, fetch the snapshot, then continue from its
+cursor. The snapshot and cursor are captured under the same lock, closing the
+gap between fetch and subscribe. Expired event cursors request a fresh snapshot.
+This subscription is HTTP long polling, not a WebSocket connection.
+
+WorldGateway handles transport and the local projection cache. WorldRecordBinding
+binds kind/id/scope to updated(state, revision) and removed signals. UI and scene
+adapters can consume these records without knowing the storage implementation.
+The renderer still needs lifecycle/dependency wiring to spawn a nearby ship
+once its construction and contents are available, update it and unload visuals.
+
+Interest selects relevant public data; it does not grant private permissions.
+company:<id> reads/events require membership. entity:<vessel-id> exposes public
+presentation. Current construction records are global, so the new snapshot path
+is not yet optimized to fetch only nearby build dependencies. Public interest
+is not yet a server-enforced geographic visibility entitlement.
+
+References:
+  Server internal/authority/state.go:12, :30
+  Server internal/transport/httpapi/state.go:9 and v2.go:478
+  Game scripts/network/world_gateway.gd:174
+  Game scripts/network/world_record_binding.gd:15
+  Game scripts/network/remote_world_backend.gd
+
+SINGLEPLAYER, NPCS AND MULTIPLAYER
+
+Desired shared flow:
+  Player action or NPC decision
+    -> authority command
+    -> validated durable records and events
+    -> permitted client projections
+    -> UI and nearby scene objects.
+
+Singleplayer should run that authority locally. Multiplayer should run it on
+the server. NPCs should invoke the trusted authority entry point and obey the
+same inventory/capacity/economy rules, rather than sending presentation-only
+ships straight to players. A player watching another player should receive the
+server's accepted result, not treat the other player's claimed inventory as fact.
+
+Current reality:
+  * Normal SP selects the GDScript LocalWorldBackend. It implements older berth,
+    operation and interaction commands, not the new Go gameplay command set.
+  * The native data lab runs the real Go authority locally and demonstrates the
+    intended transport. This has not replaced the normal SP startup/save path.
+  * Local CompanyService remains a separate source of company gameplay state.
+  * Company already has controller=player/npc in the new model; the lab has NPC
+    counterparties and an operator friend in the player's company. Membership
+    checks work. Company creation/invitation/role-management flows are not done.
+  * WorldTrafficService has a data-only traffic simulator and local interest
+    presentation, but NPC full ships still prefill cargo procedurally at 72%.
+    This is not an authoritative company-owned manifest surviving simulation.
+  * Legacy multiplayer berth ownership checks still query legacy vessel rows.
+    They must migrate along with new company-owned vessel identities. Calling
+    the new purchase endpoint alone does not make the whole voyage use it.
+
+References:
+  scripts/network/world_gateway.gd:92
+  scripts/network/local_world_backend.gd:59
+  scripts/traffic/world_traffic_service.gd:86, :391
+  Server internal/authority/authority.go:301 (ExecuteSystem)
+  Server internal/db/command_authorizer.go:22
+
+HOW TO EXTEND ATTRIBUTES WITHOUT REPEATING THIS SPLIT
+
+Recommendation, NOT implemented fish/trap schema:
+  Keep a small common entity envelope (id, type/definition, schema_version,
+  owner/company, location) with validated type-specific components.
+
+  Trap instance:
+    id, definition_id, owner_company_id,
+    location={kind:vessel, vessel_id, socket_id, local_transform}
+      OR {kind:world, world_id, position},
+    trap={phase, bait_remaining, rope_length_m, buoy_id, deployed_at,
+          next_evaluation_at, catch_inventory_id}.
+
+  Catch inventory:
+    id, vessel_id, hold_id, capacity derived from construction,
+    lots/specimens={id, species_id, mass_kg, length_cm, quality, caught_at,
+                    capture_location, provenance}.
+
+  Container:
+    existing cargo identity/location + consignment references,
+    explicit declared value if needed; delivery reward stays with contract.
+
+Use stable socket IDs for stowed gear. Store a validated vessel-local transform
+when a movable object genuinely has no predefined socket. A deployed trap keeps
+the SAME item ID: moving it changes custody/location, not ownership by spawning
+a replacement. Its buoy can be a separately identified linked entity. Catch
+transfer and trap-state changes must commit together so retrying cannot produce
+extra catches or duplicate gear. Derive presentation meshes from definitions.
+
+Allow extensible components, but do not accept an unchecked attributes bag for
+capacity, fish value or quantity. Cosmetic/user metadata can have a constrained
+extension area. Gameplay fields need schema, permission and mutation rules.
+Prices come from authority/catalog quotes and realized sales from transactions;
+clients must not submit their own catch valuation as a trusted payment amount.
+
+Fish/trap progression should run independently of loaded scenes. Persist the
+meaningful outcomes and schedule evaluations using world time. Nearby clients
+materialize models; far-away items remain records. No physics history is needed
+for the ship build/contents/economy reconstruction requested here.
+
+HISTORY AND WHAT "RECONSTRUCT AT ANY TIME" MEANS TODAY
+
+ReconstructAt can recover the new foundation's records at a committed cursor
+from a complete ordered journal. It applies recorded projections, not another
+random fish roll or another payment. It rejects gaps and cuts through the middle
+of a transaction. The client-filtered event stream is not a complete journal.
+
+Full-game reconstruction is not implemented: unmigrated fish/traps/local cargo
+never enter that journal. A historical export/checkpoint API, schema migrations,
+retention policy and availability of old construction/catalog assets remain to
+be built. PostgreSQL stores receipts/events/current projections transactionally;
+the production database migration has not been exercised by this report's tests.
+
+Reference: Server internal/authority/reconstruct.go:12.
+
+RECOMMENDED NEXT WORK / ACCEPTANCE BAR
+
+1. Complete one persistent live voyage with the new vessel/container records:
+   purchase, spawn, load both slots, sail, unload, settle and reopen. Cut over
+   legacy vessel ownership/berth checks and existing FreightService call sites.
+2. Persist and publish fish hold/equipment records. Purchase/equip through
+   authority; catching and landing create/consume records and ledger entries.
+3. Turn creels into identified owned items. Buying twelve creates twelve usable
+   instances; deploying one leaves eleven on deck and one linked world trap.
+4. Wire construction/public contents into the normal interest-driven renderer.
+   Use that same adapter for NPC and player vessels.
+5. Run the same domain authority in normal SP and MP, migrate saves and retire
+   the overlapping legacy writers. Keep the existing gateway/services as entry
+   points rather than introduce another parallel manager.
+6. Make NPC decisions mutate those records; remove presentation-time fake cargo.
+
+End-to-end acceptance:
+  * Two clients observe the same ship, container placements/paint and public gear.
+  * Company members can inspect private inventory; outsiders cannot read it.
+  * Restart/reconnect and render-distance unload/reload preserve IDs and contents.
+  * Concurrent loading of one free slot accepts exactly one container.
+  * Duplicate catch/haul/sale requests cannot duplicate items or pay twice.
+  * A fresh client rebuilds the same recorded build/contents at a saved cursor.
+  * Every test runs for player and NPC actions, with SP/MP contract parity.
+
+VERIFICATION THIS AUDIT
+
+Re-ran (uncached) successfully:
+  go test ./internal/authority ./internal/gameplay ./internal/transport/httpapi -count=1
+
+These cover the foundation's purchase/load/unload/settlement, revision and
+capacity rules, shared-company permissions, public/private projections, snapshot
+cursor, storage failure, restart and committed-cursor reconstruction. They do
+not prove the missing live fish/trap integrations. No gameplay code or deployed
+server was changed for this report; only this report file was added.

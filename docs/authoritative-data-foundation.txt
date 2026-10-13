@@ -1,0 +1,157 @@
+AUTHORITATIVE GAME DATA — FIRST IMPLEMENTED SLICE
+2026-10-13
+
+Status
+------
+The first slice works through the existing Go authority and Godot WorldGateway.
+It is an isolated, persistent, data-only freight scenario, with tested adapters
+back into the actual imported vessel assembler. It is not a completed migration
+of the whole game. Normal captain saves and live production accounts are untouched.
+
+Open in Godot
+-------------
+F6 scenes/showcases/gameplay_data_lab.tscn.
+The existing data_models_showcase has an Open live data lab button.
+If the executable needs rebuilding, run tools/build_gameplay_lab.ps1. By default
+it uses the sibling angst-n-anchors-mp repository; an explicit repository path
+can be passed with -ServerRepository.
+
+The panel launches cmd/gameplaylab on an ephemeral 127.0.0.1 port. This is the
+same authority, command handlers, projections and HTTP handlers used by the MP
+service, not a second GDScript implementation of economic rules. Development
+session/arrival helpers are registered ONLY by this executable.
+
+Use Run freight scenario or the individual buttons. The scenario:
+1. Starts with a player company, an NPC shipyard and an NPC freight customer.
+2. Purchases the authored Harbour Cargo build for NOK 10,500.
+3. Loads two individually identified containers into the two installed slots.
+4. Rejects a third container. Also rejects payment before delivery (Go test).
+5. Restarts the authority and restores both cargo records and slot assignments.
+6. Advances arrival as a trusted simulation step; clients cannot teleport.
+7. Unloads both containers and settles the contract for NOK 4,500.
+8. Rejects a second payment and restarts with the same completed state.
+The player company's resulting balance is NOK 44,000.
+
+Native records tree: select entity -> JSON. The bottom log shows accepted or
+rejected commands. Fresh scenario keeps the previous scratch file. Reopening
+the panel resumes the latest scenario. Saved paths are shown in the panel.
+The loopback child process closes with the panel. No coast/terrain is generated.
+
+Implemented records
+-------------------
+Company: independent identity, player/NPC controller, owner/operator members,
+currency and whole-NOK balance. Player and NPC companies use the same record.
+Vessel: identity, owning company, immutable construction reference, port and
+slot_id -> cargo_id index. Fleet is derived from vessel.company_id; there is no
+second independently mutable fleet list to fall out of sync.
+Construction: versioned full imported-model layout, catalog hash, persistent
+part IDs, derived usable cargo slots and their actual CargoDatum local positions.
+Cargo: identity, owner, carrier/custodian, physical container type, colour,
+commodity, mass, destination, contract and one current location.
+Contract: carrier, NPC issuer, origin, destination, required cargo IDs, reward,
+status. Transaction: debit, credit, amount, currency, reason, related identity.
+Vessel offer and port records provide trusted purchase/spawn references.
+
+Private company records require membership on every fetch/event read. Requesting
+another company's interest scope does not grant access. Public vessel records
+contain the construction reference and visible container identity, position,
+type, colour and mass, but omit contracts, prices and routing. Builds are public
+immutable content in this first slice. Interest scopes are not permissions.
+
+Capabilities and construction
+-----------------------------
+tools/export_gameplay_catalog.tscn exports the current Godot catalogs and authored
+CargoDatum sockets. Identical bytes are embedded in Go internal/gameplay/catalog.json.
+The build script refuses mismatched catalogs. It exports normalized build fixtures
+for the Godot parity test. When models/catalogs change, re-export with the isolation
+flag, copy the generated catalog to the MP repository, rebuild and run parity tests.
+
+The server derives slots from supported installed beds. Missing support, floating
+or rotated beds and incompatible cargo configurations do not grant capacity.
+The current test covers Harbour Cargo (2), container feeder (40), plus hook-line,
+bulk and coaster builds (0 container slots; their other capacities are NOT migrated).
+Complete layout fields, paint and engine selections are preserved. Build identity
+is SHA256(catalog_hash + newline + server-normalized JSON). Clients use the received
+construction ID; do not hash a differently formatted JSON serialization.
+
+AuthorityVesselAssembly adapts fetched construction/public contents into the
+existing VesselSpawn builder. Installed parts retain stable slot identity. It
+restores container identity/paint and supports repeated hydration and removal.
+It has been tested against actual assembled models; it is not yet wired into
+the live network entity lifecycle, which still uses the legacy vessel path.
+
+Service contract
+----------------
+POST /v2/commands remains the only player mutation entry point.
+Commands added: vessel.purchase, cargo.load, cargo.unload, freight.settle.
+Each requires an expected revision. Cargo movement also checks cargo_revision.
+The actor comes from the authenticated session, not a caller-provided company role.
+Use a fresh request_id for each new intent; reuse the SAME request for a retry.
+Durable receipts prevent repeated purchases and settlements after a restart.
+vessel.arrive and vessel.refit require ExecuteSystem. Client UGC/refit submission
+is deliberately not enabled until complete layout validation, ownership of parts
+and refit pricing are implemented. The cargo-support rule itself is tested.
+
+GET /v2/state returns visible projections AND a cursor captured under one lock.
+GET /v2/projections still supports individual kind/id queries.
+GET /v2/events?after=<snapshot.cursor> subscribes after the snapshot.
+Old/future cursors now explicitly return resync_required instead of losing facts.
+Events include commit_cursor. Godot buffers partial transactions across pages,
+installs all affected projections, then notifies observers. Repeated revisions
+are ignored. Snapshot replacement removes stale/inaccessible records.
+WorldRecordBinding binds any kind/id/scope to updated(state, revision) and removed.
+Existing WorldStateBinding remains available for interaction-specific consumers.
+
+Persistence and past-state reconstruction
+---------------------------------------
+Receipts, all events and all changed projections commit together through the
+existing Store. A simulated disk failure leaves memory, balances, records and
+event cursors unchanged. Concurrent loads into the same revision cannot both win.
+The production PostgreSQL store now writes/reads commit_cursor; startup adds the
+column with default 0 for older events. This migration has NOT been executed
+against PostgreSQL here: the local Docker engine was unavailable.
+
+LabStore is a single-process scratch JSON file with atomic replacement. It keeps
+the full journal for offline inspection. It is not intended as production storage.
+ReconstructAt reconstructs all record projections at a committed historical cursor
+from a COMPLETE journal; gaps, incompatible versions and mid-transaction cursors
+are rejected. Historical purchase-state reconstruction is tested after the full
+voyage has completed. It replays recorded facts, not random gameplay decisions.
+Historical export from PostgreSQL, checkpoints and schema migration between old
+event versions remain follow-up work. The online event endpoint retains a bounded
+hot window and uses snapshots for recovery; it is not a historical export API.
+
+What remains before replacing current gameplay persistence
+----------------------------------------------------------
+1. Versioned migration/import from captain documents and /v1/vessels, reconciling
+   company ownership, saved cargo/consignments and equipment. Choose one writer
+   per subsystem and cut over; do not dual-write both economic authorities.
+2. Connect berth/operation completion to trusted cargo commands. This slice uses
+   port_id as an authoritative location and explicit lab arrival, not live cranes.
+3. Full freight booking, cargo custody transfer at settlement, company invitations,
+   finer finance permissions and public company directory/views. Membership is
+   modeled/tested but there is no player invitation UI yet.
+4. Fishing and equipment, catches/holds, traps/buoys and placed entities, passengers,
+   employees, port assets and other simulation rules. Their existing systems are
+   not silently replaced or claimed to be covered by this freight example.
+5. Full authored-layout/UGC validation and construction pricing on the server.
+   Current player purchases accept catalog stock, not arbitrary client layouts.
+6. Wire AuthorityVesselAssembly to live render-distance entity spawn/update/delete
+   and migrate saved cargo through CargoConsignment consistently.
+7. Production DB integration, historical/checkpoint export and broader multiplayer
+   reconnect tests on migrated accounts. Production deployment has not occurred.
+
+Validation run
+--------------
+MP: go test ./... and go vet ./...
+Go cases: five stock capacities, invalid parts/duplicate placements/missing deck,
+purchase/load/overflow/deliver/settle, repeat payment, durable retry, restart,
+historical reconstruction, private/public access, friend contribution, concurrent
+slot loading, loaded-slot refit rejection, failed storage rollback and expired cursor.
+Godot (all run isolated with -- --shipyard-playtest):
+- tests/authority_vessel_assembly_test.tscn
+- tests/authority_binding_test.tscn
+- scenes/showcases/gameplay_data_lab.tscn --verify-gameplay-lab
+- existing company_service_test, vessel_persistence_test, world_gateway_lifecycle_test
+Native lab rendered and screenshot inspected. Captures are archived in
+C:/Users/noahs/Pictures/machinescreenshots.

@@ -93,6 +93,12 @@ func _process(delta: float) -> void:
 
 	# Commanded stage value — used for throttle click detection.
 	var stage_target := absf(float(ctrl.get("_throttle"))) if ctrl != null else 0.0
+	var remote := bool(body.get_meta("remote_replica", false))
+	var machinery: Dictionary = body.get_meta("replicated_machinery", {})
+	if remote:
+		raw_throttle = absf(float(machinery.get("throttle", 0.0)))
+		raw_lateral = absf(float(machinery.get("lateral", 0.0)))
+		stage_target = raw_throttle
 
 	# --- Exponential smoothing ---
 	var k      := 1.0 - exp(-delta / maxf(smooth_time, 0.001))
@@ -100,8 +106,9 @@ func _process(delta: float) -> void:
 	_throttle_s    = lerpf(_throttle_s,    raw_throttle,                           k)
 	_thruster_s    = lerpf(_thruster_s,    raw_lateral,                            k)
 	var turning := prop != null and bool(prop.get("engine_running"))
+	if remote: turning = bool(machinery.get("running", false))
 	# Machinery keeps idling in neutral after the captain leaves the helm.
-	if body is BoatBody and (body as BoatBody).get_fuel_fraction() <= 0.0:
+	if not remote and body is BoatBody and (body as BoatBody).get_fuel_fraction() <= 0.0:
 		turning = false
 	if turning and not _heard_running:
 		_fire_oneshot(_start_pool)

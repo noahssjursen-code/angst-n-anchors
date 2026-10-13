@@ -29,7 +29,8 @@ func _process(delta: float) -> void:
 	if _tick > 0.0:
 		return
 	_tick = 0.5
-	_update_auto_nav()
+	if not bool(get_parent().get_meta("remote_replica", false)):
+		_update_auto_nav()
 	_apply_day_scales()
 
 
@@ -40,6 +41,18 @@ func cycle_preset() -> void:
 	var host := get_parent() as Node3D
 	if host != null and host.is_inside_tree():
 		WorldSound.play("res://resources/audio/world/helm/breaker_click_1.wav", host.global_position, -10.0)
+
+
+## Complete state, including the owner's automatic navigation override.
+func network_state() -> int:
+	return _preset | (4 if _auto_nav_active else 0)
+
+func apply_network_state(value: int) -> void:
+	if value < 0 or value > 7: return
+	if network_state() == value: return
+	_preset = value & 3
+	_auto_nav_active = (value & 4) != 0
+	_apply_preset()
 
 
 func get_preset_name() -> String:

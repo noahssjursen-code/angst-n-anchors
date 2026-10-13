@@ -71,6 +71,8 @@ func ensure_binding(state: ShipPartState) -> WorldStateBinding:
 	var binding := WorldStateBinding.new()
 	binding.entity_id = "door:%s:imported:%s" % [vessel_id, key.sha256_text()]
 	binding.entity_kind = "door"
+	binding.command_rejected.connect(func(code: String, message: String):
+		push_warning("Door interaction rejected (%s): %s" % [code, message]))
 	binding.authoritative_state_changed.connect(func(snapshot: Dictionary, _action: String, _event: Dictionary) -> void:
 		if is_instance_valid(state):
 			state.apply_snapshot({"door_open":bool(snapshot.get("open", false)), "door_swing":float(snapshot.get("swing", 1.0))}, state.revision+1))

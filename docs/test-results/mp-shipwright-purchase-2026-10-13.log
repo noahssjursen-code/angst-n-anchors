@@ -1,0 +1,23 @@
+Godot Engine v4.6.1.stable.official.14d19694e - https://godotengine.org
+
+MP PURCHASE PASS Isolated account authenticated
+MP PURCHASE PASS Isolated captain created
+MP PURCHASE PASS Shipwright enables affordable MP stock
+MP PURCHASE PASS Actual shipwright service completes remote purchase:
+MP PURCHASE PASS Purchased ship reaches local fleet
+MP PURCHASE PASS Server price deducted exactly once
+MP PURCHASE PASS Retry returns same ship with no second debit
+MP PURCHASE PASS Independent fleet fetch finds one durable ship
+MP PURCHASE PASS Fresh client reconstructs purchased blueprint
+MP PURCHASE PASS Ship has durable construction reference
+MP PURCHASE PASS Purchased record constructs an actual playable vessel
+MP PURCHASE PASS Purchased vessel includes its rod fishing station
+MP PURCHASE PASS Reusing reference for different order rejected
+MP PURCHASE PASS Insufficient funds rejected
+MP PURCHASE PASS Client cannot reduce price
+MP PURCHASE PASS Another account cannot spend captain funds
+MP PURCHASE PASS Rejected orders leave fleet and balance unchanged
+MP PURCHASE PASS Concurrent orders cannot overspend account
+MP PURCHASE PASS Old receipt returns current balance after later purchase
+MP PURCHASE PASS Concurrent rejected purchase leaves no extra vessel
+MP PURCHASE PASS: 20 checks

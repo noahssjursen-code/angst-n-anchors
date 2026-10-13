@@ -272,9 +272,29 @@ func begin_new_captain(
 	save_now()
 
 
+var _yard_purchase_pending := false
+
+func purchase_remote_yard_vessel(command: Dictionary) -> Dictionary:
+	if not is_remote_voyage():
+		return purchase_yard_vessel(command)
+	if _yard_purchase_pending:
+		return CompanyContracts.result_error("purchase_pending", "A purchase is already awaiting confirmation.")
+	_yard_purchase_pending = true
+	var result: Dictionary = await VesselSync.purchase(self, command)
+	_yard_purchase_pending = false
+	if bool(result.get("ok", false)):
+		_remote_profile["marks"] = data.marks
+		_ensure_company_authority()
+		marks_changed.emit(data.marks)
+		company_changed.emit(company_service.company_summary())
+		vessels_synced.emit()
+		save_now()
+	return result
+
+
 func purchase_yard_vessel(command: Dictionary) -> Dictionary:
 	if is_remote_voyage():
-		return CompanyContracts.result_error("remote_purchase_unavailable", "Vessel purchases require the server's purchase service; this local yard cannot charge a remote account.")
+		return CompanyContracts.result_error("remote_purchase_requires_confirmation", "Use the shipwright purchase confirmation to submit this order to the server.")
 	_ensure_company_authority()
 	var previous := data.to_dict()
 	var result := company_service.purchase_vessel(command)
@@ -463,10 +483,10 @@ func save_now() -> bool:
 	return _flush_save()
 
 
-## The only write path for a configured vessel. It updates the generic ledger,
-## writes the complete player JSON atomically, then reads it back before success.
-## Hull-specific code must never own persistence.
-func persist_vessel_configuration(record: Dictionary, make_active: bool = false) -> bool:
+## Local writes are verified before returning. Remote writes are asynchronous:
+## true means submitted; on_complete receives the accepted record, or {} on
+## rejection. The owned ledger is updated only after the server accepts it.
+func persist_vessel_configuration(record: Dictionary, make_active: bool = false, on_complete: Callable = Callable()) -> bool:
 	if data == null or record.is_empty():
 		return false
 	if persistence_mode != PersistenceMode.REMOTE:
@@ -479,12 +499,16 @@ func persist_vessel_configuration(record: Dictionary, make_active: bool = false)
 		return false
 	var hull_id := str(safe.get("hull_id", ""))
 	var registration_id := str(safe.get("registration_id", ""))
-	var compliance := VesselCompliance.validate(
-		BrickLayout.from_dict(layout_raw as Dictionary),
-		hull_id,
-		registration_id,
-		HullRegistry.make_grid(hull_id),
-	)
+	var compliance: Dictionary
+	if ImportedHullCatalog.has(hull_id):
+		compliance = {"ok": ImportedVesselLayout.valid(layout_raw as Dictionary, hull_id, true), "errors": PackedStringArray(["Imported vessel design is incomplete or invalid."])}
+	else:
+		compliance = VesselCompliance.validate(
+			BrickLayout.from_dict(layout_raw as Dictionary),
+			hull_id,
+			registration_id,
+			HullRegistry.make_grid(hull_id),
+		)
 	if not bool(compliance.get("ok", false)):
 		var findings: PackedStringArray = compliance.get("errors", PackedStringArray())
 		push_error(
@@ -494,15 +518,19 @@ func persist_vessel_configuration(record: Dictionary, make_active: bool = false)
 		return false
 	if not _persistent_io_enabled:
 		data.upsert_owned_vessel(safe)
+		if on_complete.is_valid(): on_complete.call(safe)
 		return true
 	if persistence_mode == PersistenceMode.REMOTE:
-		data.upsert_owned_vessel(safe)
-		if make_active:
-			data.set_active_vessel(safe)
+		var captain_id := str(data.captain_id)
+		var accepted_callback := func(accepted: Dictionary) -> void:
+			if data == null or str(data.captain_id) != captain_id or not is_remote_voyage(): return
+			if not accepted.is_empty() and make_active:
+				data.set_active_vessel(accepted)
+			if on_complete.is_valid(): on_complete.call(accepted)
 		if str(safe.get("server_vessel_id", "")).is_empty():
-			VesselSync.ensure_vessel_registered(self, safe)
+			VesselSync.ensure_vessel_registered(self, safe, accepted_callback)
 		else:
-			VesselSync.push_brick_layout(self, safe)
+			VesselSync.push_brick_layout(self, safe, accepted_callback)
 		return true
 	if not VesselArchive.save_record(_vessel_owner_id(), safe):
 		push_error("PlayerSession: failed per-vessel archive uid=%s" % uid)
@@ -527,6 +555,7 @@ func persist_vessel_configuration(record: Dictionary, make_active: bool = false)
 	if make_active and str(disk_data.active_vessel.get("uid", "")) != uid:
 		push_error("PlayerSession: active configured vessel failed disk readback uid=%s" % uid)
 		return false
+	if on_complete.is_valid(): on_complete.call(disk_record)
 	return true
 
 

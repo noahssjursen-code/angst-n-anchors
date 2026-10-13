@@ -27,7 +27,7 @@ func _process(delta: float) -> void:
 		voyage_changed.emit(get_voyage_snapshot())
 	# A reaction-based instrument needs render-rate state. Reuse the rod resolved
 	# by the slow ship snapshot; no contracts, habitat scans or tree searches here.
-	if is_instance_valid(_view_rod) and _view_rod.working and not is_helming() and not WorldGateway.is_remote():
+	if is_instance_valid(_view_rod) and _view_rod.working and not is_helming():
 		fishing_changed.emit(_view_rod.snapshot())
 
 
@@ -45,7 +45,7 @@ func get_voyage_snapshot() -> Dictionary:
 		return result
 	var sounder := ship.get_node_or_null("ShipSounder")
 	if sounder != null: result["sonar"] = sounder.snapshot()
-	if _view_rod!=null and not WorldGateway.is_remote():result["fishing"]=_view_rod.snapshot()
+	if _view_rod!=null:result["fishing"]=_view_rod.snapshot()
 	result.ship = true
 	result.name = VesselSpawn.vessel_name_of(get_active_vessel_record())
 	var local_velocity := ship.global_basis.inverse() * ship.linear_velocity
@@ -376,3 +376,42 @@ func passenger_terminal_snapshot(agent: PassengerAgentNpc) -> Dictionary:
 func get_passenger_voyage_snapshot() -> Dictionary:
 	var operations := PassengerOperations.current(get_tree())
 	return operations.voyage_snapshot(get_active_ship() as BoatBody) if operations != null else {}
+
+## Stable presentation data for the company tablet. Scene discovery stays behind
+## this seam; the UI never reads replicated nodes or invents cargo capacities.
+func get_tablet_snapshot() -> Dictionary:
+	var company := get_company_summary()
+	company["home_port_name"] = get_port_display_name(str(company.get("home_port_id", "")))
+	var active := get_active_vessel_record()
+	var ship := get_active_ship() as BoatBody
+	var fleet: Array = []
+	for record: Dictionary in company.get("vessels", []):
+		var deployed := ship != null and str(record.get("uid", "")) == str(active.get("uid", ""))
+		var requirements := HarbourDeploy.ship_requirements(record)
+		var vessel := {"uid": str(record.get("uid", "")), "name": VesselSpawn.vessel_name_of(record),
+			"status": "Deployed" if deployed else "In fleet storage", "deployed": deployed,
+			"dimensions": "%.0f × %.0f m" % [requirements.loa_world_m, requirements.beam_world_m],
+			"services": ", ".join(requirements.terminal_families).replace("_", " "), "cargo": [], "catch_mass_kg": 0.0, "catch_value": 0}
+		if deployed:
+			vessel["fuel"] = ship.get_fuel_fraction()
+			vessel["port"] = get_port_display_name(ship.get_harbour_port_id())
+			var cargo: Array = []
+			for pad in ship.get_cargo_pads():
+				for unit in pad.get_containers():
+					cargo.append({"title": CommodityCatalog.commodity_display(unit.commodity_id),
+						"detail": "%s · %.0f kg · %s" % [unit.container_type, unit.mass_kg, get_port_display_name(unit.destination_port_id)],
+						"id": unit.id})
+			for hold in CatchHoldComponent.get_all_for_ship(ship):
+				var library := get_catch_library(hold.hold_id)
+				vessel.catch_mass_kg += float(library.get("mass_kg", 0))
+				vessel.catch_value += int(library.get("value_marks", 0))
+				for lot: Dictionary in library.get("items", []):
+					cargo.append({"title": str(lot.get("name", "Catch")), "detail": "%.1f kg · %s" % [float(lot.get("mass_kg", 0)), PlayerData.format_money(int(lot.get("value_marks", 0)))]})
+			for hold: Dictionary in ship.get_bulk_hold_states():
+				if float(hold.get("filled_tonnes_t", 0)) > 0:
+					cargo.append({"title": CommodityCatalog.commodity_display(str(hold.get("commodity_id", ""))), "detail": "%.1f tonnes" % float(hold.get("filled_tonnes_t", 0))})
+			vessel.cargo = cargo
+		fleet.append(vessel)
+	return {"company": company, "captain": get_display_name(), "balance": get_marks(),
+		"voyage": get_voyage_snapshot(), "fleet": fleet, "jobs": get_active_contracts(),
+		"passenger": get_passenger_voyage_snapshot(), "remote": WorldGateway.is_remote(), "connected": WorldGateway.is_ready()}

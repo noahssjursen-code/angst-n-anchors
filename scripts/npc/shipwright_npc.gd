@@ -9,10 +9,11 @@ func _ready() -> void:
 	super._ready()
 
 func _on_commission_requested(entry: Dictionary) -> void:
-	var result := PortServiceDesk.request(self,"buy",{
+	var result: Dictionary = await PortServiceDesk.purchase(self,{
 		"stock_id":str(entry.get("prebuilt_id","")),
 		"vessel_name":str(entry.get("prebuilt_name","Vessel")),
 		"request_id":PlayerData.new_uuid(),
+		"expected_price_nok":ShipwrightPricing.commission_price(entry, HullStations.from_box(float(entry.get("loa_m",24)),float(entry.get("beam_m",8)),4,10), PlayerSession.data),
 	})
 	if not bool(result.get("ok",false)):
 		GameMenu.notify(str(result.get("message","The yard could not complete the purchase.")))

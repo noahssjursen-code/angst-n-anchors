@@ -44,6 +44,14 @@ float ocean_fresnel(vec3 normal_world, vec3 view_dir) {
 	return 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
 }
 
+// Bounded CPU time preserves centimetre detail. Blend across the clock wrap
+// instead of jumping the decorative noise every 4096 seconds.
+float ocean_crest_noise(vec2 xz, float wt) {
+	float value = ocean_vnoise(xz * 0.55 + wt * 0.12);
+	if (wt > 4088.0) value = mix(value, ocean_vnoise(xz * 0.55 + (wt - 4096.0) * 0.12), smoothstep(4088.0,4096.0,wt));
+	return value;
+}
+
 float ocean_crest(
 	vec3 world_pos,
 	vec3 normal_world,
@@ -53,7 +61,7 @@ float ocean_crest(
 ) {
 	float steep = clamp(1.0 - normal_world.y, 0.0, 1.0);
 	float height_rel = clamp((world_pos.y - water_level_value) * 0.55, -0.5, 1.0);
-	float noise = ocean_vnoise(world_pos.xz * 0.55 + wave_time_value * 0.12);
+	float noise = ocean_crest_noise(world_pos.xz, wave_time_value);
 	float crest = smoothstep(0.22, 0.78, steep * 0.9 + max(height_rel, 0.0) * 0.2);
 	crest *= mix(0.4, 1.0, noise);
 	crest *= mix(1.0, 0.5, clamp((wave_intensity_value - 0.8) * 0.4, 0.0, 1.0));
@@ -93,7 +101,7 @@ float ocean_foam_noise(vec2 p) {
 }
 
 // Coarse FFT compression decides where foam is possible, not its texture.
-float ocean_foam_coverage(vec2 xz, float wt, float breaking, float steep) {
+float ocean_foam_coverage_raw(vec2 xz, float wt, float breaking, float steep) {
 	vec2 drift = xz + wt * vec2(0.16, -0.11);
 	float footprint = max(length(dFdx(xz)), length(dFdy(xz)));
 	// Break up the periodic FFT compression envelope with metre-scale rafts.
@@ -108,7 +116,7 @@ float ocean_foam_coverage(vec2 xz, float wt, float breaking, float steep) {
 	return smoothstep(0.24, 0.37, density);
 }
 
-float ocean_foam_bubbles(vec2 xz, float wt, float footprint) {
+float ocean_foam_bubbles_raw(vec2 xz, float wt, float footprint) {
 	vec2 drift = xz + wt * vec2(0.16, -0.11);
 	vec2 p = drift * 14.0;
 	p += vec2(ocean_foam_noise(drift * 3.1), ocean_foam_noise(drift * 3.1 + vec2(37.1))) * 2.0;
@@ -133,4 +141,15 @@ float ocean_foam_bubbles(vec2 xz, float wt, float footprint) {
 // Fade before the 1536 m horizon boundary; never use a different gain per ring.
 float ocean_foam_distance_fade(float distance_to_camera) {
 	return 1.0 - smoothstep(800.0, 1400.0, distance_to_camera);
+}
+
+float ocean_foam_coverage(vec2 xz, float wt, float breaking, float steep) {
+	float value = ocean_foam_coverage_raw(xz, wt, breaking, steep);
+	if (wt > 4088.0) value = mix(value, ocean_foam_coverage_raw(xz,wt-4096.0,breaking,steep),smoothstep(4088.0,4096.0,wt));
+	return value;
+}
+float ocean_foam_bubbles(vec2 xz, float wt, float footprint) {
+	float value = ocean_foam_bubbles_raw(xz, wt, footprint);
+	if (wt > 4088.0) value = mix(value, ocean_foam_bubbles_raw(xz,wt-4096.0,footprint),smoothstep(4088.0,4096.0,wt));
+	return value;
 }

@@ -160,6 +160,8 @@ static func apply_identity(boat: BoatBody, record: Dictionary) -> void:
 	var layout_hash := str(record.get("layout_hash", "")).strip_edges()
 	if not layout_hash.is_empty():
 		boat.set_meta("layout_hash", layout_hash)
+	for field in ["construction_id", "catalog_hash"]:
+		boat.set_meta(field, str(record.get(field, "")).strip_edges())
 
 
 ## Power belongs to the finished store ship, not the reusable hull component.

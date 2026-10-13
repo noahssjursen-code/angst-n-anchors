@@ -12,13 +12,15 @@ const FUEL_PRICE_PER_LITRE := 0.5
 signal deployment_finished(ok: bool, message: String)
 var _pending_berth_claims: Dictionary = {} ## request id -> deployment context
 var _pending_storage: Dictionary = {}
+var _deployment_fetch_generation := 0
 
 func request_storage(ship: BoatBody) -> void:
 	if _passenger_storage_blocked(ship): return
 	if not PortServiceDesk.storage_reason(self,ship).is_empty(): return
-	if not _pending_storage.is_empty(): return
+	if not _pending_storage.is_empty() or not _pending_berth_claims.is_empty(): return
+	_deployment_fetch_generation += 1
 	var request_id := WorldGateway.next_request_id("store-vessel")
-	_pending_storage[request_id] = weakref(ship)
+	_pending_storage[request_id] = {"ship": weakref(ship), "session": WorldGateway.session_token()}
 	WorldGateway.send_command(WorldContracts.COMMAND_VESSEL_BERTH_RELEASE, {"vessel_id":HarbourDeploy.authority_vessel_id(LocalPlayerView.get_active_vessel_record()),"reason":"stored_at_port"},request_id)
 
 
@@ -69,12 +71,47 @@ func _commit_refuel(litres: float, price: int) -> void:
 
 func _deploy_fleet_vessel(record: Dictionary) -> void:
 	if _passenger_storage_blocked(PlayerVessel.find_active_ship(get_tree())): return
+	if not _pending_berth_claims.is_empty() or not _pending_storage.is_empty(): return
+	_deployment_fetch_generation += 1
+	if WorldGateway.is_remote():
+		var server_id := str(record.get("server_vessel_id", "")).strip_edges()
+		if server_id.is_empty():
+			deployment_finished.emit(false, "This vessel has not been saved to the server yet.")
+			return
+		var generation := _deployment_fetch_generation
+		var actor_id := WorldGateway.actor_id()
+		var authority_session := WorldGateway.session_token()
+		var session := get_node_or_null("/root/PlayerSession")
+		VesselSync.fetch_vessel_record(session, server_id, func(row: Dictionary) -> void:
+			if generation != _deployment_fetch_generation: return
+			if not WorldGateway.is_ready() or not WorldGateway.is_remote() or WorldGateway.actor_id() != actor_id: return
+			if WorldGateway.session_token() != authority_session: return
+			if row.is_empty():
+				deployment_finished.emit(false, "Could not load the server's vessel design. Please try again.")
+				return
+			# Local identity stays stable, but every construction field comes from
+			# the accepted server record. An unsaved editor draft is never deployed.
+			var accepted := record.duplicate(true)
+			for field in ["hull_id", "registration_id", "shaft_power_kw", "brick_layout", "layout_hash", "construction_id", "catalog_hash"]:
+				accepted[field] = row.get(field, "" if field != "brick_layout" else {})
+			accepted["name"] = str(row.get("display_name", "Vessel"))
+			accepted["display"] = accepted.name
+			accepted["scene_path"] = str(row.get("template_path", ""))
+			_claim_fleet_berth(accepted)
+		)
+		return
+	_claim_fleet_berth(record)
+
+
+func _claim_fleet_berth(record: Dictionary) -> void:
 	var resolved := VesselSpawn.resolve_deployable_record(record)
 	if resolved.is_empty():
+		deployment_finished.emit(false, "The saved vessel design cannot be built with this client.")
 		return
 	var harbour := _harbour()
 	var candidates := HarbourDeploy.compatible_slots_for(harbour, resolved, _max_ship_class())
 	if candidates.is_empty():
+		deployment_finished.emit(false, "No suitable berth is available for this vessel.")
 		return
 	var vessel_id := HarbourDeploy.authority_vessel_id(resolved)
 	if vessel_id.is_empty():
@@ -93,6 +130,8 @@ func _deploy_fleet_vessel(record: Dictionary) -> void:
 		"record": resolved.duplicate(true),
 		"vessel_id": vessel_id,
 		"old_record": old_record,
+		"generation": _deployment_fetch_generation,
+		"session_token": WorldGateway.session_token(),
 	}
 	WorldGateway.send_command(
 		WorldContracts.COMMAND_VESSEL_BERTH_CLAIM,
@@ -108,20 +147,30 @@ func _deploy_fleet_vessel(record: Dictionary) -> void:
 
 func _on_world_command_completed(request_id: String, result: Dictionary) -> void:
 	if _pending_storage.has(request_id):
-		var ship := (_pending_storage[request_id] as WeakRef).get_ref() as BoatBody
+		var context: Dictionary = _pending_storage[request_id]
+		var ship := (context.ship as WeakRef).get_ref() as BoatBody
 		_pending_storage.erase(request_id)
+		if str(context.session) != WorldGateway.session_token(): return
 		if not bool(result.get("ok",false)):
 			deployment_finished.emit(false,str(result.get("message","Storage could not be confirmed.")))
 			return
 		if is_instance_valid(ship) and ship == LocalPlayerView.get_active_ship():
 			_network_unregister_record(LocalPlayerView.get_active_vessel_record())
 			PlayerVessel.despawn_all_ships(get_tree())
+			PlayerSession.data.ship_runtime_state = {}
+			PlayerSession.save_now()
 		deployment_finished.emit(true,"Vessel stored. Choose a vessel to bring alongside.")
 		return
 	if not _pending_berth_claims.has(request_id):
 		return
 	var context := _pending_berth_claims[request_id] as Dictionary
 	_pending_berth_claims.erase(request_id)
+	if str(context.get("session_token", "")) != WorldGateway.session_token(): return
+	if int(context.get("generation", -1)) != _deployment_fetch_generation:
+		if bool(result.get("ok", false)):
+			WorldGateway.send_command(WorldContracts.COMMAND_VESSEL_BERTH_RELEASE,
+				{"vessel_id": context.get("vessel_id", ""), "reason": "deployment_cancelled"})
+		return
 	if not bool(result.get("ok", false)):
 		deployment_finished.emit(false, str(result.get("message", "No suitable berth is currently available.")))
 		return
@@ -136,19 +185,12 @@ func _on_world_command_completed(request_id: String, result: Dictionary) -> void
 	var new_vessel_id := str(context.get("vessel_id", ""))
 	if not old_vessel_id.is_empty() and old_vessel_id != new_vessel_id:
 		_network_unregister_record(old_record)
-	var session := get_node_or_null("/root/PlayerSession")
-	if session != null and session.data != null:
-		session.data.set_active_vessel(resolved)
-		if session.has_method("save_now"):
-			session.call("save_now")
 	_spawn_chosen_ship(resolved, berth_id)
 
 
 func _spawn_chosen_ship(resolved: Dictionary, preferred_berth_id: String) -> void:
 	var plot := _plot()
-	if plot == null:
-		return
-	var ship := HarbourDeploy.deploy(plot, resolved, preferred_berth_id)
+	var ship := HarbourDeploy.deploy(plot, resolved, preferred_berth_id) if plot != null else null
 	if ship == null:
 		WorldGateway.send_command(
 			WorldContracts.COMMAND_VESSEL_BERTH_RELEASE,
@@ -160,12 +202,18 @@ func _spawn_chosen_ship(resolved: Dictionary, preferred_berth_id: String) -> voi
 		deployment_finished.emit(false, "The ship could not be launched. The berth reservation was released.")
 		return
 
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.data != null:
+		session.data.set_active_vessel(resolved)
+		if session.has_method("save_now"):
+			session.call("save_now")
 	var scene_path := str(resolved.get("scene_path", resolved.get("template_path", ""))).strip_edges()
 	_network_register_ship(ship, scene_path, str(resolved.get("hull_id", "")))
 	deployment_finished.emit(true, "%s is alongside at %s." % [VesselSpawn.vessel_name_of(resolved), PortServiceDesk.friendly_berth(ship.get_moored_berth())])
 
 
 func _commit_abandon() -> void:
+	_deployment_fetch_generation += 1
 	var active_record: Dictionary = LocalPlayerView.get_active_vessel_record()
 	var vessel_id := HarbourDeploy.authority_vessel_id(active_record)
 	if not vessel_id.is_empty() and WorldGateway.is_ready():

@@ -142,7 +142,7 @@ void fragment() {
 	vec3 sun_dir = normalize(sun_direction);
 	float distance_to_camera = length(CAMERA_POSITION_WORLD - v_world_pos);
 	float fresnel = ocean_fresnel(normal_world, view_dir);
-	float crest_noise = ocean_vnoise(v_world_pos.xz * 0.55 + wave_time * 0.12);
+	float crest_noise = ocean_crest_noise(v_world_pos.xz, wave_time);
 	float crest = ocean_crest(v_world_pos, normal_world, water_level, wave_time, wave_intensity);
 	vec3 body = ocean_body(
 		deep_albedo, shallow_albedo, normal_world, view_dir, v_world_pos,

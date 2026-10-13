@@ -19,6 +19,7 @@ var _hose_drop: Node3D
 
 
 func _ready() -> void:
+	if not Engine.is_editor_hint(): add_to_group("network_catch_hold")
 	_boat = _find_boat()
 	state.hold_id = hold_id
 	state.capacity_kg = maxf(capacity_kg, 0.0)
@@ -55,6 +56,8 @@ func get_hose_drop_world() -> Vector3:
 
 
 func apply_state(data: Dictionary) -> void:
+	# Captain save snapshots cannot overwrite the authoritative multiplayer crate.
+	if not Engine.is_editor_hint() and WorldGateway.is_remote() and not data.has("owner_actor_id"): return
 	state = CatchHoldState.from_dict(data)
 	state.hold_id = hold_id
 	state.capacity_kg = capacity_kg
@@ -64,6 +67,7 @@ func apply_state(data: Dictionary) -> void:
 
 
 func accept_lot(lot: CatchLot) -> CatchLot:
+	if WorldGateway.is_remote(): return lot.duplicate_lot() if lot != null else CatchLot.new()
 	var before := state.total_mass_kg()
 	var overflow := state.accept_lot(lot)
 	if not is_equal_approx(before, state.total_mass_kg()):
@@ -72,6 +76,7 @@ func accept_lot(lot: CatchLot) -> CatchLot:
 
 
 func withdraw_oldest(max_mass_kg: float) -> Array[CatchLot]:
+	if WorldGateway.is_remote(): return []
 	var before := state.total_mass_kg()
 	var lots := state.withdraw_oldest(max_mass_kg)
 	if not is_equal_approx(before, state.total_mass_kg()):
@@ -242,11 +247,12 @@ func _build_inspection() -> void:
 
 func can_inspect() -> bool:
 	if Engine.is_editor_hint() or not is_instance_valid(_inspect_area) or not _inspect_area.is_inside_tree() or GameMenu.is_modal_open() or LocalPlayerView.is_helming():return false
-	if WorldGateway.is_remote() or LocalPlayerView.get_active_ship()!=_boat:return false
+	if LocalPlayerView.get_active_ship()!=_boat:return false
+	if WorldGateway.is_remote() and not FishingCatchReplication.owns_ship(_boat): return false
 	var player:=get_tree().get_first_node_in_group("player") as CharacterBody3D
 	if player==null or player.is_vehicle_occupied():return false
 	var rod:=_boat.get_node_or_null("RodFishingStation") as RodFishingStation
-	if rod!=null and rod.working and rod.session.phase!="stowed":return false
+	if rod!=null and rod.working and rod.session.phase not in ["stowed", "landed"]:return false
 	var camera:=player.get_node("Camera3D") as Camera3D
 	if camera.global_position.distance_to(_inspect_area.global_position)>3.5:return false
 	var query:=PhysicsRayQueryParameters3D.create(camera.global_position,camera.global_position-camera.global_basis.z*3.5,21)

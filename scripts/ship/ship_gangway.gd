@@ -8,6 +8,8 @@ const ROLLER_MODEL := "res://resources/models/parts/gangway/gangway_landing_roll
 const WIDTH := .90
 const MAX_SPAN := 8.0
 const MAX_SLOPE := .60 # tangent: 31 degrees, below the player's walking limit
+const LEGACY_GATE_Z := {"hull_24x8":4.0, "hull_32x10":8.0, "hull_88x14":33.0, "trawler_hull_14m":5.0}
+const DECK_CLEARANCE := 2.2
 var boat: ImportedDraftVessel
 var deployed := false
 var ship_end := Vector3.ZERO
@@ -67,8 +69,13 @@ func refresh_gates() -> void:
 	deployed = false
 	_gates.clear()
 	_candidates.clear()
-	# Existing straight 1 m bulwark modules become hinged boarding gates. The
-	# authored model, paint, draft records and collision are retained.
+	var explicit := false
+	var legacy_z := float(LEGACY_GATE_Z.get(boat.draft.get("hull", ""), INF))
+	for part in boat.part_roots:
+		if part.has_meta("boarding_gate"): explicit = true
+		if part.get_meta("asset_id", "") == "hold_coaming_5x8": legacy_z = 6.0
+	# Only authored gates become hinges. Old drafts use fixed compatibility points;
+	# obstructed entrances never relocate themselves to another ordinary railing.
 	for side in [-1,1]:
 		var candidates: Array[Dictionary] = []
 		for part in boat.part_roots:
@@ -76,9 +83,12 @@ func refresh_gates() -> void:
 			if not id.begins_with("halfwall_straight_100cm_"): continue
 			if absf(part.position.x-side*boat.beam_m*.5) > .05: continue
 			if absf(part.position.y-boat.depth_m) > .05 or absf(part.rotation.y) > .01: continue
+			if explicit:
+				if not bool(part.get_meta("boarding_gate", false)): continue
+			elif not is_equal_approx(part.position.z, legacy_z):
+				continue
 			part.set_meta("gangway_gate", true)
 			candidates.append({"part":part, "closed":part.transform})
-		candidates.sort_custom(func(a: Dictionary,b: Dictionary): return absf(a.part.position.z-1.0)<absf(b.part.position.z-1.0))
 		_candidates[side] = candidates
 	_shore_valid = false
 	_probe_time = 0.0
@@ -116,8 +126,10 @@ func _physics_process(delta: float) -> void:
 		return
 	var gate: Node3D = _gates[side].part
 	var closed: Transform3D = _gates[side].closed
-	var local_end := closed * Vector3(0,.035,-.5)
-	local_end.x -= side*.24
+	# Overlap the deck with a slightly buried toe. A raised 35 mm vertical lip
+	# can arrest CharacterBody movement when the hull rolls during disembarking.
+	var local_end := closed * Vector3(0,-.015,-.5)
+	local_end.x -= side*.45
 	ship_end = boat.to_global(local_end)
 	if probing:
 		_shore_valid = _find_shore(berth)
@@ -157,18 +169,28 @@ func _clear_gate(side: int) -> Dictionary:
 	if boat.get_walk_deck() == null: return {}
 	var query := PhysicsShapeQueryParameters3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = .36
-	capsule.height = 1.85
+	capsule.radius = .35 # Matches scenes/shared/player.tscn.
+	capsule.height = 1.8
 	query.shape = capsule
 	query.collision_mask = BoatBody.LAYER_BOAT_WALK | BoatBody.LAYER_WORLD
 	query.exclude = [_walk.get_rid()]
 	for entry: Dictionary in _candidates.get(side,[]):
-		var point: Vector3 = entry.closed * Vector3(0,.975,-.5)
+		var point: Vector3 = entry.closed * Vector3(0,.96,-.5)
 		var clear := true
-		for inset in [.6,1.0]:
+		query.transform = Transform3D(boat.global_basis, boat.to_global(point-Vector3(side*.45,0,0)))
+		query.motion = boat.global_basis * Vector3(-side*(DECK_CLEARANCE-.45),0,0)
+		var travel := get_world_3d().direct_space_state.cast_motion(query)
+		if travel[0] < .999: continue
+		query.motion = Vector3.ZERO
+		for inset in [.45,.7,1.0,1.3,1.6,1.9,DECK_CLEARANCE]:
 			var position := point-Vector3(side*inset,0,0)
 			query.transform = Transform3D(boat.global_basis,boat.to_global(position))
 			if not get_world_3d().direct_space_state.intersect_shape(query,1).is_empty():
+				clear = false
+				break
+			var feet := boat.to_global(position-Vector3.UP*.96)
+			var support := PhysicsRayQueryParameters3D.create(feet+boat.global_basis.y*.15, feet-boat.global_basis.y*.2, BoatBody.LAYER_BOAT_WALK)
+			if get_world_3d().direct_space_state.intersect_ray(support).is_empty():
 				clear = false
 				break
 		if clear: return entry

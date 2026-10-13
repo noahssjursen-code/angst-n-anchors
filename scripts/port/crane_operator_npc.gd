@@ -45,7 +45,7 @@ func _on_request_load() -> void:
 	var equip := _this_equipment(hc)
 	if ship == null or equip == null:
 		return
-	hc.plug_equipment(equip.equipment_id(), ship, QuayEquipmentJob.MODE_LOAD)
+	hc.request_equipment_job(equip.equipment_id(), QuayEquipmentJob.MODE_LOAD)
 
 
 func _on_request_unload() -> void:
@@ -56,7 +56,7 @@ func _on_request_unload() -> void:
 	var equip := _this_equipment(hc)
 	if ship == null or equip == null:
 		return
-	hc.plug_equipment(equip.equipment_id(), ship, QuayEquipmentJob.MODE_UNLOAD)
+	hc.request_equipment_job(equip.equipment_id(), QuayEquipmentJob.MODE_UNLOAD)
 
 
 func _on_request_stop() -> void:

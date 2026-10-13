@@ -144,6 +144,7 @@ func _process(delta: float) -> void:
 
 
 func _has_transferable_catch() -> bool:
+	if WorldGateway.is_remote():return _landed_mass_kg < _initial_mass_kg
 	var room := _receiver.available_kg() if _receiver != null else INF
 	if room <= CatchLot.MASS_EPS_KG: return false
 	for hold in _ship.get_catch_holds():
@@ -154,6 +155,11 @@ func _has_transferable_catch() -> bool:
 
 
 func _transfer_mass(max_mass_kg: float) -> void:
+	if WorldGateway.is_remote():
+		# Animate throughput only. The server removes lots and pays atomically
+		# after the owner submits the completed operation; observers never mutate.
+		_landed_mass_kg=minf(_initial_mass_kg,_landed_mass_kg+maxf(0,max_mass_kg))
+		return
 	_transfer_credit += maxf(max_mass_kg, 0.0)
 	var remaining := _transfer_credit
 	if _receiver != null:

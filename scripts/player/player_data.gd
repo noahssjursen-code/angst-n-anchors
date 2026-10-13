@@ -203,6 +203,10 @@ static func ledger_vessel_record(record: Dictionary) -> Dictionary:
 	var layout_hash := str(record.get("layout_hash", "")).strip_edges()
 	if not layout_hash.is_empty():
 		out["layout_hash"] = layout_hash
+	for field in ["construction_id", "catalog_hash"]:
+		var value := str(record.get(field, "")).strip_edges()
+		if not value.is_empty():
+			out[field] = value
 	return out
 
 

@@ -54,7 +54,13 @@ func _process(delta: float) -> void:
 	if is_instance_valid(local_boat):
 		var drive := local_boat.get_node_or_null("PropulsionComponent") as PropulsionComponent
 		var steering := local_boat.get_node_or_null("RudderComponent") as RudderComponent
-		if drive != null and steering != null:
+		if bool(local_boat.get_meta("remote_replica", false)):
+			var state: Dictionary = local_boat.get_meta("replicated_machinery", {})
+			if steering != null: max_rudder_degrees = steering.max_rudder_angle_deg
+			apply_snapshot({"throttle": -float(state.get("throttle", 0.0)),
+				"steering": float(state.get("steering", 0.0)),
+				"powered": bool(state.get("running", false))}, revision + 1)
+		elif drive != null and steering != null:
 			max_rudder_degrees = steering.max_rudder_angle_deg
 			apply_snapshot({"throttle":-drive.throttle, "steering":steering.rudder_input,
 				"powered":drive.engine_running and local_boat.get_fuel_fraction() > 0.0}, revision + 1)

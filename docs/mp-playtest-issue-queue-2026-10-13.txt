@@ -1,0 +1,164 @@
+Multiplayer playtest issue queue — 2026-10-13
+
+Work in progress is not a verified fix. Keep each report until its acceptance checks pass.
+
+1. Ocean appearance and apparent surface fold-through (ACTIVE)
+   Shared clock previously passed Unix-scale time into decorative shader noise.
+   Bounded foam time and wrap blending verified in rendered Unix-time comparisons.
+   Wrap image mean RGB difference < 0.007/255. FFT remains 512.
+   Captures: C:/Users/noahs/Pictures/machinescreenshots/ocean-clock-4218845/
+   Moderate-sea face-orientation capture did not reproduce back-facing folds;
+   inspect grazing views, transmission and LOD seams before declaring resolved.
+
+2. Receiving client's vessel wake (IMPLEMENTED; live visual confirmation pending)
+   User sees an inverted X / narrow long stripe behind remote vessel.
+   Replaced frame-derived correction velocity with published propeller flow speed,
+   thrust, throttle and hull stern direction. Uses local strength/immersion rules.
+   Focused test passes correction stability, astern reversal and engine stop.
+   Turns and range re-entry still need live visual confirmation.
+
+3. Vessel lighting state (IMPLEMENTED; focused tests pass)
+   Receiving clients do not see onboard lights switched on.
+   Trace ShipLighting plus imported fixture assembly and replication metadata.
+   Verify OFF/NAV/WORK/ALL, automatic navigation lights, cabin/deck fixtures,
+   existing observers and clients first entering range of an already lit vessel.
+   Do not merely transmit a toggle: initial current state must also be supplied.
+   Preset plus automatic-nav override now published in every state snapshot.
+   Imported refits refresh fixture discovery. Focused production-model test covers
+   OFF/NAV/WORK/ALL, automatic nav, stationary metadata changes and late fixtures.
+
+4. Cargo/crane replication (IMPLEMENTED; rendered Docker integration passes)
+   Server persists cargo_manifest and port_cargo_manifest projections, with stable
+   container identities, contents, paint, destination, slot and relative pose.
+   One exclusive location: quay, crane hook, or vessel. Observers animate crane
+   joints and reparent the same cargo node; they do not simulate another job.
+   75 integration checks pass against rebuilt local Docker, including port-only
+   discovery, transfer, deck attachment, reconnect, range re-entry and removal.
+   Engine captures archived under C:/Users/noahs/Pictures/machinescreenshots/.
+   IMPORTANT: This is ownership-validated replication of captain-simulated cargo,
+   not server-issued economic inventory or server-simulated crane pathfinding.
+   Remote contract cancellation and authoritative freight economics remain OPEN.
+
+5. Vessel services (PARTLY VERIFIED / OPEN)
+   Immediate stored-vessel removal and stale-snapshot suppression have a passing
+   focused test; 86-check Docker blueprint regression also passes after the latest changes.
+   Shipwright purchasing now implemented: atomic server debit/fleet ownership,
+   durable retry receipts and all six sale presets. 20 MP integration checks
+   and 52 single-player/UI checks pass. Fuel service remains unfinished.
+
+Previously verified: sky clock precision fix; shared server ocean clock tests.
+This queue does not claim that all reported regressions have been fixed.
+
+6. Passenger jitter on replicated vessels (TIMING FIX IMPLEMENTED)
+   Player 2 standing on a replicated ship is still very jittery.
+   User suggests damping / ignoring a threshold of external movement.
+   Moved remote interpolation to physics before player movement (priority -100).
+   Real-player moving/rolling deck test passes at 30 and 144 render FPS:
+   standing horizontal drift < 0.1 mm; deliberate walking covers 4.83 m.
+   No movement deadband added. Two-client visual confirmation still pending.
+   Keep standing passengers stable relative to deck without delaying deliberate
+   walking. Verify stationary and moving hulls, turns/waves, boarding/leaving,
+   and both owner and passenger client views.
+
+7. Replicated propeller and rudder animation (IMPLEMENTED; focused tests pass)
+   Receiving clients see a stationary propeller and rudder on remote ships.
+   Inspect machinery-state publication and remote visual animation updates.
+   Drive propeller visuals from replicated operating state (speed/direction),
+   and rudder visuals from actual rudder angle; keep remote propulsion physics
+   disabled. Check idle, forward, reverse, steering both ways, and initial
+   state when entering range of an already moving vessel.
+
+Validation in this pass:
+- tests/remote_vessel_presentation_test.tscn: PASS, actual imported fishing boat,
+  owner snapshot metadata, light fixtures, propeller/rudder and wake emissions.
+- tests/remote_deck_stability_test.tscn: PASS with a rendered window. Requires
+  mouse capture; headless is explicitly rejected rather than falsely testing input.
+- tests/mp_blueprint_flow_test.tscn: PASS, 86 checks against local Docker server.
+- tests/remote_storage_visibility_test.tscn: PASS.
+- tests/ocean_shader_clock_test.tscn: rendered/captured and manually inspected.
+- git diff --check: PASS.
+
+The local Docker server has been rebuilt with manifest publication support.
+Existing clients must restart to load client replication changes.
+Cancellation and full server-owned freight economics remain OPEN.
+
+Crane follow-up: NPC Load/Unload bypassed the authority and started local jobs.
+Both now request exact equipment through HarbourAuthorityBridge. Cargo test
+passes 76 headless checks including real NPC Load and initial automatic motion.
+
+8. Deliberate gangway placement / blocked deck access (INVESTIGATED; OPEN)
+   Player reports getting stuck on an onboard obstacle they cannot jump over.
+   ShipGangway currently converts ordinary straight 1 m halfwalls into candidate
+   gates, sorts toward local z=1 m, and checks only two capsule positions 0.6 m
+   and 1.0 m inboard. This does not establish a usable route into the deck.
+   Proposed fix: explicit boarding-gate/mount designation saved in the authored
+   vessel blueprint (including UGC), with a reserved player-width passage from
+   the shore ramp through the opened gate into a connected walkable deck area.
+   Validate the gate swing, ramp threshold and route against actual player
+   collision; report obstruction instead of silently picking another wall.
+   Check loaded containers as well as bare deck, both quay sides and replicas.
+   Exact obstruction/ship from the report has not yet been identified; no
+   collision or jump-height workaround has been applied.
+
+9. Network range gizmo / runtime vessel render LOD (IMPLEMENTED, 2026-10-13)
+   F3 > G > NETWORK RANGE & VESSEL LOD. Boat guides at 400/500 m;
+   actual network rings use the camera observer and 3D-distance cross-section.
+   GET /v1/network-policy exposes live server constants: ships 4 km, players
+   1 km, ship update bands 100/500/2000/4000 m. Client timeout remains 15 s.
+   Imported remote vessels build a combined distant model from their actual
+   construction at runtime. This includes UGC; no stock-id lookup is used.
+   Small fittings are omitted and equivalent materials merged. Nearby players
+   preserve full detail. Detailed nodes remain in memory; this is render LOD.
+   Bake batches yield between frames (~2 ms target, individual mesh operations
+   can exceed it). Cargo node additions/removals and refits rebuild the proxy.
+   Headless test verifies UGC addition, cancellation, transitions, cargo changes
+   and observer geometry. Render inspected; cargo ship 689 -> 34 surfaces.
+   Inspect: tests/network_vessel_lod_test.tscn -- --shipyard-playtest --inspect
+   Server rebuilt. Also accepted the existing authored boarding_gate boolean
+   in server construction validation (the focused server test exposed this).
+
+10. Own MP fishing vessel interactions (CONFIRMED; OPEN)
+    User reports rod/harpe pickup and catch-crate inspection unavailable.
+    RodFishingStation.can_interact, snapshot and physics explicitly return on
+    WorldGateway.is_remote(); LocalPlayerView also suppresses fishing HUD.
+    CatchHoldComponent.can_inspect independently rejects all remote sessions.
+    Server currently has no fishing-session/catch-award command handler.
+    Fix requires owned-vessel permissions, server-backed equipment selection,
+    catch issuance and hold projection; inspect should remain a read operation.
+    Do not simply enable client-local catch mutation and claim MP fishing works.
+    No fishing interaction changes made in the LOD pass.
+
+11. MP contract cancellation (CLIENT BLOCK REMOVED, 2026-10-13)
+    Removed the unconditional remote-voyage rejection in FreightService.
+    Existing loaded/in-transit/busy-crane checks still apply. Cancellation saves
+    the revised captain document through PlayerSession's durable remote outbox
+    before removing waiting cargo. Existing CargoManifestReplication publishes
+    the resulting removal. This is the current captain-document architecture,
+    not a new fully server-authoritative freight command. UI explicitly says
+    server save queued; a queued save is not a server acknowledgement.
+    Focused cancellation regression: 39 checks passed, including MP waiting
+    cargo removal, loaded/in-transit rejection and failed-save rollback.
+    No server rebuild needed. Live two-client cancellation not rerun this pass.
+
+12. Crane refuses to start: stale equipment lock (FIXED, 2026-10-13)
+    User log repeatedly reported equipment already serving another operation.
+    DB confirmed six old running operations with duration_ms=0. Client completion
+    skipped remote finish, while server timed scheduler ignores zero duration.
+    Untimed local completion now sends owner-authorized stop to release the lock
+    without asserting freight completion or awarding money. Active owner equipment
+    sends a heartbeat every 10 seconds; abandoned untimed locks expire after 45 s.
+    Timed server operations retain scheduler ownership. Lease expiry rechecks
+    under the authority lock against a heartbeat racing the expiry scan.
+    Server authority/HTTP suites pass; real Docker MP cargo/crane flow 76 checks
+    pass. Local Docker rebuilt; all six pre-existing stale locks cleared through
+    authority events (no direct database edits). Restart clients for heartbeat
+    and completion changes. Startup HTTP timeouts in the log are separate and
+    were not claimed fixed by this lock-lifecycle change.
+
+13. MP fishing station and catch crate (2026-10-13)
+Removed explicit multiplayer guards from rod/harpe station input, simulation, HUD and owned crate inspection. Ownership comes from the actual fleet ledger + server vessel identity (owner_player_id metadata is not present on deployed owned ships).
+Added fishing.catch.store command + durable fishing_hold projections scoped to vessel. DB checks captain ownership and installed hook_line_station / insulated_catch_tank at matching tank_N part index. Server validates species size bounds, capacity, lot identity and canonical owner/quality. Client serializes harpe batches, retries unknown transport outcomes with the same request ID, and hydrates owned and replica holds from server projections. Saved captain runtime cannot overwrite server crates.
+Verified: Go authority and DB tests; tests/mp_fishing_interaction_test.tscn on live Docker with 2 isolated accounts, actual authored boat/player/raycast F interactions, payout/reel input, HUD, seven accepted catches, observer fetch, duplicate rejection, foreign ownership rejection, crate library and component reconstruction. 15 checks passed. Postgres independently contains seven specimens per test vessel. Docker rebuilt and running.
+Scope limits: bites/fights and school depletion still client-simulated; this is validated inventory storage, not server habitat simulation/anti-cheat. MP equipment purchases/equipping and authoritative fish sale are not implemented by this change. Local fish landing is explicitly blocked in MP to avoid selling/withdrawing a server crate locally. Connection closure discards unsent pending requests; acknowledged catches remain durable and unknown committed outcomes hydrate on reconnect. Restart existing game clients to use the updated scripts.
+14. Fishing presentation replication (2026-10-13): player UDP metadata now carries a bounded versioned visual packet for held rod/harpe pose, reel, bend, line endpoint and up to six fish species/sizes/hook positions. Remote avatars reuse RodFishingStation visuals and RodHandPose without input, fishing simulation or catch awards. Equipment/line targets interpolate in the replicated player's frame (visible body heading), so deck riding moves them together. Empty fishing state removes carried gear and hand modifier. Existing server transport accepts this metadata; no server rebuild. Rendered fishing_visual_replication_test + --live-server passed with two authenticated localhost identities, six-hook packet round trip and stow removal; screenshots archived in Pictures/machinescreenshots/fishing-replica-1791916984-654. This is visual presentation; durable catches remain fishing.catch.store / fishing_hold.
+15. MP fish landing: fishing.catch.land removes server-held lot IDs and commits NOK credit/receipts/projections in the same PostgreSQL transaction. Pump is visual-only in MP. Owner refreshes server balance; observer gets empty holds and port batch receipt. Sold lot IDs cannot be stored again. Docker updated; 25 live Godot checks and Go authority/db/gameplay tests pass, including data-only before/after replay and restart retry. Full company-ledger integration, server port capability registry and authoritative bite/population simulation remain gaps, documented in data-model-review-after-fish-landing-2026-10-13.txt.

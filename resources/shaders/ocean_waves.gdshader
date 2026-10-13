@@ -1,6 +1,8 @@
 shader_type spatial;
 // Dielectric water, with the simulation's filtered slopes resolving its surface.
-render_mode diffuse_burley, cull_disabled;
+// Screen-texture refraction puts this material in the transparent pass. Write
+// depth there too so farther wave triangles cannot overwrite the nearest skin.
+render_mode diffuse_burley, cull_disabled, depth_draw_always;
 
 
 // Opaque scene colour is already lit. Transmit it through EMISSION so it is
@@ -243,7 +245,7 @@ void fragment() {
 	// Crest teal must NOT follow absolute height — FFT wind seas make long
 	// parallel ridges, and height→color paints straight green stripes (max waves).
 	// Prefer local steepness + noise breakup; keep height as a weak hint only.
-	float crest_noise = ocean_vnoise(xz * 0.55 + wt * 0.12);
+	float crest_noise = ocean_crest_noise(xz, wt);
 	float crest = ocean_crest(v_world_pos, nm, water_level, wt, wave_intensity);
 	vec3 body = ocean_body(
 		deep_albedo, shallow_albedo, nm, view_dir, v_world_pos,

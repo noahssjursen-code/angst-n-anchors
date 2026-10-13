@@ -186,6 +186,8 @@ func _assemble_parts() -> void:
 		var part := assembler.create_part(record)
 		part.set_meta("asset_id", record["asset_id"])
 		part.set_meta("record_key", ImportedShipPartsEditor.slot_key(record))
+		if record.has("boarding_gate"): part.set_meta("boarding_gate", bool(record.boarding_gate))
+		if record.has("instance_id"): part.set_meta("instance_id", str(record.instance_id))
 		add_child(part)
 		part_roots.append(part)
 	var posts := Node3D.new()
@@ -195,11 +197,18 @@ func _assemble_parts() -> void:
 	_configure_bulk_holds()
 	_configure_cargo_pads()
 	for part in part_roots:
+		var pad := part.get_node_or_null("CargoPad")
+		if pad != null and part.has_meta("instance_id"):
+			pad.set_meta("authority_slot_id", "cargo:" + str(part.get_meta("instance_id")))
+	for part in part_roots:
 		var state := part.get_node_or_null("PartState") as ShipPartState
 		var controller := get_node_or_null("BoatController")
 		if state != null and controller != null and (not part.find_children("WheelPivot*", "Node3D", true, false).is_empty() or not part.find_children("ThrottlePivot*", "Node3D", true, false).is_empty()):
 			state.bind_local_helm(controller)
 		_add_interactions(part, state)
+	var lighting := get_node_or_null("ShipLighting") as ShipLighting
+	if lighting != null:
+		lighting.call_deferred("_gather_lights")
 	fitout_revision += 1
 
 func _configure_cargo_pads() -> void:
@@ -476,7 +485,10 @@ func _ensure_walk_deck() -> void:
 	_sync_walk_deck_transform()
 
 func _physics_process(delta: float) -> void:
-	super._physics_process(delta)
+	if not bool(get_meta("remote_replica", false)):
+		super._physics_process(delta)
+	else:
+		_sync_walk_deck_transform()
 	_sync_moving_part_colliders()
 
 func _sync_moving_part_colliders() -> void:

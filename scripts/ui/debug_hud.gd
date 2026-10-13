@@ -26,6 +26,7 @@ var _mouse_mode_before_debug_cursor: int = Input.MOUSE_MODE_CAPTURED
 ## Master playtest flag — every `world_gizmo` node + PortPlot site overlays follow this.
 var world_gizmos_enabled := false
 var gizmo_layers: Dictionary = {
+	WorldGizmos.LAYER_NETWORK: false,
 	WorldGizmos.LAYER_FISHING: false,
 	WorldGizmos.LAYER_BRIDGES: false,
 	"hide_ocean": false,
@@ -90,6 +91,7 @@ func _any_gizmo_layer_enabled() -> bool:
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(preload("res://scripts/network/network_range_gizmo.gd").new())
 
 	_layer              = CanvasLayer.new()
 	_layer.layer        = 100

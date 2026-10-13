@@ -4,6 +4,8 @@ uniform sampler3D cloud_volume : filter_linear_mipmap, repeat_enable;
 
 // --- Time ---
 uniform float sky_time = 0.0;
+// CPU wraps each texture axis in double precision before float upload.
+uniform vec3 cloud_drift = vec3(0.0);
 
 // --- Sky colour layers (driven by WeatherLighting) ---
 uniform vec3 sky_top_color     : source_color = vec3(0.26, 0.46, 0.70);
@@ -111,7 +113,7 @@ float volume_density(vec3 p, float footprint) {
     float thickness = mix(0.4, 1.1, cloud_thickness);
     float h = (p.y - base) / thickness;
     if (h <= 0.0 || h >= 1.0) return 0.0;
-    vec3 drift = vec3(sky_time * cloud_speed * .025, 0.0, sky_time * cloud_speed * .011);
+    vec3 drift = cloud_drift;
     float broad = textureLod(cloud_volume, p * .28 + drift, max(log2(footprint*.28*64.0),0.0)).r;
     float detail = textureLod(cloud_volume, p * .95 + drift * 2.0 + vec3(.37,.19,.53), max(log2(footprint*.95*64.0),0.0)).r;
     float coverage = clamp(cloud_coverage + storm_intensity * .15, 0.0, 1.0);

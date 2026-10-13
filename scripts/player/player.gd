@@ -510,8 +510,8 @@ func _sync_deck_capsule() -> void:
 	)
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if not hit.is_empty() and bool(hit.collider.get_meta("align_player_capsule", false)) and hit.normal.dot(Vector3.UP) > cos(floor_max_angle):
-		var boat: Node3D = hit.collider.get_meta("_boat_owner")
-		if is_instance_valid(boat):
+		var boat: Variant = hit.collider.get_meta("_boat_owner")
+		if is_instance_valid(boat) and boat is Node3D:
 			deck_up = boat.global_basis.y.normalized()
 	var forward := -global_basis.z
 	forward = (forward - deck_up * forward.dot(deck_up)).normalized()
@@ -779,6 +779,22 @@ func deck_support_id() -> int:
 
 func is_deck_mounted() -> bool:
 	return _mount_node() != null
+
+
+func network_deck_frame() -> String:
+	var deck := _mount_node()
+	if deck == null: return ""
+	var ship := deck.get_meta("_boat_owner", null) as Node3D
+	if not is_instance_valid(ship): return ""
+	var vid := str(ship.get_meta("server_vessel_id", ""))
+	if vid.is_empty(): return ""
+	var at := ship.to_local(global_position)
+	var yaw := rotation.y
+	if _player_camera != null: yaw = _player_camera.get_replication_yaw()
+	var relative_yaw := wrapf(yaw - ship.global_rotation.y, -PI, PI)
+	# Keep the regular world payload for server spatial interest; presentation
+	# uses this position in the exact hull frame seen by the walking client.
+	return ";deck=%s;dpos=%.3f,%.3f,%.3f;dyaw=%.4f" % [vid, at.x, at.y, at.z, relative_yaw]
 
 
 func mount_deck_transform() -> Transform3D:

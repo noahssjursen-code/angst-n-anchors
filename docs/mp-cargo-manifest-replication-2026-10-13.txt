@@ -1,0 +1,55 @@
+Cargo replication implementation — 2026-10-13
+
+The captain collects existing ContainerUnit records and exact locations from
+cargo pads and the operating crane. cargo.manifest.publish sends changes through
+WorldGateway and the reliable remote command service. Commands carry an expected
+revision and an idempotent receipt. Unknown transport outcomes retry the same
+receipt; conflicts fetch the current revision before trying again.
+
+The server checks durable vessel ownership, berth identity, duplicate container
+IDs, finite transforms, supported container types and crane-operation ownership.
+It stores the latest manifest and events in the existing authority store. Vessel
+interest and port interest expose copies of the same version. Port observers can
+see waiting containers before the vessel has assembled. Departure retires the old
+port copy once all cargo is aboard.
+
+Observers preserve container identity across quay -> hook -> vessel transitions.
+Crane joints interpolate every rendered frame. Deck positions are vessel-local;
+cargo follows the moving hull. Remote containers are excluded from local pickup
+queries. The public projection contains contents, routes, values, paint, slot IDs
+and transforms; remote hulls also expose their received cargo_manifest metadata.
+
+Files:
+- scripts/network/cargo_manifest_replication.gd
+- scripts/network/world_gateway.gd (runtime service setup)
+- scripts/network/remote_world_backend.gd (receipt identity on transport failure)
+- scripts/port/harbour_authority_bridge.gd (no independent observer crane jobs)
+- scripts/port/provision_crane_equipment_job.gd (retain terminal pose context)
+- sibling mp repo: internal/authority/cargo_manifest.go and tests
+- sibling mp repo: internal/db/command_authorizer.go, authority/commands.go
+
+Validation:
+- Full Go test suite passes.
+- tests/mp_cargo_manifest_test.tscn: 75 checks pass in a rendered Godot process,
+  with independent account/session/client stacks against the actual local Docker
+  server. Includes custom ship publication/discovery and actual imported models.
+- Two quay containers, port-only interest, hook reparenting, two crane poses,
+  actual pad landing, deck-relative placement, cold observer reconnect, range
+  exit/re-entry, deletion and metadata preservation are exercised.
+- Three actual engine screenshots were inspected and archived.
+- Go test checks restart restoration, stale revisions, ownership, duplicate IDs,
+  missing crane authorization, port mirror retirement and empty manifests.
+- Run Godot with tests/mp_cargo_manifest_test.tscn -- --shipyard-playtest --capture.
+- Detailed results: docs/test-results/mp-cargo-manifest-2026-10-13.json
+
+Boundaries / follow-up work:
+This deliberately does not grant economic authority to client-supplied prices or
+cargo. Existing FreightService issuance and crane simulation still run on the
+captain client. Server-issued contracts, cancellation, transactional inventory
+and server simulation remain separate work. The test stages a real freight
+fixture and drives real crane joints/landing; it does not click through NPC UI or
+exercise a complete autonomous crane route in two independent game windows.
+Owner reconnect recovery and multiple simultaneous origin-port manifests are
+not covered by this test and must be handled in the authoritative freight pass.
+
+Follow-up: real NPC Load/Unload now enters HarbourAuthorityBridge with the exact equipment ID. Previously it bypassed authority and had no replication context. Expanded cargo regression passes 76 headless checks including real NPC Load and initial automatic crane movement on the observer. Later hook/landing stages remain explicitly positioned.
