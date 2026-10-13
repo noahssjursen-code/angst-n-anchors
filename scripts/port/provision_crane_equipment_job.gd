@@ -6,6 +6,8 @@ extends QuayEquipmentJob
 var _crane: ProvisionCrane
 var last_failure := ""
 var last_result := ""
+# Preserve the final pose and any suspended container after a job stops.
+var replication_context: Dictionary = {}
 
 
 func bind_crane(crane: ProvisionCrane) -> void:
@@ -94,6 +96,7 @@ func can_reach_yard(yard: Node) -> bool:
 
 
 func _begin_job(ship: BoatBody, mode: String, _commodity_id: String) -> bool:
+	replication_context = authority_context().duplicate(true)
 	if _crane == null:
 		return false
 	if mode == MODE_LOAD:
@@ -117,23 +120,23 @@ func status_lines() -> PackedStringArray:
 func serve_hint(ship: BoatBody, mode: String) -> String:
 	if not last_failure.is_empty(): return last_failure
 	if _crane == null or not is_instance_valid(_crane):
-		return "No crane on this tool"
+		return "Crane unavailable"
 	if ship == null or not is_instance_valid(ship):
 		return "No ship at berth"
 	if ship.get_cargo_pads().is_empty():
-		return "Ship has no cargo pads"
+		return "No container space fitted"
 	if not _crane.can_reach_ship(ship):
-		return "Sorry mac — crane won't reach."
+		return "Vessel out of crane reach."
 	var m := mode.strip_edges().to_lower()
 	if m == MODE_LOAD:
 		if not _has_yard_container(ship):
-			return "No booked cargo in this crane's yard. Check the other operators along the quay."
+			return "No booked cargo here. Try another quay operator."
 		if not _has_free_pad_slot(ship):
-			return "No empty cargo bed within this crane's reach."
+			return "No free cargo space in reach."
 		return ""
 	if m == MODE_UNLOAD:
 		if not _has_ship_container(ship):
-			return "No cargo for this port within this crane's reach."
+			return "No cargo for this port in reach."
 		if not _has_yard_slot():
 			return "Yard is full"
 		return ""

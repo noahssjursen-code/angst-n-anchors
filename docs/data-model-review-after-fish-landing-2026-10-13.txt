@@ -1,0 +1,176 @@
+DATA MODELS AND DATA-ONLY SIMULATION — CURRENT CHECKPOINT
+13 October 2026. Working copies: game web/kontor; MP server main.
+This report includes uncommitted work. It supersedes the fishing status in
+game-state-publication-report-2026-10-13.txt, not the entire earlier report.
+
+WHAT NOW WORKS IN MULTIPLAYER
+
+Fish storage: fishing.catch.store validates an owned vessel and installed
+catch hold, records individual specimens, and publishes fishing_hold updates.
+Rebuilt ships hydrate those records. Fishing motion is separate, disposable
+player presentation; it does not award inventory or money.
+
+Landing: the existing quay pump runs its animation on participating clients.
+In MP it does not remove fish locally. The owner submits fishing.catch.land
+with vessel_id, operation_id and the IDs of the fish present when pumping began.
+The server checks the operation owner, vessel, unloading status, berth,
+mooring and minimum pumping time, and finds the requested lots in its holds.
+It calculates NOK from its species catalog, mass and quality. Client prices
+are ignored. The database transaction commits inventory removal, payment,
+receipt, events and projections together. A rollback leaves all unchanged.
+
+Published records:
+  fishing_hold: vessel/hold capacity and remaining individual catch lots.
+  fish_landing: owner's immutable sale receipt; operation, vessel, port,
+                owner, mass_kg, value_nok and sold specimens.
+  port_fish_landing: the same delivered batch available to port subscribers.
+  landed_fish: consumed specimen identity, preventing re-storage after sale.
+
+The port landing receipt is a delivered-batch history, NOT a complete mutable
+shore warehouse with processing, stock consumption or NPC purchase budgets.
+Payment credits the existing captains.marks database column, which stores NOK
+and is the balance used by the live shipwright. The client fetches that balance
+after acknowledgement. We have NOT migrated the whole game onto company money.
+
+Verification completed:
+  - 25 native Godot/localhost-server integration checks, including the real
+    pump, seven specimens, another authenticated client's empty-hold/port
+    projections, database payout, and retry without double payment.
+  - Go authority, database and gameplay tests pass.
+  - Data-only landing scenario rejects early/foreign sales and sold-fish
+    resurrection; repeated receipts add no events or payment effects.
+  - ReconstructAt reproduces the hold before and after landing. Restoring the
+    authority store then retrying preserves the existing receipt.
+  - Server rebuilt in Docker. Existing sessions need reconnecting.
+
+WHAT THE MODEL REVIEW FOUND
+
+There are still TWO economic/vessel paths, not one finished unified model:
+
+Live game:
+  account/captain tables -> captain NOK balance -> legacy vessels rows with
+  full brick_layout; reliable berth/operation/cargo/fishing projections;
+  captain document still holds parts of local progression and contract state.
+
+Native data lab:
+  typed company/member/balance, immutable construction, company-owned vessel,
+  cargo custody/slot, contract and transaction projections. Purchases, freight
+  loading/unloading, arrival and settlement run through the authority. NPC and
+  player companies use the same records. This is an isolated scratch world.
+
+The lab is a useful foundation, but its company balances are not yet the live
+shipwright/fish-landing balance. Calling both 'company finances' hides the gap.
+
+Model                         Current coverage / next required work
+Player/account                Authentication, captain identity, appearance.
+                              Explicit active company/membership integration
+                              is needed for shared companies in ordinary play.
+Company                       Typed members/controller/NOK balance in lab;
+                              live company summary is still captain-local.
+Vessel + construction         Full custom build publication/fetch works.
+                              Unify legacy ownership with company vessel IDs;
+                              derive every capacity from installed construction.
+                              Hold IDs currently depend on part array indices;
+                              migrate to stable part instance IDs before refits
+                              can reorder parts without remapping inventory.
+Items and custody             Containers and fish have IDs and content, but
+                              separate representations. Define one item/lot
+                              identity and one location per owned object, with
+                              typed details, rather than copying inventories.
+Cargo manifest                Live cargo.manifest.publish replicates client
+                              presentation; lab cargo.load/unload validates
+                              custody/capacity. Wire live crane actions into
+                              those authority transitions before calling the
+                              live manifest a fully authoritative economy.
+Equipment                     Purchased/installed data exists. Need authoritative
+                              purchase, equip, remove, transfer and ownership
+                              records tied to installed slots and item IDs.
+Placed entities               Crab pots need persistent instance, owner/company,
+                              vessel/deck slot or deployed position, rope/buoy,
+                              bait, timestamps, catch and recovery state. Do not
+                              represent one trap as separate owned inventory
+                              entries when it moves from deck to sea.
+Contracts                     Separate public offer, accepted obligation and
+                              cargo/consignment. Fish sales are spot transactions,
+                              not invented freight contracts. Service obligations
+                              (tow, LNG transfer, farm/rig servicing) need typed
+                              objectives alongside, not inside, container data.
+Finances                      One account owner, NOK unit, immutable transaction,
+                              debit/credit counterparties and idempotency key.
+                              Migrate all live purchases and rewards together;
+                              avoid a second independently spendable balance.
+Port facilities               Server currently verifies declared berth/operation
+                              state, not a complete canonical geographic equipment
+                              registry. Register capabilities/reach on the server
+                              so fish landing cannot be requested at an invented
+                              berth or unrelated equipment. Existing port commands
+                              have this same trust boundary.
+Fish populations              Bite/fight and specimen generation remain local.
+                              Durable storage/landing does not prove a legitimate
+                              catch. Authority needs school IDs, stock, hook
+                              proximity/depth, reservations and catch outcomes.
+
+RECOMMENDED NEXT IMPLEMENTATION ORDER
+
+1. Map existing IDs and writers. Pick canonical account/company/vessel/item
+   owners and preserve migration links. Define which records are public,
+   nearby-only, company-private or owner-private.
+2. Move live balances and vessel ownership onto the typed company model with
+   a one-time transactional migration. Adapt shipwright and fish receipts to
+   the same ledger. Test that old saves cannot restore spent currency.
+3. Establish inventory custody/capacity as the common rule for containers,
+   catch lots and movable equipment. Keep species, container paint, cargo
+   destinations and trap preparation as typed details/references. Render the
+   manifest; never infer durable custody from a mesh position.
+4. Move real crane/freight and trap actions into these commands. Add canonical
+   port facilities and server fish population rules. Keep visual operation
+   playback separate from inventory and settlement.
+5. Extend the existing native data lab with live-schema scenario adapters,
+   invariants, event inspection and reconstruction. Do not create another
+   disconnected demonstration schema or HTML inspector.
+
+SIMULATIONS WE CAN RUN NOW
+
+The existing lab already simulates purchase -> capacity-limited load ->
+logical arrival -> unload -> freight settlement -> restart, without ship
+physics. The new Go fishing test simulates catch storage -> moor -> start
+unloading -> advance authoritative time -> land -> retry -> reconstruct.
+Those are real authority handlers, not UI button scripts pretending to test.
+
+Next scenarios should assert:
+  - An item is in exactly one place; partial transfers conserve mass.
+  - Slot/hold capacity follows a construction revision, including UGC builds.
+  - Payment and custody commit together, or neither does.
+  - Duplicate, stale, unauthorized and simultaneous commands cannot duplicate
+    items, overfill a slot, double-pay, or spend another company's money.
+  - Disconnect/reconnect during a crane or landing job gives the same result
+    as staying connected; observers converge from snapshot plus events.
+  - Two friends can operate one company's fleet under roles; NPC companies
+    obey the same financial and cargo rules.
+  - A fresh client reconstructs all durable contents and placed equipment
+    from data at a committed event cursor.
+
+REPLAY LIMITS TO KEEP HONEST
+
+ReconstructAt requires the complete journal and a transaction-boundary cursor.
+The startup authority cache restores only the most recent 20,000 events, so
+historical export needs a database journal reader/checkpoint strategy.
+Fish hold/landing receipts replay today. The entire live economy does not:
+legacy captain balances and vessel SQL writes are not all journal projections.
+Physics is intentionally outside this work. The missing work is canonical
+records, command ownership and complete economic/custody events.
+
+SOURCE ENTRY POINTS
+
+Game:
+  scripts/network/fishing_catch_replication.gd
+  scripts/port/fish_landing_equipment_job.gd
+  scripts/port/fish_landing_pump.gd
+  scripts/company/gameplay_data_lab.gd
+  scripts/network/cargo_manifest_replication.gd
+  tests/mp_fishing_interaction_test.gd
+Server (sibling angst-n-anchors-mp):
+  internal/authority/fishing_landing.go and fishing_landing_test.go
+  internal/db/authority_store.go
+  internal/gameplay/models.go
+  internal/authority/gameplay.go, gameplay_lab.go, reconstruct.go

@@ -66,7 +66,7 @@ func _ready() -> void:
 
 	_backdrop = MenuBackdropScript.new()
 	_backdrop.name = "MenuBackdrop"
-	if show_backdrop:
+	if show_backdrop and not OS.get_cmdline_user_args().has("--mp-auto-join"):
 		add_child(_backdrop)
 
 	_build_vignette()
@@ -100,6 +100,10 @@ func _ready() -> void:
 	)
 
 	_show_page(Page.MODE_SELECT)
+	if OS.is_debug_build() and OS.get_cmdline_user_args().has("--mp-auto-join"):
+		var auto_join := preload("res://scripts/network/testing/local_mp_autojoin.gd").new()
+		add_child(auto_join)
+		auto_join.call_deferred("start", self)
 
 
 func _build_vignette() -> void:
@@ -724,6 +728,8 @@ func _refresh_servers() -> void:
 		{"id": "custom", "label": "Custom", "is_preset": false, "host": str(config.get("udp_host")), "http_scheme": str(config.get("http_scheme")), "http_host": str(config.get("http_host")), "http_port": int(config.get("http_port"))},
 	]
 	for s in servers:
+		if OS.get_cmdline_user_args().has("--mp-auto-join") and s.id != "local":
+			continue
 		_add_server_row(s, config)
 
 
@@ -791,7 +797,7 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 			if typeof(parsed) == TYPE_DICTIONARY:
 				count = int((parsed as Dictionary).get("active_sessions", 0))
 			players_lbl.text = "%d active" % count
-			if is_active:
+			if is_active and not OS.get_cmdline_user_args().has("--mp-auto-join"):
 				_captains.configure_remote(self, "%s://%s:%d" % [s["http_scheme"], s["http_host"], s["http_port"]])
 				_on_remote_account_changed(_captains.remote_account())
 		else:

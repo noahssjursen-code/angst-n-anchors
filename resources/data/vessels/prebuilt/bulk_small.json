@@ -533,7 +533,8 @@
             0.79,
             0.72
           ]
-        }
+        },
+        "boarding_gate": true
       },
       {
         "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
@@ -949,7 +950,8 @@
             0.79,
             0.72
           ]
-        }
+        },
+        "boarding_gate": true
       },
       {
         "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",

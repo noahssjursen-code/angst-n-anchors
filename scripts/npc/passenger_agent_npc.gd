@@ -25,7 +25,7 @@ func snapshot() -> Dictionary:
 	if item.is_empty():
 		if secured:
 			result.offers = operations.offers(port_id, ship)
-			result.status = "Choose a destination. Boarding requires both mooring lines, the bow ramp and an open passenger entrance."
+			result.status = "Choose a destination. Tie both lines, lower the ramp and open the entrance."
 		return result
 	result.destination = PortCatalog.get_port_display_name(str(item.destination_berth).trim_suffix("/passenger"))
 	var voyage := ship.get_node_or_null("PassengerVoyage") as PassengerVoyage
@@ -80,4 +80,4 @@ func request(action: String, id: String = "", request_id: String = "") -> Dictio
 	return result
 
 func _not_ready() -> Dictionary:
-	return CompanyContracts.result_error("not_ready", "Secure the ferry with both lines at the correct passenger terminal.")
+	return CompanyContracts.result_error("not_ready", "Tie both lines at this passenger terminal.")

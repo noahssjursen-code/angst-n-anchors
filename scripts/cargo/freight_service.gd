@@ -84,8 +84,6 @@ func active_contracts() -> Array[Dictionary]:
 ## Never orphan cargo already aboard or suspended on a crane. UI previews and
 ## the command both use this authoritative check, including stale-panel retries.
 func cancellation_status(contract_id: String) -> Dictionary:
-	if PlayerSession.is_remote_voyage():
-		return {"allowed":false,"reason":"Contract cancellation is not available on this server."}
 	var index := _contract_index(contract_id)
 	if index < 0:
 		return {"allowed":false,"reason":"This job is no longer active."}
@@ -105,7 +103,9 @@ func cancellation_status(contract_id: String) -> Dictionary:
 	var accounted := loaded
 	if str(contract.get("handling_mode","")) in ["general","container"]:
 		accounted += waiting.size()
-	if issued > accounted + .001:
+	# Remote staging may be outside loaded terrain or belong to an inactive ship.
+	# The server reconciles the saved cancellation against its durable manifest.
+	if issued > accounted + .001 and not PlayerSession.is_remote_voyage():
 		return {"allowed":false,"reason":"Cargo has left the quay and is still in transit on handling equipment. Return or finish transferring it first."}
 	return {"allowed":true,"reason":"No cancellation fee. Reserved space and waiting quay cargo will be released; no delivery payment is earned."}
 
@@ -119,8 +119,10 @@ func cancel_contract(contract_id: String) -> Dictionary:
 	var waiting := _waiting_contract_containers(_active[index])
 	_active.remove_at(index)
 	PlayerSession.data.accepted_contracts = active_contracts()
-	# Commit the booking removal before deleting its physical staging. Roll back
-	# without restore_contracts(), which intentionally resets voyage counters.
+	# Local saves commit immediately; MP stages the revised captain document in
+	# the durable remote outbox. Only then remove physical staging. The
+	# server removes staging from every affected manifest after this save arrives.
+	# Roll back without restore_contracts(), which resets voyage counters.
 	if not PlayerSession.save_now():
 		_active.assign(previous)
 		PlayerSession.data.accepted_contracts = active_contracts()
@@ -132,7 +134,10 @@ func cancel_contract(contract_id: String) -> Dictionary:
 			pad.take_container_node(container)
 			container.queue_free()
 	_publish()
-	return CompanyContracts.result_ok({"message":"Job cancelled. Reserved cargo space released. No fee charged."})
+	var message := "Job cancelled. Reserved cargo space released. No fee charged."
+	if PlayerSession.is_remote_voyage():
+		message += " Server save queued."
+	return CompanyContracts.result_ok({"message":message})
 
 
 func _waiting_contract_containers(contract: Dictionary) -> Array[Dictionary]:

@@ -50,7 +50,7 @@ static func get_wave_energy_multiplier() -> float:
 	var tick := Time.get_ticks_msec()
 	if tick == _wem_cache_tick:
 		return _wem_cache_value
-	var t := tick * 0.001
+	var t := get_sim_time()
 	var gate := sin(t * 0.032) + sin(t * 0.011 + 1.7) * 0.22 - 0.72
 	var rare := pow(clampf(gate * 1.9, 0.0, 1.0), 3.5)
 	_wem_cache_value = 0.85 + rare * 0.6
@@ -80,6 +80,7 @@ static func clear_coupled_vessel_if(body: RigidBody3D) -> void:
 		_coupled_vessel = null
 
 static func get_sim_time() -> float:
+	if WorldGateway.is_remote(): return WorldGateway.server_unix_seconds()
 	return Time.get_ticks_msec() * 0.001
 
 
@@ -325,3 +326,9 @@ static func _hull_cut_edge(u: float, v: float, bow_frac: float) -> float:
 		if v < shoulder:
 			width_factor = clampf((v + 1.0) / maxf(bow_frac * 2.0, 0.001), 0.04, 1.0)
 	return maxf(absf(v), absf(u) / width_factor)
+
+
+## Surface decoration only; physics and FFT keep their shared simulation clock.
+## Shaders crossfade the final eight seconds to the next cycle before wrapping.
+static func get_shader_time() -> float:
+	return fposmod(get_sim_time(), 4096.0)

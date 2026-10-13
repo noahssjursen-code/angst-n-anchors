@@ -57,6 +57,8 @@ var _gateway: Node = null
 
 
 func _ready() -> void:
+	# Settle remote deck/collision transforms before passenger physics.
+	process_physics_priority = -100
 	if ShipyardPlaytestMode.active():
 		process_mode = Node.PROCESS_MODE_DISABLED
 		return
@@ -79,18 +81,25 @@ func _ready() -> void:
 	
 	# Instantiate clean, modular drawing service
 	drawing_service = ReplicationDrawingServiceClass.new()
+	if _gateway != null:
+		_gateway.projection_changed.connect(_on_storage_projection)
 	drawing_service.name = "ReplicationDrawingService"
 	drawing_service.visible = false
 	add_child(drawing_service)
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not _session_active:
 		return
 	# 1. Delegate dynamic remote entities interpolation to the drawing service
+	drawing_service.prune_expired_entities(_scene_nodes, Time.get_ticks_msec(), entity_timeout_ms)
 	drawing_service.interpolate_entities(delta, position_smoothness, payload_smoothness)
 	
-	# 2. Tick local outbound send queue
+
+
+func _process(delta: float) -> void:
+	if not _session_active:
+		return
 	_tick_outbound(delta)
 
 
@@ -319,7 +328,16 @@ func _build_player_meta() -> String:
 	var appearance_hash := ""
 	if appearance != null:
 		appearance_hash = appearance.to_json_string().sha256_text().substr(0, 12)
-	return "cid=%s;app=%s" % [captain_id, appearance_hash]
+	var meta := "cid=%s;app=%s" % [captain_id, appearance_hash]
+	var player := get_tree().get_first_node_in_group("player")
+	if player != null and player.has_method("network_deck_frame"):
+		meta += str(player.network_deck_frame())
+	if player is Node3D:
+		for station in get_tree().get_nodes_in_group("rod_fishing_stations"):
+			if station.remote_player == null and station.working:
+				meta += ";fv=" + FishingVisualReplication.encode(station, player)
+				break
+	return meta
 
 
 # ── Snapshot Packet Router ───────────────────────────────────────────────────
@@ -441,17 +459,22 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 	## both briefly coexisted during deployment.
 	var bound_vid := str(ship_node.get_meta("server_vessel_id", "")).strip_edges()
 	var bound_lh := str(ship_node.get_meta("layout_hash", "")).strip_edges()
+	var bound_cid := str(ship_node.get_meta("construction_id", "")).strip_edges()
 	if bound_vid.is_empty() and _local_view != null:
 		var record: Dictionary = _local_view.call("get_active_vessel_record") as Dictionary
 		bound_vid = str(record.get("server_vessel_id", "")).strip_edges()
 		if bound_lh.is_empty():
 			bound_lh = str(record.get("layout_hash", "")).strip_edges()
+		if bound_cid.is_empty():
+			bound_cid = str(record.get("construction_id", "")).strip_edges()
 		## Stamp the node so boarding/unboarding re-registrations keep the
 		## same identity even after the active record moves on.
 		if not bound_vid.is_empty():
 			ship_node.set_meta("server_vessel_id", bound_vid)
 		if not bound_lh.is_empty():
 			ship_node.set_meta("layout_hash", bound_lh)
+		if not bound_cid.is_empty():
+			ship_node.set_meta("construction_id", bound_cid)
 	register_sender(
 		ship_node,
 		ship_id,
@@ -467,10 +490,22 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 			if not pilot.is_empty():
 				parts.append("pilot=" + pilot)
 			if ship_node is BoatBody:
+				var prop := ship_node.get_node_or_null("PropulsionComponent")
+				var thr := ship_node.get_node_or_null("BowThrusterComponent")
+				if prop != null:
+					parts.append("eng=%d;thr=%.3f;lat=%.3f" % [int(prop.engine_running), prop.throttle, float(thr.lateral_input) if thr != null else 0.0])
+				var rudder := ship_node.get_node_or_null("RudderComponent") as RudderComponent
+				if rudder != null:
+					parts.append("rud=%.4f" % rudder.rudder_input)
+				if prop != null:
+					parts.append("adv=%.3f;force=%.1f" % [prop.advance_speed_ms, prop.delivered_thrust_n])
+				var lighting := ship_node.get_node_or_null("ShipLighting") as ShipLighting
+				if lighting != null:
+					parts.append("lights=%d" % lighting.network_state())
 				var systems: Array[FishingSystem] = (ship_node as BoatBody).get_fishing_systems()
 				if not systems.is_empty() and systems[0].trawling:
 					parts.append("trawl=1")
-			## Deck fit-out identity — remotes fetch layout via HTTP using vid + lh.
+			## Immutable build identity lets a cold observer fetch exactly this revision.
 			## Refresh the hash from node meta so refits update it, but the vessel
 			## id stays the one bound at registration.
 			var vid := bound_vid
@@ -479,6 +514,9 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 				parts.append("vid=" + vid)
 			if not lh.is_empty():
 				parts.append("lh=" + lh)
+			var cid := str(ship_node.get_meta("construction_id", bound_cid)).strip_edges()
+			if not cid.is_empty():
+				parts.append("cid=" + cid)
 			var port_id := str(ship_node.get_meta("harbour_port_id", "")).strip_edges()
 			var berth_id := str(ship_node.get_meta("harbour_berth_id", "")).strip_edges()
 			if not port_id.is_empty():
@@ -499,6 +537,16 @@ func force_local_ship_meta_resync() -> void:
 		var sender: Dictionary = _local_senders[sender_id]
 		if not str(sender.get("type", "")).begins_with("ship_"):
 			continue
+		_force_sender_sync(str(sender_id))
+
+
+## Refit replaces deck components, including the boarding interactions. Keep
+## the existing entity and pilot state while wiring its newly accepted fit-out.
+func refresh_ship_fitout(ship: BoatBody) -> void:
+	for sender_id in _local_senders:
+		var sender: Dictionary = _local_senders[sender_id]
+		if sender.get("node") != ship: continue
+		_wire_board_signals_recursive(str(sender_id), ship)
 		_force_sender_sync(str(sender_id))
 
 
@@ -679,6 +727,11 @@ func _on_authority_session_ready(remote: bool, _session: Dictionary) -> void:
 
 
 func _on_authority_error(code: String, message: String) -> void:
+	if code == "session_reconnecting" and (_session_active or _session_pending):
+		_session_active = false
+		_session_pending = true
+		close_connection()
+		return
 	if _session_pending or (_session_active and _session_token().is_empty()):
 		_fail_realtime_session(code, message)
 
@@ -746,3 +799,8 @@ func close_connection() -> void:
 	if drawing_service != null:
 		drawing_service.clear_all(_scene_nodes)
 	_scene_nodes.clear()
+
+
+func _on_storage_projection(kind: String, id: String, value: Dictionary) -> void:
+	if kind == "vessel_berth" and is_instance_valid(drawing_service):
+		drawing_service.apply_vessel_storage(id, value, _scene_nodes)

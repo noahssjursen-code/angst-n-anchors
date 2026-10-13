@@ -18,6 +18,88 @@ var _interest_dirty := false
 ## under an older epoch must not fast-forward the cursor past events the server
 ## filtered out under the stale scopes — see _on_event_page.
 var _interest_epoch := 0
+var _snapshot_in_flight := false
+var _pending_events: Array = []
+var _login_body: Dictionary = {}
+var _account_token := ""
+
+func fetch_captain_balance(callback:Callable)->void:
+	_request_json(HTTPClient.METHOD_GET,"/v2/captains?id="+str(_login_body.get("actor_id","")).uri_encode(),{},false,callback,8.0,_account_token)
+var _recovering := false
+var _recovery_delay := 1.0
+
+
+var _clock_server_ms := 0.0
+var _clock_local_ms := 0
+var _clock_poll := 0.0
+var _clock_pending := false
+var _clock_correction_ms := 0.0
+
+func server_unix_seconds() -> float:
+	if _clock_server_ms <= 0.0:
+		return Time.get_unix_time_from_system()
+	return (_clock_server_ms + Time.get_ticks_msec() - _clock_local_ms) * 0.001
+
+func _process(delta: float) -> void:
+	if not is_ready(): return
+	# Slew subsequent estimates instead of visibly jumping the wave phase.
+	var correction := clampf(_clock_correction_ms, -delta * 20.0, delta * 20.0)
+	_clock_server_ms += correction
+	_clock_correction_ms -= correction
+	_clock_poll -= delta
+	if _clock_poll > 0.0 or _clock_pending: return
+	_clock_poll = 10.0
+	_clock_pending = true
+	var started := Time.get_ticks_msec()
+	var generation := _generation
+	_request_json(HTTPClient.METHOD_GET, "/v2/clock", {}, true, func(response: Dictionary):
+		_clock_pending = false
+		if generation != _generation or not bool(response.get("transport_ok", false)): return
+		var received := Time.get_ticks_msec()
+		var stamp := float(response.get("payload", {}).get("server_time_ms", 0))
+		if not is_finite(stamp) or stamp <= 0.0 or received - started > 1000: return
+		var estimate := stamp + (received - started) * 0.5
+		if _clock_server_ms <= 0.0:
+			_clock_server_ms = estimate
+			_clock_local_ms = received
+		else:
+			_clock_correction_ms = estimate - server_unix_seconds() * 1000.0
+	, 4.0)
+
+
+## Accept an already authenticated session from an injected test transport.
+## This does not authenticate an actor or manufacture authority credentials.
+func adopt_session(session: Dictionary) -> void:
+	_generation += 1
+	_desired_interests = PackedStringArray(session.get("interests", ["global"]))
+	_on_session_response({"transport_ok": true, "payload": session})
+
+
+func query_state() -> void:
+	if not is_ready() or _snapshot_in_flight:
+		return
+	_snapshot_in_flight = true
+	var generation := _generation
+	var epoch := _interest_epoch
+	_request_json(HTTPClient.METHOD_GET, "/v2/state", {}, true, func(response: Dictionary):
+		_snapshot_in_flight = false
+		if generation != _generation:
+			return
+		if epoch != _interest_epoch:
+			query_state()
+			return
+		if bool(response.get("transport_ok", false)):
+			var snapshot: Dictionary = response.payload
+			_event_cursor = int(snapshot.cursor)
+			_pending_events.clear()
+			snapshot_received.emit(snapshot.duplicate(true))
+		elif int(response.get("status", 0)) == 404:
+			# Compatibility with servers predating atomic state snapshots.
+			query_projections()
+		else:
+			transport_failed.emit("snapshot_failed", str(response.get("message", "State fetch failed")))
+		_poll_events_deferred(generation)
+	, 8.0)
 
 
 func configure(url: String) -> void:
@@ -34,11 +116,17 @@ func start_session(actor_id: String, display_name: String, world_checksum: Strin
 		"display_name": display_name.strip_edges(),
 		"world_checksum": world_checksum.strip_edges(),
 	}
+	_login_body = body.duplicate(true)
+	_account_token = account_token
+	_recovering = false
 	_request_json(HTTPClient.METHOD_POST, "/v2/sessions", body, false, _on_session_response, 8.0, account_token)
 
 
 func stop_session() -> void:
 	_generation += 1
+	_recovering = false
+	_login_body.clear()
+	_account_token = ""
 	_poll_active = false
 	var closing_token := session_token()
 	if not closing_token.is_empty():
@@ -66,7 +154,8 @@ func send_command(command: Dictionary) -> void:
 	if not is_ready():
 		command_finished.emit(WorldContracts.result_error(str(command.get("request_id", "")), "session_invalid", "Remote authority session is not ready."))
 		return
-	_request_json(HTTPClient.METHOD_POST, "/v2/commands", command, true, _on_command_response, 8.0)
+	_request_json(HTTPClient.METHOD_POST, "/v2/commands", command, true,
+		func(response: Dictionary): _on_command_response(response, str(command.get("request_id", ""))), 8.0)
 
 
 func query_projections(kind: String = "", id: String = "") -> void:
@@ -94,6 +183,10 @@ func set_interests(scopes: PackedStringArray) -> void:
 
 func _on_session_response(response: Dictionary) -> void:
 	if not bool(response.get("transport_ok", false)):
+		if _recovering and int(response.get("status",0)) != 401:
+			_retry_session(_generation)
+			return
+		_recovering = false
 		transport_failed.emit("session_transport_failed", str(response.get("message", "Could not open authority session.")))
 		return
 	var payload := response.get("payload", {}) as Dictionary
@@ -101,12 +194,37 @@ func _on_session_response(response: Dictionary) -> void:
 		transport_failed.emit("contract_version_unsupported", "Client and server world contracts do not match.")
 		return
 	_session = payload.duplicate(true)
+	_recovering = false
+	_recovery_delay = 1.0
 	_event_cursor = int(_session.get("event_cursor", 0))
 	_poll_active = true
 	session_started.emit(_session.duplicate(true))
 	_interest_dirty = true
 	_sync_interests()
 	_poll_events_deferred(_generation)
+
+func _recover_session() -> void:
+	if _recovering: return
+	_generation += 1
+	_session.clear()
+	_poll_active = false
+	_poll_in_flight = false
+	_snapshot_in_flight = false
+	_interest_request_in_flight = false
+	_clock_pending = false
+	_pending_events.clear()
+	if _login_body.is_empty() or _account_token.is_empty():
+		transport_failed.emit("session_invalid", "Server session ended; reconnect to the server.")
+		return
+	_recovering = true
+	transport_failed.emit("session_reconnecting", "Server session ended; reconnecting and restoring world state.")
+	_retry_session(_generation)
+
+func _retry_session(generation: int) -> void:
+	await get_tree().create_timer(_recovery_delay, true, false, true).timeout
+	if generation != _generation or not _recovering: return
+	_recovery_delay = minf(_recovery_delay * 2.0, 8.0)
+	_request_json(HTTPClient.METHOD_POST, "/v2/sessions", _login_body, false, _on_session_response, 8.0, _account_token)
 
 
 func _sync_interests() -> void:
@@ -135,19 +253,24 @@ func _on_interest_response(response: Dictionary) -> void:
 		_interest_epoch += 1
 		## A newly loaded scope may already contain durable state that predates
 		## this session. Rehydrate it once after the server accepts the interest.
-		query_projections()
+		query_state()
 	if _interest_dirty:
 		_sync_interests()
 
 
-func _on_command_response(response: Dictionary) -> void:
+func _on_command_response(response: Dictionary, request_id: String = "") -> void:
 	var payload := response.get("payload", {}) as Dictionary
 	if payload.is_empty():
-		payload = WorldContracts.result_error("", "transport_failed", str(response.get("message", "Authority command failed.")))
+		payload = WorldContracts.result_error(request_id, "transport_failed", str(response.get("message", "Authority command failed.")))
 	command_finished.emit(payload)
 
 
 func _on_projection_response(response: Dictionary) -> void:
+	# Untouched doors have no durable projection until their first interaction.
+	# Missing state is normal on initial hydration, not a broken connection.
+	if int(response.get("status", 0)) == 404:
+		projections_received.emit([])
+		return
 	if not bool(response.get("transport_ok", false)):
 		transport_failed.emit("projection_transport_failed", str(response.get("message", "Projection query failed.")))
 		return
@@ -162,7 +285,7 @@ func _poll_events_deferred(generation: int) -> void:
 
 
 func _poll_events(generation: int) -> void:
-	if generation != _generation or not _poll_active or _poll_in_flight or not is_ready():
+	if generation != _generation or not _poll_active or _poll_in_flight or _snapshot_in_flight or not is_ready():
 		return
 	_poll_in_flight = true
 	if OS.has_environment("MP_BACKEND_DEBUG"):
@@ -183,6 +306,8 @@ func _on_event_page(response: Dictionary, generation: int, epoch: int = -1) -> v
 	_poll_in_flight = false
 	if generation != _generation or not _poll_active:
 		return
+	if _snapshot_in_flight:
+		return # Snapshot provides the new cursor; discard this older poll.
 	if OS.has_environment("MP_BACKEND_DEBUG"):
 		print("[backend %s] page ok=%s status=%d events=%d next=%s stale_epoch=%s" % [
 			get_parent().name if get_parent() != null else "?",
@@ -193,13 +318,21 @@ func _on_event_page(response: Dictionary, generation: int, epoch: int = -1) -> v
 		])
 	if bool(response.get("transport_ok", false)):
 		var payload := response.get("payload", {}) as Dictionary
+		if bool(payload.get("resync_required", false)):
+			query_state()
+			return
 		for event_variant in payload.get("events", []) as Array:
 			var event := event_variant as Dictionary
 			var cursor := int(event.get("cursor", 0))
 			if cursor <= _event_cursor:
 				continue
 			_event_cursor = cursor
-			event_received.emit(event.duplicate(true))
+			_pending_events.append(event.duplicate(true))
+		var scanned := int(payload.get("next_cursor", _event_cursor))
+		var complete: Array = []
+		while not _pending_events.is_empty() and int(_pending_events[0].get("commit_cursor", _pending_events[0].cursor)) <= scanned:
+			complete.append(_pending_events.pop_front())
+		if not complete.is_empty(): event_batch_received.emit(complete)
 		## A poll issued before the latest confirmed interest change scanned the
 		## log under stale scopes: events it filtered out may be visible under
 		## the new scopes. Advancing only past *delivered* events (above) and
@@ -236,7 +369,7 @@ func _request_json(
 	var request := HTTPRequest.new()
 	request.timeout = timeout_s
 	add_child(request)
-	request.request_completed.connect(_on_http_completed.bind(request, callback), CONNECT_ONE_SHOT)
+	request.request_completed.connect(_on_http_completed.bind(request, callback, _generation, authenticated), CONNECT_ONE_SHOT)
 	var headers := PackedStringArray(["Accept: application/json", "Content-Type: application/json"])
 	if authenticated:
 		headers.append("Authorization: Bearer %s" % session_token())
@@ -282,11 +415,20 @@ func _on_http_completed(
 		body: PackedByteArray,
 		request: HTTPRequest,
 		callback: Callable,
+		generation: int,
+		authenticated: bool,
 ) -> void:
 	if is_instance_valid(request):
 		request.queue_free()
-	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if not body.is_empty() else {}
+	if generation != _generation: return
+	var decoder := JSON.new()
+	var parsed: Variant = {}
+	if not body.is_empty() and decoder.parse(body.get_string_from_utf8()) == OK:
+		parsed = decoder.data
 	var payload := parsed as Dictionary if parsed is Dictionary else {}
+	if authenticated and (response_code == 401 or str(payload.get("code",payload.get("error_code",""))) == "session_invalid"):
+		_recover_session()
+		return
 	var ok := result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300
 	var message := str(payload.get("error", ""))
 	if message.is_empty() and not ok:

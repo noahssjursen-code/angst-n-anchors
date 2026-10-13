@@ -244,9 +244,9 @@ func _build_horizon_cap() -> ArrayMesh:
 		morph_targets.append(Vector2(vertex.x, vertex.z))
 	var indices := PackedInt32Array([
 		0, 1, 2, 1, 3, 2,
-		2, 0, 6, 0, 4, 6,
-		3, 7, 1, 1, 7, 5,
-		6, 4, 7, 4, 5, 7,
+		2, 6, 0, 0, 6, 4,
+		3, 1, 7, 1, 5, 7,
+		6, 7, 4, 4, 7, 5,
 	])
 	return _make_mesh(vertices, normals, morph_targets, indices)
 

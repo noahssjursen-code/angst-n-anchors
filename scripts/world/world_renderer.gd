@@ -207,27 +207,27 @@ func _process(_delta: float) -> void:
 	_follow_camera_xz()
 	_update_underwater_effect()
 	if _ocean_shader_material:
-		_ocean_shader_material.set_shader_parameter("wave_time",      WaveSurface.get_sim_time())
+		_ocean_shader_material.set_shader_parameter("wave_time",      WaveSurface.get_shader_time())
 		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_shader_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 		WaveSurface.sync_ocean_coupling_to_shader(_ocean_shader_material)
 		_sync_land_shelter()
 	if _ocean_mid_material:
-		_ocean_mid_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
+		_ocean_mid_material.set_shader_parameter("wave_time", WaveSurface.get_shader_time())
 		_ocean_mid_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_mid_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	if _ocean_far_material:
-		_ocean_far_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
+		_ocean_far_material.set_shader_parameter("wave_time", WaveSurface.get_shader_time())
 		_ocean_far_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_far_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	if _ocean_horizon_material:
-		_ocean_horizon_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
+		_ocean_horizon_material.set_shader_parameter("wave_time", WaveSurface.get_shader_time())
 		_ocean_horizon_material.set_shader_parameter("wave_intensity", WaveSurface.get_applied_wave_intensity())
 		_ocean_horizon_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	_bind_fft_maps_once()
 	_sync_wake_field()
 	if _sky_shader_material:
-		_sky_shader_material.set_shader_parameter("sky_time",       WaveSurface.get_sim_time())
+		_sync_sky_animation(WaveSurface.get_sim_time())
 		_sky_shader_material.set_shader_parameter("sun_direction",   _celestial_dir(0.0))
 		_sky_shader_material.set_shader_parameter("moon_direction",  _celestial_dir(0.5))
 
@@ -611,7 +611,7 @@ func _build_legacy_ocean() -> void:
 func _make_ocean_material(shader: Shader, foam_scale: float) -> ShaderMaterial:
 	var sm := ShaderMaterial.new()
 	sm.shader = shader
-	sm.set_shader_parameter("wave_time",             WaveSurface.get_sim_time())
+	sm.set_shader_parameter("wave_time",             WaveSurface.get_shader_time())
 	sm.set_shader_parameter("water_level",           WaveSurface.WATER_LEVEL)
 	sm.set_shader_parameter("shallow_albedo",        Vector3(0.022, 0.085, 0.130))
 	sm.set_shader_parameter("deep_albedo",           Vector3(0.005, 0.022, 0.045))
@@ -1048,3 +1048,16 @@ func _celestial_dir(tod_offset: float) -> Vector3:
 
 func _get_weather() -> Node:
 	return get_node_or_null("/root/WeatherLighting")
+
+
+func _sync_sky_animation(seconds: float) -> void:
+	if _sky_shader_material == null: return
+	var speed_value: Variant = _sky_shader_material.get_shader_parameter("cloud_speed")
+	var speed: float = float(speed_value) if speed_value != null else 0.04
+	# Both density layers repeat at integer texture coordinates (detail uses
+	# twice this drift), so wrapping here is continuous, even across a tile.
+	_sky_shader_material.set_shader_parameter("cloud_drift", Vector3(
+		fposmod(seconds * speed * 0.025, 1.0), 0.0,
+		fposmod(seconds * speed * 0.011, 1.0)))
+	# sky_time now only drives the periodic star twinkle.
+	_sky_shader_material.set_shader_parameter("sky_time", fposmod(seconds, TAU / 5.9))

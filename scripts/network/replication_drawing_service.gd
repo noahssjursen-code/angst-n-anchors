@@ -7,10 +7,14 @@ extends Node3D
 signal remote_ship_available(server_vessel_id: String, ship: BoatBody)
 
 const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+const RemoteVesselLod = preload("res://scripts/network/remote_vessel_lod.gd")
 const LARGE_SHIP_FULL_DETAIL_DISTANCE_M := 50.0
 const SHIP_DETAIL_REFRESH_S := 0.5
 const MAX_PROFILE_REQUESTS := 4
 const PROFILE_RETRY_MS := 10000
+const MAX_LAYOUT_REQUESTS := 4
+const MAX_CACHED_LAYOUTS := 64
+const LAYOUT_RETRY_MS := 2000
 
 # Tracks active visual remote representations: id -> { "node": Node3D, "type": String, "target_pos": Vector3, "target_payload": Array, "interpolated_payload": Array, "meta": String, "last_seen_ms": int }
 var _visible_entities: Dictionary = {}
@@ -72,10 +76,14 @@ func _purge_entities_under(root: Node) -> void:
 # call_id -> { ship_id, port_id, start_m, end_m }.
 var _occupied_calls: Dictionary = {}
 
-## Cache of fetched deck layouts: server_vessel_id -> { "hash": String, "layout": Dictionary }
+## Accepted construction versions are shared by every vessel using that build.
+## Legacy cache keys include both vessel id and layout hash; never cache by id alone.
 var _layout_cache: Dictionary = {}
-## In-flight HTTP fetches keyed by server_vessel_id.
 var _layout_inflight: Dictionary = {}
+var _layout_cache_order: Array[String] = []
+var _layout_retry_after_ms: Dictionary = {}
+var _layout_epoch := 0
+var _layout_server := ""
 
 ## Returns a duplicate of currently visible remote entities dictionary (for read-only queries)
 func get_visible_entities() -> Dictionary:
@@ -122,6 +130,21 @@ const TYPE_SCENE_MAP := {
 
 
 ## Processes snapshot frames to add, update, or remove remote entity nodes.
+var _stored_vessels: Dictionary = {}
+
+func apply_vessel_storage(id: String, projection: Dictionary, scene_nodes: Dictionary) -> void:
+	var state: Dictionary = projection.get("state", {})
+	var stored := str(state.get("status", "")) == "released" and str(state.get("reason", "")) == "stored_at_port"
+	if not stored:
+		_stored_vessels.erase(id)
+		return
+	_stored_vessels[id] = true
+	for entity_id in _visible_entities.keys():
+		var entity: Dictionary = _visible_entities[entity_id]
+		if str(_parse_meta_map(str(entity.get("meta", ""))).get("vid", "")) == id:
+			_despawn_remote_entity(entity_id, scene_nodes)
+
+
 func apply_entities(entities_list: Array, local_id: String, scene_nodes: Dictionary, local_sender_ids: Array, now_ms: int, timeout_ms: int) -> void:
 	_prune_stale_entries()
 	var active_snapshot_ids: Dictionary = {}
@@ -129,6 +152,9 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 	
 	for ent: Dictionary in entities_list:
 		var id: String = ent["id"]
+		var vessel_id := str(_parse_meta_map(str(ent.get("meta", ""))).get("vid", ""))
+		if not vessel_id.is_empty() and _stored_vessels.has(vessel_id):
+			continue
 		
 		# 1. Skip ourselves and anything we currently have authority over (local senders)
 		if id == local_id or local_sender_ids.has(id):
@@ -203,6 +229,7 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			_visible_entities[id] = state
 			if str(ent["type"]) == "player":
 				_sync_remote_player_profile(id, node, meta, state)
+				FishingVisualReplication.apply(node, str(_parse_meta_map(meta).get("fv", "")))
 			
 			_parse_call_meta(id, ent["type"], meta, current_frame_calls)
 			
@@ -214,13 +241,19 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 		
 	# Reconcile shared-quay call occupancy changes.
 	_reconcile_call_locks(current_frame_calls)
+	prune_expired_entities(scene_nodes, now_ms, timeout_ms)
+	_update_avatar_visibilities(_collect_active_pilot_ids())
 			
+
+func prune_expired_entities(scene_nodes: Dictionary, now_ms: int, timeout_ms: int) -> void:
+	_prune_stale_entries()
 	# 3. Clean up expired/lost entities.
 	# With standstill throttling, an entity might be omitted from snapshot packets simply because
 	# it is stationary. Therefore, we ONLY despawn an entity if we haven't heard from it in timeout_ms (3.0s),
 	# rather than immediately when it is missing from a single packet.
 	for id_variant in _visible_entities.keys():
 		var id := String(id_variant)
+		if not _visible_entities.has(id): continue # Parent cleanup may remove children.
 		var state: Dictionary = _visible_entities[id]
 		var age := now_ms - int(state["last_seen_ms"])
 		
@@ -259,6 +292,8 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 		if node == null:
 			continue
 			
+		if str(state.get("type", "")) == "player" and _passenger_ship(state) != null:
+			continue # Resolve passengers after every ship has reached this frame's pose.
 		var target_pos: Vector3 = state["target_pos"]
 		var target_payload: Array = state["target_payload"]
 		var current_payload: Array = state["interpolated_payload"]
@@ -299,10 +334,58 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 		if str(state["type"]).begins_with("ship_") and node is BoatBody:
 			_submit_remote_ship_wake(str(id), node as BoatBody, state, delta)
 			if refresh_ship_detail:
+				# Drain deferred fetches and retry failures even while the ship's
+				# transform is stationary and discovery packets are compressed.
+				_sync_remote_ship_layout(str(id), node as BoatBody, str(state.get("meta", "")), state)
 				_promote_remote_ship_detail(str(id), node as BoatBody, state)
+				if node is ImportedDraftVessel and node.visible:
+					var lod := node.get_node_or_null("RemoteVesselLod")
+					if lod == null:
+						lod = RemoteVesselLod.new()
+						lod.name = "RemoteVesselLod"
+						node.add_child(lod)
+					# Free-camera excursions must not remove a passenger's deck.
+					var near_player := WorldReference.gameplay_position().distance_to(node.global_position) < 100.0
+					lod.refresh(WorldReference.stream_position(get_viewport()).distance_to(node.global_position), near_player)
 
 		if state["type"] == "player":
+			state.erase("deck_position")
+			state.erase("deck_id")
 			_drive_player_walk_cycle(state, node, delta)
+	for state: Dictionary in _visible_entities.values():
+		if str(state.get("type", "")) != "player": continue
+		var ship := _passenger_ship(state)
+		var passenger := _live_node(state)
+		if ship == null or passenger == null: continue
+		var fields := _parse_meta_map(str(state.get("meta", "")))
+		var coords := str(fields.get("dpos", "")).split(",")
+		var target := Vector3(float(coords[0]), float(coords[1]), float(coords[2]))
+		var changed := str(state.get("deck_id", "")) != str(fields.deck)
+		var previous: Vector3 = target if changed else state.get("deck_position", target)
+		var at := previous.lerp(target, pos_alpha)
+		state["deck_id"] = str(fields.deck)
+		state["deck_position"] = at
+		var yaw := float(fields.get("dyaw", "0"))
+		state["deck_yaw"] = yaw if changed else lerp_angle(float(state.get("deck_yaw", yaw)), yaw, pay_alpha)
+		passenger.global_position = ship.to_global(at)
+		passenger.global_rotation = Vector3(0, ship.global_rotation.y + float(state.deck_yaw), 0)
+		# Animation measures walking on deck, never the ship's ocean travel.
+		state["walk_sample_pos"] = passenger.global_position - ship.global_basis * (at - previous)
+		_drive_player_walk_cycle(state, passenger, delta)
+
+
+func _passenger_ship(state: Dictionary) -> Node3D:
+	var fields := _parse_meta_map(str(state.get("meta", "")))
+	var vid := str(fields.get("deck", ""))
+	var coords := str(fields.get("dpos", "")).split(",")
+	if vid.is_empty() or coords.size() != 3: return null
+	for value in coords:
+		if not value.is_valid_float() or not is_finite(float(value)) or absf(float(value)) > 500.0: return null
+	var yaw := str(fields.get("dyaw", ""))
+	if not yaw.is_valid_float() or not is_finite(float(yaw)): return null
+	var own := LocalPlayerView.get_active_ship() as Node3D
+	if is_instance_valid(own) and str(own.get_meta("server_vessel_id", "")) == vid: return own
+	return find_remote_ship_by_vessel_id(vid)
 
 
 func _submit_remote_ship_wake(
@@ -319,32 +402,30 @@ func _submit_remote_ship_wake(
 		) as OceanWakeField
 	if _wake_field == null:
 		return
-	var current := ship.global_position
-	var previous: Vector3 = state.get("wake_sample_pos", current)
-	state["wake_sample_pos"] = current
-	var velocity := (current - previous) / delta
-	var planar_velocity := Vector2(velocity.x, velocity.z)
-	var speed := minf(planar_velocity.length(), 25.0)
-	if speed < 0.35:
+	# Network position corrections are not propeller flow: use the owner's
+	# propulsion state and the hull's stern axis just as local propulsion does.
+	var machinery: Dictionary = ship.get_meta("replicated_machinery", {})
+	var throttle := float(machinery.get("throttle", 0.0))
+	if not machinery.get("running", false) or absf(throttle) < 0.001:
+		_wake_field.remove_emitter("remote:" + entity_id)
 		return
-	var trailing_axis := -planar_velocity.normalized()
-	var propeller_local := Vector3(
-		0.0, ship.depth_m * 0.25, ship.length_m * 0.45
-	)
-	if ship.physics_profile != null:
-		propeller_local = ship.physics_profile.propeller_position
+	var speed := float(machinery.get("speed", 0.0))
+	var stern := Vector2(ship.global_basis.z.x, ship.global_basis.z.z)
+	var trailing_axis := OceanWakeField.calculate_trailing_axis(stern, throttle)
+	var propulsion := ship.get_node_or_null("PropulsionComponent") as PropulsionComponent
+	var propeller_local := propulsion.stern_offset if propulsion != null else Vector3(0, ship.depth_m * 0.25, ship.length_m * 0.45)
 	var propeller_world := ship.to_global(propeller_local)
-	var speed_strength := smoothstep(0.35, 7.0, speed)
-	_wake_field.submit_emitter(
-		"remote:" + entity_id,
-		Vector2(propeller_world.x, propeller_world.z),
-		trailing_axis,
-		ship.get_half_beam_m(),
-		speed,
-		speed_strength * 0.45,
-		speed_strength * 0.75,
-		30.0
-	)
+	var water := WaveSurface.sample_at(propeller_world.x, propeller_world.z)
+	var immersion := water.height - propeller_world.y
+	if immersion < 0.25:
+		immersion = maxf(immersion, water.height - ship.global_position.y + ship.depth_m * 0.35)
+	var strength := OceanWakeField.calculate_strength(float(machinery.get("thrust", 0.0)), ship.mass, speed, throttle, immersion)
+	if strength.y <= 0.001 and absf(throttle) > 0.05:
+		strength = Vector2(absf(throttle) * 0.55, absf(throttle) * 0.7)
+	_wake_field.submit_emitter("remote:" + entity_id,
+		Vector2(propeller_world.x, propeller_world.z), trailing_axis,
+		ship.get_half_beam_m(), speed, strength.x, strength.y, 30.0)
+
 
 
 ## Parses metadata to identify pilot IDs that should be hidden.
@@ -523,6 +604,9 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		if ship != null:
 			ship.name = "RemoteShip_" + id
 			ship.set_meta("remote_replica", true)
+			# A cached or downloaded build must be applied before revealing an
+			# owned ship. A bare catalog hull is not its accepted construction.
+			ship.visible = str(_parse_meta_map(meta).get("vid", "")).is_empty()
 			ship.freeze = true
 			ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 			_disable_physics_in_subtree(ship)
@@ -542,57 +626,115 @@ func _sync_remote_ship_layout(entity_id: String, ship: BoatBody, meta: String, s
 	var parsed := _parse_meta_map(meta)
 	var vid := str(parsed.get("vid", ""))
 	var lh := str(parsed.get("lh", ""))
+	var cid := str(parsed.get("cid", ""))
 	if vid.is_empty():
 		return
 	ship.set_meta("server_vessel_id", vid)
 	state["server_vessel_id"] = vid
-	if not bool(state.get("server_vessel_announced", false)):
-		state["server_vessel_announced"] = true
-		_visible_entities[entity_id] = state
-		remote_ship_available.emit(vid, ship)
-
-	var applied_vid := str(state.get("layout_vid", ""))
-	var applied_hash := str(state.get("layout_hash", ""))
-	## Already applied this vessel; only refetch when layout hash changes.
-	if applied_vid == vid and (lh.is_empty() or applied_hash == lh):
-		return
-
-	var cached: Dictionary = _layout_cache.get(vid, {})
-	if not cached.is_empty() and (lh.is_empty() or str(cached.get("hash", "")) == lh):
-		_apply_remote_ship_layout(ship, cached.get("layout", {}) as Dictionary)
-		state["layout_vid"] = vid
-		state["layout_hash"] = str(cached.get("hash", lh))
-		_visible_entities[entity_id] = state
-		return
-
-	if _layout_inflight.has(vid):
-		return
-
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
-		session = get_tree().root.get_node_or_null("/root/PlayerSession")
-	if session == null:
 		return
+	var server := VesselSync._http_base(session)
+	if server != _layout_server:
+		_reset_layout_requests(true)
+		_layout_server = server
+	var key := "construction:" + cid if not cid.is_empty() else "legacy:" + vid + ":" + lh
+	state["requested_layout_key"] = key
+	state["requested_layout_hash"] = lh
+	state["requested_construction_id"] = cid
+	_visible_entities[entity_id] = state
+	if str(state.get("applied_layout_key", "")) == key:
+		return
+	if _layout_cache.has(key):
+		_layout_cache_order.erase(key)
+		_layout_cache_order.append(key)
+		_apply_cached_ship_layout(entity_id, key, _layout_cache[key])
+		return
+	if _layout_inflight.has(key) or _layout_inflight.size() >= MAX_LAYOUT_REQUESTS:
+		return
+	if Time.get_ticks_msec() < int(_layout_retry_after_ms.get(key, 0)):
+		return
+	var epoch := _layout_epoch
+	_layout_inflight[key] = null
+	var request: HTTPRequest
+	if not cid.is_empty():
+		request = VesselSync.fetch_vessel_construction(session, cid, func(construction: Dictionary) -> void:
+			var accepted := construction if VesselSync.construction_matches(cid, construction) else {}
+			_finish_layout_request(key, epoch, {"construction": accepted, "layout": accepted.get("layout", {}), "hash": lh})
+		)
+	else:
+		request = VesselSync.fetch_vessel_record(session, vid, func(row: Dictionary) -> void:
+			var hash := str(row.get("layout_hash", ""))
+			# A refit may commit between discovery and GET. Do not apply that
+			# different version under the stale version advertised in metadata.
+			var layout := VesselSync._decoded_layout(row.get("brick_layout", {})) if lh.is_empty() or hash == lh else {}
+			_finish_layout_request(key, epoch, {"layout": layout, "hash": hash})
+		)
+	if _layout_inflight.has(key): _layout_inflight[key] = request
 
-	_layout_inflight[vid] = true
-	VesselSync.fetch_vessel_layout(session, vid, func(layout: Dictionary, hash: String) -> void:
-		_layout_inflight.erase(vid)
-		if layout.is_empty() and hash.is_empty():
-			return
-		var use_hash := hash if not hash.is_empty() else lh
-		_layout_cache[vid] = {"hash": use_hash, "layout": layout}
-		## Entity may have despawned while the request was in flight.
-		if not _visible_entities.has(entity_id):
-			return
-		var live_state: Dictionary = _visible_entities[entity_id]
-		var live_ship := _live_node(live_state) as BoatBody
-		if live_ship == null:
-			return
-		_apply_remote_ship_layout(live_ship, layout)
-		live_state["layout_vid"] = vid
-		live_state["layout_hash"] = use_hash
-		_visible_entities[entity_id] = live_state
-	)
+
+func _finish_layout_request(key: String, epoch: int, accepted: Dictionary) -> void:
+	if epoch != _layout_epoch: return
+	_layout_inflight.erase(key)
+	var layout: Dictionary = accepted.get("layout", {})
+	if layout.is_empty():
+		_layout_retry_after_ms[key] = Time.get_ticks_msec() + LAYOUT_RETRY_MS
+		# Old failed contacts should not grow memory throughout a long voyage.
+		while _layout_retry_after_ms.size() > MAX_CACHED_LAYOUTS:
+			_layout_retry_after_ms.erase(_layout_retry_after_ms.keys()[0])
+		return
+	_layout_retry_after_ms.erase(key)
+	_layout_cache[key] = accepted.duplicate(true)
+	_layout_cache_order.erase(key)
+	_layout_cache_order.append(key)
+	while _layout_cache_order.size() > MAX_CACHED_LAYOUTS:
+		_layout_cache.erase(_layout_cache_order.pop_front())
+	# Several visible vessels can share a construction and a single download.
+	# Every consumer is checked against its CURRENT desired version, so stale
+	# callbacks cannot overwrite a refit or an entity id reused for another boat.
+	for id: String in _visible_entities.keys():
+		_apply_cached_ship_layout(id, key, accepted)
+
+
+func _apply_cached_ship_layout(entity_id: String, key: String, accepted: Dictionary) -> void:
+	if not _visible_entities.has(entity_id): return
+	var state: Dictionary = _visible_entities[entity_id]
+	if str(state.get("requested_layout_key", "")) != key or str(state.get("applied_layout_key", "")) == key:
+		return
+	var ship := _live_node(state) as BoatBody
+	if ship == null: return
+	var layout: Dictionary = accepted.get("layout", {})
+	if ship is ImportedDraftVessel and not ImportedVesselLayout.valid(layout, str(ship.draft.get("hull", ""))):
+		return
+	_apply_remote_ship_layout(ship, layout)
+	state["layout_vid"] = str(state.get("server_vessel_id", ""))
+	state["layout_hash"] = str(accepted.get("hash", ""))
+	state["applied_layout_key"] = key
+	state["full_detail_requested"] = false
+	ship.set_meta("construction_id", str(state.get("requested_construction_id", "")))
+	ship.set_meta("layout_hash", state.layout_hash)
+	ship.visible = true
+	_visible_entities[entity_id] = state
+	if str(state.get("server_vessel_announced", "")) != str(state.layout_vid):
+		state["server_vessel_announced"] = str(state.layout_vid)
+		remote_ship_available.emit(str(state.layout_vid), ship)
+
+
+func _reset_layout_requests(clear_cache: bool = false) -> void:
+	_layout_epoch += 1
+	for raw: Variant in _layout_inflight.values():
+		if raw is HTTPRequest and is_instance_valid(raw):
+			raw.cancel_request()
+			raw.queue_free()
+	_layout_inflight.clear()
+	_layout_retry_after_ms.clear()
+	if clear_cache:
+		_layout_cache.clear()
+		_layout_cache_order.clear()
+
+
+func _exit_tree() -> void:
+	_reset_layout_requests(true)
 
 
 func _apply_remote_ship_layout(ship: BoatBody, layout: Dictionary) -> void:
@@ -677,12 +819,12 @@ func _despawn_remote_entity(id: String, scene_nodes: Dictionary) -> void:
 
 
 func _disable_physics_in_subtree(n: Node) -> void:
-	## MooringComponent's physics callback only redraws locally derived ropes;
-	## keeping it alive does not enable remote hull physics.
-	if n is MooringComponent:
+	## Keep replicated presentation and walk collision alive. These components
+	## consume authority state; propulsion/buoyancy still stay disabled.
+	if n is MooringComponent or n is ShipGangway or n is ShipPartState:
 		n.set_physics_process(true)
 		return
-	n.set_physics_process(false)
+	n.set_physics_process(n is ImportedDraftVessel)
 	if n.is_in_group(VehicleGroups.SHIP_OWNER_ONLY):
 		n.queue_free()
 		return
@@ -722,6 +864,15 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 		if node.has_method("_sync_walk_deck_transform"):
 			node.call("_sync_walk_deck_transform")
 		if node is BoatBody:
+			var machinery := _parse_meta_map(meta)
+			node.set_meta("replicated_machinery", {"running": machinery.get("eng", "0") == "1", "throttle": clampf(float(machinery.get("thr", "0")), -1, 1), "lateral": clampf(float(machinery.get("lat", "0")), -1, 1)})
+			var presentation: Dictionary = node.get_meta("replicated_machinery")
+			presentation["steering"] = clampf(float(machinery.get("rud", "0")), -1, 1)
+			presentation["speed"] = clampf(float(machinery.get("adv", "0")), 0, 60)
+			presentation["thrust"] = clampf(float(machinery.get("force", "0")), 0, 10000000)
+			var lighting := node.get_node_or_null("ShipLighting") as ShipLighting
+			if lighting != null and str(machinery.get("lights", "")).is_valid_int():
+				lighting.apply_network_state(int(machinery.lights))
 			var systems: Array[FishingSystem] = (node as BoatBody).get_fishing_systems()
 			if not systems.is_empty():
 				var ship_meta := _parse_meta_map(meta)
@@ -836,6 +987,8 @@ func _drive_player_walk_cycle(state: Dictionary, node: Node3D, _delta: float) ->
 
 
 func clear_all(scene_nodes: Dictionary) -> void:
+	_stored_vessels.clear()
+	_reset_layout_requests()
 	for id in _visible_entities.keys():
 		var state: Dictionary = _visible_entities[id]
 		var node := _live_node(state)

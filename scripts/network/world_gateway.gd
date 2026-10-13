@@ -16,6 +16,21 @@ const LocalBackendClass = preload("res://scripts/network/local_world_backend.gd"
 const RemoteBackendClass = preload("res://scripts/network/remote_world_backend.gd")
 
 var _backend: WorldBackend = null
+var fishing_catches: FishingCatchReplication
+
+func refresh_captain_balance()->void:
+	if not _backend is RemoteWorldBackend:return
+	var actor:=actor_id()
+	_backend.fetch_captain_balance(func(response:Dictionary):
+		if int(response.get("status",0))!=200 or actor_id()!=actor:return
+		var captain:Dictionary=response.get("payload",{}).get("captain",{})
+		if str(captain.get("id",""))!=PlayerSession.data.captain_id:return
+		PlayerSession.data.marks=int(captain.get("marks",PlayerSession.data.marks))
+		var account:Dictionary=PlayerSession.data.company.get("account",{}).duplicate(true)
+		account["balance_marks"]=PlayerSession.data.marks
+		PlayerSession.data.company["account"]=account
+		PlayerSession.marks_changed.emit(PlayerSession.data.marks)
+	)
 var _remote := false
 ## Optional connection override for gateway instances that are not the process
 ## autoload — test harness virtual clients and future dedicated workers. When
@@ -38,6 +53,25 @@ var _interest_references: Dictionary = {
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_store.changed.connect(_on_projection_changed)
+	if not ShipyardPlaytestMode.active():
+		call_deferred("_setup_cargo_replication")
+
+
+## Inject the same transport seam into isolated native tools and tests. The
+## caller opens/authenticates its session; no captain save is consulted here.
+func use_backend(backend: WorldBackend, remote: bool) -> void:
+	stop_session()
+	_backend = backend
+	_remote = remote
+	add_child(backend)
+	backend.session_started.connect(_on_session_started)
+	backend.session_ended.connect(_on_session_ended)
+	backend.command_finished.connect(_on_command_finished)
+	backend.event_received.connect(_on_world_event)
+	backend.event_batch_received.connect(_on_world_events)
+	backend.projections_received.connect(_on_projections_received)
+	backend.snapshot_received.connect(_on_state_snapshot)
+	backend.transport_failed.connect(_on_transport_failed)
 
 
 func begin_session(multiplayer: bool) -> void:
@@ -72,7 +106,9 @@ func begin_session_with_identity(
 	_backend.session_ended.connect(_on_session_ended)
 	_backend.command_finished.connect(_on_command_finished)
 	_backend.event_received.connect(_on_world_event)
+	_backend.event_batch_received.connect(_on_world_events)
 	_backend.projections_received.connect(_on_projections_received)
+	_backend.snapshot_received.connect(_on_state_snapshot)
 	_backend.transport_failed.connect(_on_transport_failed)
 	var base_url := _override_base_url if not _override_base_url.is_empty() else ServerConfig.get_http_base_url()
 	if multiplayer:
@@ -283,12 +319,15 @@ func next_request_id(request_scope: String = "command") -> String:
 	var request_actor := actor_id()
 	if request_actor.is_empty():
 		request_actor = str(LocalPlayerView.get_network_player_id())
-	return "%s:%s:%d:%d" % [
+	var identifier := "%s:%s:%d:%d" % [
 		request_scope.replace(".", "-"),
 		request_actor,
 		Time.get_ticks_usec(),
 		_request_counter,
 	]
+	# Server receipt keys are limited to 128 UTF-8 bytes. Imported part/entity
+	# scopes can already exceed that before the actor and nonce are appended.
+	return identifier if identifier.to_utf8_buffer().size() <= 128 else "command:" + identifier.sha256_text()
 
 
 func _on_session_started(session: Dictionary) -> void:
@@ -321,10 +360,25 @@ func _on_world_event(event: Dictionary) -> void:
 	_dispatch("*", event)
 
 
+func _on_world_events(events: Array) -> void:
+	var records: Array = []
+	for event: Dictionary in events:
+		if event.get("projection") is Dictionary: records.append(event.projection)
+	_store.apply_batch(records)
+	for event: Dictionary in events:
+		world_event.emit(event.duplicate(true))
+		_dispatch(str(event.get("type", "")), event)
+		_dispatch("*", event)
+
+
 func _on_projections_received(incoming: Array) -> void:
 	for projection_variant in incoming:
 		if projection_variant is Dictionary:
 			_store.apply(projection_variant as Dictionary)
+
+
+func _on_state_snapshot(snapshot: Dictionary) -> void:
+	_store.replace_all(snapshot.get("projections", []) as Array)
 
 
 func _dispatch(type: String, event: Dictionary) -> void:
@@ -351,5 +405,28 @@ func _on_projection_changed(kind: String, id: String, projection_value: Dictiona
 
 
 func _on_transport_failed(code: String, message: String) -> void:
+	if code == "session_reconnecting":
+		print("[WorldGateway] ", message)
+		authority_error.emit(code, message)
+		return
 	push_error("[WorldGateway] Authority transport failed (%s): %s" % [code, message])
 	authority_error.emit(code, message)
+
+
+## Shared wall clock for ocean phase and deterministic weather. Elapsed time
+## follows a monotonic local clock after each server sample, never frame count.
+func server_unix_seconds() -> float:
+	if _remote and _backend is RemoteWorldBackend and _backend.is_ready():
+		return (_backend as RemoteWorldBackend).server_unix_seconds()
+	return Time.get_unix_time_from_system()
+
+
+func _setup_cargo_replication() -> void:
+	fishing_catches = FishingCatchReplication.new()
+	fishing_catches.name = "FishingCatchReplication"
+	add_child(fishing_catches)
+	fishing_catches.setup(self)
+	var replication := CargoManifestReplication.new()
+	replication.name = "CargoManifestReplication"
+	add_child(replication)
+	replication.setup(self, LocalPlayerView)

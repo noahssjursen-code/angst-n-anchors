@@ -146,12 +146,25 @@ func test_vessel(id: String,side: int) -> void:
 	add_child(boat)
 	await wait_frames(10)
 	var mooring := boat.get_node("ShipGameplay/MooringComponent") as MooringComponent
+	if OS.get_cmdline_user_args().has("--remote-replica"):
+		boat.set_meta("remote_replica", true)
+		var drawing := preload("res://scripts/network/replication_drawing_service.gd").new()
+		drawing._disable_physics_in_subtree(boat)
+		drawing.free()
 	mooring.moor_to_posts(posts[0],posts[1])
 	check(harbour.plug_ship(slot.berth_id,boat),id+" berth assignment")
 	await wait_frames(20)
 	var bridge := boat.gangway
+	if OS.get_cmdline_user_args().has("--survey"):
+		var saved := bridge._candidates.duplicate(true)
+		for candidate in boat.part_roots:
+			if not str(candidate.get_meta("asset_id", "")).begins_with("halfwall_straight_100cm_"): continue
+			if absf(candidate.position.x + side*boat.beam_m*.5) > .05 or absf(candidate.rotation.y) > .01: continue
+			bridge._candidates[-side] = [{"part":candidate,"closed":candidate.transform}]
+			if not bridge._clear_gate(-side).is_empty(): print("CLEAR GATE ",id," side ",-side," z ",candidate.position.z)
+		bridge._candidates = saved
 	check(bridge.deployed,id+" side "+str(side)+" deployed: "+bridge.status)
-	if bridge.deployed:
+	if bridge.deployed and not OS.get_cmdline_user_args().has("--survey"):
 		var middle := (bridge.ship_end+bridge.shore_end)*.5
 		camera.global_position = middle+port.global_basis*Vector3(-side*6,3.2,5.5)
 		camera.look_at(middle+Vector3.UP*.6)
@@ -171,6 +184,8 @@ func test_vessel(id: String,side: int) -> void:
 		await capture(id+str(side)+"-aboard")
 		await walk_to(bridge.shore_end-toward_ship*.9,-toward_ship,id+" ashore",true)
 		check(player.is_on_floor() and absf(port.to_local(player.global_position).x)<9.0,id+" returns to quay without jumping")
+		await walk_to(bridge.ship_end+toward_ship*1.8,toward_ship,id+" full deck passage",false)
+		await walk_to(bridge.shore_end-toward_ship*.9,-toward_ship,id+" full passage return",true)
 		mooring.release_mooring()
 		await wait_frames(4)
 		check(not bridge.deployed and bridge._walk.collision_layer==0,id+" cast off stows ramp")
@@ -199,6 +214,23 @@ func test_vessel(id: String,side: int) -> void:
 		await wait_frames(20)
 		check(bridge.deployed,id+" redeploys on return to valid landing")
 		check(JSON.stringify(boat.draft)==saved_draft,id+" boarding never modifies saved fit-out")
+		# A blocker beyond the old one-metre spot checks must prevent a NEW
+		# deployment, without silently choosing another ordinary wall.
+		mooring.release_mooring()
+		await wait_frames(3)
+		var obstruction := StaticBody3D.new()
+		obstruction.collision_layer = BoatBody.LAYER_BOAT_WALK
+		boat.add_child(obstruction)
+		var gate_entry: Dictionary = bridge._candidates[-side][0]
+		var obstruct_at: Vector3 = gate_entry.closed * Vector3(0,.7,-.5)
+		obstruct_at.x += side*1.7
+		add_box(obstruction,Vector3(.3,1.4,.8),obstruct_at,Color.RED)
+		mooring.moor_to_posts(posts[0],posts[1])
+		await wait_frames(20)
+		check(not bridge.deployed,id+" obstructed deck passage prevents boarding deployment")
+		obstruction.queue_free()
+		await wait_frames(20)
+		check(bridge.deployed,id+" clearing passage restores the same authored gate")
 		if id == "coaster":
 			var updated := boat.draft.duplicate(true)
 			updated["name"] = "Gangway fixture refresh"
@@ -234,6 +266,10 @@ func walk_to(target: Vector3,direction: Vector3,tag: String,bob: bool) -> void:
 		if (player.global_position-target).dot(direction) >= 0:
 			arrived = true
 			break
+	if not arrived:
+		for index in player.get_slide_collision_count():
+			var hit := player.get_slide_collision(index)
+			print("BLOCKED ", hit.get_collider(), " shape=", hit.get_collider_shape(), " point=", hit.get_position(), " normal=", hit.get_normal())
 	Input.action_release("move_forward")
 	await wait_frames(20)
 	check(arrived,tag+" walked across "+("moving" if bob else "stationary")+" bridge")

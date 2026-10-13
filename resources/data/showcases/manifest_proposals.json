@@ -1,0 +1,886 @@
+{
+  "title": "Unified manifests and contracts",
+  "schema_status": "PROPOSAL ONLY: not supported server commands or saved game data. example-construction-* are placeholders, not real blueprint hashes. All balancing values are fictional. Only linked canonical examples are expanded; other IDs illustrate external records.",
+  "records": [
+    {
+      "id": "manifest-freight",
+      "group": "manifests",
+      "name": "Freight · 35 windows in a blue container",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "The container belongs to the carrier; its windows belong to the customer. Twenty more windows were already delivered. Placement comes from the accepted construction.",
+      "json": {
+        "schema_version": 1,
+        "kind": "vessel_manifest",
+        "vessel_id": "10000000-0000-4000-8000-000000000001",
+        "construction_id": "example-construction-freight",
+        "revision": 8,
+        "as_of_cursor": 120,
+        "sections": {
+          "onboard": [
+            {
+              "kind": "entity",
+              "entity_id": "box-17",
+              "definition_id": "iso_container_20ft",
+              "role": "freight",
+              "owner_company_id": "company-carrier",
+              "custodian_company_id": "company-carrier",
+              "placement": {
+                "storage_id": "cargo:bed-a",
+                "local_position_m": [
+                  0,
+                  3,
+                  2
+                ],
+                "local_rotation_xyzw": [
+                  0,
+                  0,
+                  0,
+                  1
+                ]
+              },
+              "appearance": {
+                "paint_id": "blue"
+              },
+              "tare_mass_g": 2200000,
+              "contents": [
+                {
+                  "inventory_id": "windows-in-transit",
+                  "definition_id": "ship_window_standard",
+                  "owner_company_id": "company-buyer",
+                  "quantity": {
+                    "amount": 35,
+                    "unit": "each"
+                  },
+                  "net_mass_g": 700000,
+                  "allocation_ids": [
+                    "allocation-windows"
+                  ],
+                  "destination": {
+                    "kind": "facility",
+                    "id": "shipyard-sveio"
+                  },
+                  "contract_ids": [
+                    "haul-windows"
+                  ]
+                }
+              ]
+            }
+          ],
+          "work": [
+            {
+              "contract_id": "haul-windows",
+              "objective_id": "deliver-windows",
+              "status": "in_progress"
+            }
+          ],
+          "deployed": []
+        }
+      },
+      "links": [
+        "manifest-container",
+        "manifest-windows",
+        "manifest-window-contract",
+        "manifest-window-order"
+      ]
+    },
+    {
+      "id": "manifest-container",
+      "group": "manifestRecords",
+      "name": "Container · reusable box and placement",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Canonical physical entity. Contents are found through their parent location, not copied here. A box may contain lots belonging to different customers.",
+      "json": {
+        "schema_version": 1,
+        "kind": "physical_entity",
+        "id": "box-17",
+        "definition_id": "iso_container_20ft",
+        "owner_company_id": "company-carrier",
+        "custodian_company_id": "company-carrier",
+        "location": {
+          "kind": "vessel",
+          "id": "10000000-0000-4000-8000-000000000001",
+          "storage_id": "cargo:bed-a"
+        },
+        "appearance": {
+          "paint_id": "blue"
+        },
+        "condition": {
+          "integrity_basis_points": 10000
+        }
+      },
+      "links": [
+        "manifest-windows",
+        "manifest-freight"
+      ]
+    },
+    {
+      "id": "manifest-windows",
+      "group": "manifestRecords",
+      "name": "Inventory · customer-owned windows",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Canonical stock with one current location. Delivery reward is in the contract; this inventory is not itself a promise of payment.",
+      "json": {
+        "schema_version": 1,
+        "kind": "inventory",
+        "id": "windows-in-transit",
+        "definition_id": "ship_window_standard",
+        "owner_company_id": "company-buyer",
+        "custodian_company_id": "company-carrier",
+        "quantity": {
+          "amount": 35,
+          "unit": "each"
+        },
+        "net_mass_g": 700000,
+        "location": {
+          "kind": "entity",
+          "id": "box-17",
+          "storage_id": "interior"
+        },
+        "components": {
+          "condition": {
+            "quality_basis_points": 10000
+          }
+        },
+        "provenance": {
+          "source": "purchase",
+          "transaction_id": "purchase-windows"
+        }
+      },
+      "links": [
+        "manifest-container",
+        "manifest-window-allocation"
+      ]
+    },
+    {
+      "id": "manifest-window-order",
+      "group": "contractsProposal",
+      "name": "Build demand · 55 windows",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Future construction requirement: 20 accepted, 35 reserved and travelling. Progress is derived from receipts and allocations. Consuming all 55 for construction is a later transaction.",
+      "json": {
+        "schema_version": 1,
+        "kind": "material_requirement",
+        "id": "build-order-windows",
+        "requester_company_id": "company-buyer",
+        "project_id": "build-new-ship",
+        "destination": {
+          "kind": "facility",
+          "id": "shipyard-sveio"
+        },
+        "lines": [
+          {
+            "id": "windows",
+            "definition_id": "ship_window_standard",
+            "required": {
+              "amount": 55,
+              "unit": "each"
+            },
+            "accepted": {
+              "amount": 20,
+              "unit": "each"
+            },
+            "reserved_undelivered": {
+              "amount": 35,
+              "unit": "each"
+            }
+          }
+        ],
+        "contract_ids": [
+          "haul-windows"
+        ],
+        "status": "partially_fulfilled"
+      },
+      "links": [
+        "manifest-window-contract",
+        "manifest-window-allocation",
+        "manifest-window-receipt"
+      ]
+    },
+    {
+      "id": "manifest-window-contract",
+      "group": "contractsProposal",
+      "name": "Contract · deliver the customer's 55 windows",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Customer and carrier can each be NPC or player companies. This is transport of existing purchased goods. Procurement could instead ask a supplier to source them.",
+      "json": {
+        "schema_version": 1,
+        "kind": "contract",
+        "id": "haul-windows",
+        "type": "transport",
+        "issuer_company_id": "company-buyer",
+        "provider_company_id": "company-carrier",
+        "beneficiary_company_id": "company-buyer",
+        "status": "in_progress",
+        "origin": {
+          "kind": "facility",
+          "id": "window-factory"
+        },
+        "destination": {
+          "kind": "facility",
+          "id": "shipyard-sveio"
+        },
+        "requirements": [
+          {
+            "id": "deliver-windows",
+            "type": "deliver_goods",
+            "definition_id": "ship_window_standard",
+            "quantity": {
+              "amount": 55,
+              "unit": "each"
+            },
+            "minimum_quality_basis_points": 9000,
+            "material_requirement_id": "build-order-windows",
+            "material_requirement_line_id": "windows"
+          }
+        ],
+        "terms": {
+          "partial_deliveries_allowed": true,
+          "reward": {
+            "amount_minor": 450000,
+            "currency": "NOK"
+          },
+          "payout_policy": "on_completion",
+          "funding_status": "reserved",
+          "reservation_id": "payment-reservation-windows"
+        },
+        "progress": [
+          {
+            "objective_id": "deliver-windows",
+            "accepted": {
+              "amount": 20,
+              "unit": "each"
+            }
+          }
+        ],
+        "assignment": {
+          "vessel_ids": [
+            "10000000-0000-4000-8000-000000000001"
+          ]
+        },
+        "receipt_ids": [
+          "receipt-windows-20"
+        ]
+      },
+      "links": [
+        "manifest-window-order",
+        "manifest-window-allocation",
+        "manifest-window-receipt",
+        "manifest-freight"
+      ]
+    },
+    {
+      "id": "manifest-window-allocation",
+      "group": "contractsProposal",
+      "name": "Allocation · the 35 windows still due",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Binds stock to an objective. These units cannot be promised twice. Accepted deliveries leave the active allocation and retain immutable receipts.",
+      "json": {
+        "schema_version": 1,
+        "kind": "cargo_allocation",
+        "id": "allocation-windows",
+        "inventory_id": "windows-in-transit",
+        "contract_id": "haul-windows",
+        "objective_id": "deliver-windows",
+        "material_requirement_id": "build-order-windows",
+        "material_requirement_line_id": "windows",
+        "quantity": {
+          "amount": 35,
+          "unit": "each"
+        },
+        "status": "active"
+      },
+      "links": [
+        "manifest-windows",
+        "manifest-window-contract",
+        "manifest-window-receipt"
+      ]
+    },
+    {
+      "id": "manifest-window-receipt",
+      "group": "contractsProposal",
+      "name": "Receipt · 20 windows already accepted",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Committed evidence. Retry returns this receipt instead of counting the delivery twice. Destination inventory may subsequently move without erasing the receipt.",
+      "json": {
+        "schema_version": 1,
+        "kind": "delivery_receipt",
+        "id": "receipt-windows-20",
+        "operation_id": "unload-windows-trip-1",
+        "contract_id": "haul-windows",
+        "objective_id": "deliver-windows",
+        "recipient_company_id": "company-buyer",
+        "destination": {
+          "kind": "facility",
+          "id": "shipyard-sveio"
+        },
+        "quantity": {
+          "amount": 20,
+          "unit": "each"
+        },
+        "source_inventory_id": "windows-trip-1",
+        "destination_inventory_id": "windows-shipyard",
+        "accepted_world_time_ms": 7200000
+      },
+      "links": [
+        "manifest-window-contract",
+        "manifest-window-order"
+      ]
+    },
+    {
+      "id": "manifest-fish",
+      "group": "manifestRecords",
+      "name": "Inventory · individual 9.2 kg cod",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "One indivisible specimen preserves model, size and provenance for the catch library. Species definition resolves the approved model. Bulk catches can use mass-based lots.",
+      "json": {
+        "schema_version": 1,
+        "kind": "inventory",
+        "id": "catch-cod-001",
+        "definition_id": "atlantic_cod",
+        "owner_company_id": "company-fisher",
+        "custodian_company_id": "company-fisher",
+        "quantity": {
+          "amount": 1,
+          "unit": "each"
+        },
+        "net_mass_g": 9200,
+        "components": {
+          "specimen": {
+            "species_id": "atlantic_cod",
+            "length_mm": 940,
+            "grade": "Large"
+          },
+          "catch": {
+            "caught_world_time_ms": 7300000,
+            "source_school_id": "school-cod-7"
+          },
+          "condition": {
+            "quality_basis_points": 10000
+          }
+        },
+        "location": {
+          "kind": "vessel",
+          "id": "10000000-0000-4000-8000-000000000002",
+          "storage_id": "hold:catch-a"
+        }
+      },
+      "links": [
+        "manifest-fishing"
+      ]
+    },
+    {
+      "id": "manifest-fishing",
+      "group": "manifests",
+      "name": "Fishing · fresh catch and a recovered item",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Both enter the manifest without contracts. Value below is an illustrative quote, not earnings. A recovered object's owner can remain unresolved.",
+      "json": {
+        "schema_version": 1,
+        "kind": "vessel_manifest",
+        "vessel_id": "10000000-0000-4000-8000-000000000002",
+        "construction_id": "example-construction-fisher",
+        "revision": 8,
+        "as_of_cursor": 120,
+        "sections": {
+          "onboard": [
+            {
+              "kind": "inventory",
+              "inventory_id": "catch-cod-001",
+              "role": "catch",
+              "definition_id": "atlantic_cod",
+              "owner_company_id": "company-fisher",
+              "custodian_company_id": "company-fisher",
+              "quantity": {
+                "amount": 1,
+                "unit": "each"
+              },
+              "net_mass_g": 9200,
+              "components": {
+                "specimen": {
+                  "species_id": "atlantic_cod",
+                  "length_mm": 940,
+                  "grade": "Large"
+                },
+                "catch": {
+                  "caught_world_time_ms": 7300000,
+                  "source_school_id": "school-cod-7"
+                },
+                "condition": {
+                  "quality_basis_points": 10000
+                }
+              },
+              "location": {
+                "kind": "vessel",
+                "id": "10000000-0000-4000-8000-000000000002",
+                "storage_id": "hold:catch-a"
+              },
+              "contract_ids": [],
+              "valuation": {
+                "kind": "estimate",
+                "amount_minor": 276000,
+                "currency": "NOK",
+                "quote_id": "example-quote-cod"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "recovered-case-1",
+              "definition_id": "sealed_supply_case",
+              "role": "recovered_goods",
+              "owner_company_id": null,
+              "custodian_company_id": "company-fisher",
+              "ownership_status": "unresolved",
+              "placement": {
+                "storage_id": "deck:recovery-a",
+                "local_position_m": [
+                  1,
+                  2,
+                  -3
+                ],
+                "local_rotation_xyzw": [
+                  0,
+                  0,
+                  0,
+                  1
+                ]
+              },
+              "contract_ids": []
+            }
+          ],
+          "work": [],
+          "deployed": []
+        }
+      },
+      "links": [
+        "manifest-fish"
+      ]
+    },
+    {
+      "id": "manifest-crab",
+      "group": "manifests",
+      "name": "Crabber · 12 owned traps, 11 aboard",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Deployed gear is listed separately and does not count as onboard cargo. Deployment moves existing equipment rather than creating another owned trap.",
+      "json": {
+        "schema_version": 1,
+        "kind": "vessel_manifest",
+        "vessel_id": "10000000-0000-4000-8000-000000000003",
+        "construction_id": "example-construction-crabber",
+        "revision": 8,
+        "as_of_cursor": 120,
+        "sections": {
+          "onboard": [
+            {
+              "kind": "entity",
+              "entity_id": "trap-01",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-1"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-02",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-2"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-03",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-3"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-04",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-4"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-05",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-5"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-06",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-6"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-07",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-7"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-08",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-8"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-09",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-9"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-10",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-10"
+              }
+            },
+            {
+              "kind": "entity",
+              "entity_id": "trap-11",
+              "definition_id": "crab_creel",
+              "role": "equipment",
+              "owner_company_id": "company-crabber",
+              "placement": {
+                "storage_id": "mount:creel-11"
+              }
+            }
+          ],
+          "work": [],
+          "deployed": [
+            {
+              "entity_id": "trap-12",
+              "status": "soaking",
+              "location": {
+                "kind": "world",
+                "world_id": "example-world",
+                "position_m": [
+                  1200,
+                  -45,
+                  800
+                ]
+              },
+              "linked_buoy_id": "marker-12",
+              "ready_world_time_ms": 10800000
+            }
+          ]
+        }
+      },
+      "links": [
+        "manifest-trap"
+      ]
+    },
+    {
+      "id": "manifest-trap",
+      "group": "manifestRecords",
+      "name": "Trap · same item identity after deployment",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Canonical gear keeps its owner and identity while its location moves from deck to world. Rope, bait and trap state are validated components.",
+      "json": {
+        "schema_version": 1,
+        "kind": "physical_entity",
+        "id": "trap-12",
+        "definition_id": "crab_creel",
+        "owner_company_id": "company-crabber",
+        "custodian_company_id": "company-crabber",
+        "assigned_vessel_id": "10000000-0000-4000-8000-000000000003",
+        "location": {
+          "kind": "world",
+          "world_id": "example-world",
+          "position_m": [
+            1200,
+            -45,
+            800
+          ]
+        },
+        "components": {
+          "trap": {
+            "status": "soaking",
+            "bait_remaining_g": 300,
+            "ready_world_time_ms": 10800000
+          },
+          "line": {
+            "length_mm": 55000,
+            "linked_buoy_id": "marker-12"
+          }
+        }
+      },
+      "links": [
+        "manifest-crab"
+      ]
+    },
+    {
+      "id": "manifest-lng",
+      "group": "manifests",
+      "name": "LNG · measured cargo in a compatible tank",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Tank compatibility and capacity come from installed equipment. Cargo LNG is separate from fuel reserved for the engine. Quantities here are illustrative.",
+      "json": {
+        "schema_version": 1,
+        "kind": "vessel_manifest",
+        "vessel_id": "10000000-0000-4000-8000-000000000004",
+        "construction_id": "example-construction-tanker",
+        "revision": 8,
+        "as_of_cursor": 120,
+        "sections": {
+          "onboard": [
+            {
+              "kind": "inventory",
+              "inventory_id": "lng-lot-1",
+              "definition_id": "lng",
+              "role": "freight",
+              "owner_company_id": "company-energy",
+              "custodian_company_id": "company-tanker",
+              "quantity": {
+                "amount": 900000000,
+                "unit": "g"
+              },
+              "location": {
+                "kind": "vessel",
+                "id": "10000000-0000-4000-8000-000000000004",
+                "storage_id": "tank:lng-a"
+              },
+              "components": {
+                "liquid": {
+                  "occupied_volume_ml": 2000000000,
+                  "temperature_milli_c": -162000
+                }
+              },
+              "contract_ids": [
+                "haul-lng"
+              ],
+              "destination": {
+                "kind": "facility",
+                "id": "lng-terminal"
+              }
+            }
+          ],
+          "work": [
+            {
+              "contract_id": "haul-lng",
+              "objective_id": "deliver-lng",
+              "status": "in_progress"
+            }
+          ],
+          "deployed": []
+        }
+      },
+      "links": []
+    },
+    {
+      "id": "manifest-farm",
+      "group": "manifests",
+      "name": "Fish-farm service · supplies plus a service job",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "Feed is onboard stock. Inspection is a linked objective at the farm. Passing nearby does not prove that inspection was performed.",
+      "json": {
+        "schema_version": 1,
+        "kind": "vessel_manifest",
+        "vessel_id": "10000000-0000-4000-8000-000000000005",
+        "construction_id": "example-construction-service",
+        "revision": 8,
+        "as_of_cursor": 120,
+        "sections": {
+          "onboard": [
+            {
+              "kind": "inventory",
+              "inventory_id": "feed-lot-1",
+              "definition_id": "salmon_feed",
+              "role": "service_supply",
+              "owner_company_id": "company-farm",
+              "custodian_company_id": "company-service",
+              "quantity": {
+                "amount": 600000,
+                "unit": "g"
+              },
+              "location": {
+                "kind": "vessel",
+                "id": "10000000-0000-4000-8000-000000000005",
+                "storage_id": "hold:feed-a"
+              },
+              "contract_ids": [
+                "service-farm"
+              ],
+              "destination": {
+                "kind": "facility",
+                "id": "farm-7"
+              }
+            }
+          ],
+          "work": [
+            {
+              "contract_id": "service-farm",
+              "objective_id": "inspect-cage",
+              "type": "perform_service",
+              "target": {
+                "kind": "facility",
+                "id": "farm-7"
+              },
+              "service_type": "cage_inspection",
+              "status": "accepted"
+            }
+          ],
+          "deployed": []
+        }
+      },
+      "links": []
+    },
+    {
+      "id": "manifest-supply",
+      "group": "manifests",
+      "name": "Offshore supply · deck freight and tank goods",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "One vessel combines storage types and customer owners. The destination is a facility, not necessarily a port. Return cargo uses the same model.",
+      "json": {
+        "schema_version": 1,
+        "kind": "vessel_manifest",
+        "vessel_id": "10000000-0000-4000-8000-000000000006",
+        "construction_id": "example-construction-supply",
+        "revision": 8,
+        "as_of_cursor": 120,
+        "sections": {
+          "onboard": [
+            {
+              "kind": "entity",
+              "entity_id": "spare-pump-1",
+              "definition_id": "palletized_pump",
+              "role": "freight",
+              "owner_company_id": "company-rig",
+              "custodian_company_id": "company-supply",
+              "placement": {
+                "storage_id": "deck:freight-a",
+                "local_position_m": [
+                  2,
+                  4,
+                  -5
+                ],
+                "local_rotation_xyzw": [
+                  0,
+                  0,
+                  0,
+                  1
+                ]
+              },
+              "contract_ids": [
+                "supply-rig"
+              ],
+              "destination": {
+                "kind": "facility",
+                "id": "rig-3"
+              }
+            },
+            {
+              "kind": "inventory",
+              "inventory_id": "water-lot-1",
+              "definition_id": "freshwater",
+              "role": "freight",
+              "owner_company_id": "company-rig",
+              "custodian_company_id": "company-supply",
+              "quantity": {
+                "amount": 8000000,
+                "unit": "ml"
+              },
+              "location": {
+                "kind": "vessel",
+                "id": "10000000-0000-4000-8000-000000000006",
+                "storage_id": "tank:water-a"
+              },
+              "contract_ids": [
+                "supply-rig"
+              ],
+              "destination": {
+                "kind": "facility",
+                "id": "rig-3"
+              }
+            }
+          ],
+          "work": [
+            {
+              "contract_id": "supply-rig",
+              "objective_id": "deliver-supplies",
+              "status": "in_progress"
+            }
+          ],
+          "deployed": []
+        }
+      },
+      "links": []
+    },
+    {
+      "id": "manifest-tug",
+      "group": "manifests",
+      "name": "Tug · tow assignment under the same manifest",
+      "scope": "PROPOSED · public game-client data · illustrative only",
+      "note": "The towed ship remains an independent vessel. Work references it without adding it to the tug's inventory, ownership or onboard mass.",
+      "json": {
+        "schema_version": 1,
+        "kind": "vessel_manifest",
+        "vessel_id": "10000000-0000-4000-8000-000000000007",
+        "construction_id": "example-construction-tug",
+        "revision": 8,
+        "as_of_cursor": 120,
+        "sections": {
+          "onboard": [],
+          "work": [
+            {
+              "contract_id": "tow-job-1",
+              "objective_id": "tow-to-berth",
+              "type": "tow_vessel",
+              "target": {
+                "kind": "vessel",
+                "id": "10000000-0000-4000-8000-000000000008"
+              },
+              "attachment": {
+                "relationship_id": "tow-attachment-1",
+                "source_socket_id": "tow:bollard-a",
+                "target_socket_id": "tow:bow-a"
+              },
+              "destination": {
+                "kind": "berth",
+                "id": "repair-berth-2"
+              },
+              "status": "connected"
+            }
+          ],
+          "deployed": []
+        }
+      },
+      "links": []
+    }
+  ]
+}

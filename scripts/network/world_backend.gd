@@ -7,7 +7,9 @@ signal session_started(session: Dictionary)
 signal session_ended
 signal command_finished(result: Dictionary)
 signal event_received(event: Dictionary)
+signal event_batch_received(events: Array)
 signal projections_received(projections: Array)
+signal snapshot_received(snapshot: Dictionary)
 signal transport_failed(code: String, message: String)
 
 

@@ -1,0 +1,396 @@
+{
+  "captures": [
+    "C:/Users/noahs/Pictures/machinescreenshots/mp-cargo-2026-10-13T17-24-12-8580-quay.png",
+    "C:/Users/noahs/Pictures/machinescreenshots/mp-cargo-2026-10-13T17-24-14-8580-hook.png",
+    "C:/Users/noahs/Pictures/machinescreenshots/mp-cargo-2026-10-13T17-24-14-8580-deck.png"
+  ],
+  "checks": [
+    {
+      "check": "Only the local Docker endpoint is used",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "builder authenticated independent account",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "builder has its own captain",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "builder opened isolated reliable authority session",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "builder opened authenticated UDP socket",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer authenticated independent account",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer has its own captain",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer opened isolated reliable authority session",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer opened authenticated UDP socket",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Custom authoring layout is valid and has a helm",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "VesselSync uses isolated test credentials",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "New captain ledger starts empty",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Registration leaves ledger empty while awaiting server acceptance",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Production vessel save completes callback",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Production registration publishes custom ship from empty ledger",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Accepted registration inserts and persists one ledger row",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Registered vessel can be fetched independently",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Vessel has durable ID and immutable construction hash",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Unpublished vessel fetch fails without local-draft fallback",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Cold observer fetches an unknown immutable construction",
+      "detail": "HTTP 200 ",
+      "passed": true
+    },
+    {
+      "check": "Client and server construction/catalog contract agrees",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Capacity is derived as two supported container positions",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Accepted blueprint retains custom paint and installed engine",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Custom equipment placement survives server normalization",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Owner deployment fetches accepted construction instead of local draft",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Production owner builder reconstructs fetched construction",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "owner reconstructs the complete accepted envelope",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "owner instantiates every authored part",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "owner model identities and physical positions match server blueprint",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "owner visible hull material uses saved paint",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "owner installs saved engine power",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "owner runtime cargo capacity agrees with server",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "owner stable cargo IDs and CargoDatum coordinates agree",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Out-of-range observer receives no vessel",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Moving into range discovers vessel via real UDP snapshots",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Discovery identifies authoritative vessel and exact construction version",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Server canonicalizes forged build hash and hull from accepted vessel record",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Another captain cannot publish transforms for the owner's vessel",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Production remote renderer downloads and assembles cold unseen ship",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer reconstructs the complete accepted envelope",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer instantiates every authored part",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer model identities and physical positions match server blueprint",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer visible hull material uses saved paint",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer installs saved engine power",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer runtime cargo capacity agrees with server",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer stable cargo IDs and CargoDatum coordinates agree",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Owner obtains server berth",
+      "detail": "{ \"contract_version\": 1.0, \"request_id\": \"vessel-berth-claim:e2dc8810-8f7c-4b8b-be40-601630462716:16030481:1\", \"ok\": true, \"revision\": 1.0, \"data\": { \"assignment\": { \"assigned_at_ms\": 1791905051916.0, \"berth_id\": \"cargo-test-398dba29/berth\", \"bow_line\": true, \"owner_actor_id\": \"e2dc8810-8f7c-4b8b-be40-601630462716\", \"port_id\": \"cargo-test-398dba29\", \"status\": \"assigned\", \"stern_line\": true, \"vessel_id\": \"398dba29-ff05-4ada-80f8-e3b049c9a105\" }, \"replaced_vessel_id\": \"\" }, \"event_ids\": [\"event-f1011ccdd6ab8a2355041378\"] }",
+      "passed": true
+    },
+    {
+      "check": "Two real containers staged on owner's quay",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Observer renders both quay containers through real server events",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Quay cargo arrives from port interest before vessel discovery",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Destination, value, paint and identity survive publication",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Quay placement matches source",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Archived actual engine capture: quay",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Observer containers cannot be picked up by a second local crane",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Server authorizes cargo crane operation",
+      "detail": "{ \"contract_version\": 1.0, \"request_id\": \"port-operation-request:e2dc8810-8f7c-4b8b-be40-601630462716:16620677:3\", \"ok\": true, \"revision\": 1.0, \"data\": { \"operation_id\": \"cargo-op-398dba29-ff05-4ada-80f8-e3b049c9a105\" }, \"event_ids\": [\"event-26877b981425f2189ad60956\"] }",
+      "passed": true
+    },
+    {
+      "check": "Real crane attaches original container",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Same observer container moves from quay onto crane hook",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Observer crane joints follow owner",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Transfer never duplicates cargo",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Archived actual engine capture: hook",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Observer crane follows a second moving pose",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Custom ship has two cargo positions",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Actual crane release places first container on deck",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Actual crane release places second container on deck",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Both loaded containers appear aboard observer ship",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Deck container preserves ship-local placement",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Deck container preserves ship-local placement",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Archived actual engine capture: deck",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Cargo travels and rotates with replicated hull",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "observer opened isolated reliable authority session",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Fresh observer session reconstructs already-loaded deck cargo",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Leaving vessel range removes deck replicas",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Returning to vessel range rebuilds deck manifest",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Removing cargo removes all observer copies",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "Publisher finishes without rejected commands",
+      "detail": "",
+      "passed": true
+    }
+  ],
+  "duration_ms": 16685,
+  "godot": "4.6.1-stable (official)",
+  "limitations": [
+    "Two isolated client stacks in one process; not two game windows",
+    "Crane poses driven explicitly through real crane nodes; full autonomous crane pathfinding is not exercised"
+  ],
+  "passed": true,
+  "published": {
+    "original_construction_id": "25f356f365c1f16e892b18f0028ff138431a2bfa3fed949d93aed28762b07ade",
+    "vessel_id": "398dba29-ff05-4ada-80f8-e3b049c9a105"
+  },
+  "server": "http://127.0.0.1:8080"
+}

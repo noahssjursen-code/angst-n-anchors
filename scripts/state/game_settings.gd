@@ -76,11 +76,32 @@ func _ready() -> void:
 	if ShipyardPlaytestMode.active():
 		window_mode = WindowMode.WINDOWED
 	apply_all()
+	if _is_mp_test_window():
+		_apply_mp_test_window.call_deferred()
+
+
+func _is_mp_test_window() -> bool:
+	return OS.get_cmdline_user_args().has("--mp-test-window")
+
+
+func _apply_mp_test_window() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var usable := DisplayServer.screen_get_usable_rect()
+	var size := Vector2i(mini(960, usable.size.x / 2 - 24), mini(540, usable.size.y - 80))
+	var slot := NetworkClientStorageScope.current_slot().trim_prefix("client-").to_int() - 1
+	var position := usable.position + Vector2i(12 + (maxi(slot, 0) % 2) * (size.x + 24), 40)
+	DisplayServer.window_set_size(size)
+	DisplayServer.window_set_position(position)
+	print("MP TEST WINDOW: mode=%d borderless=%s resize_disabled=%s size=%s position=%s" % [
+		DisplayServer.window_get_mode(), DisplayServer.window_get_flag(DisplayServer.WINDOW_FLAG_BORDERLESS),
+		DisplayServer.window_get_flag(DisplayServer.WINDOW_FLAG_RESIZE_DISABLED),
+		DisplayServer.window_get_size(), DisplayServer.window_get_position()])
 
 
 func load_settings(path: String = CFG_PATH) -> void:
 	var cfg := ConfigFile.new()
-	var err := cfg.load(path)
+	var err := cfg.load(NetworkClientStorageScope.scoped_path(path) if path == CFG_PATH else path)
 	if err != OK:
 		return
 	master_volume     = float(cfg.get_value("audio",    "master",        master_volume))
@@ -129,7 +150,7 @@ func save_settings(path: String = CFG_PATH) -> void:
 	cfg.set_value("chart",    "fishing",        chart_fishing_enabled)
 	cfg.set_value("chart",    "profile",        chart_profile)
 	cfg.set_value("chart",    "minimap_collapsed", minimap_collapsed)
-	cfg.save(path)
+	cfg.save(NetworkClientStorageScope.scoped_path(path) if path == CFG_PATH else path)
 
 
 # ── Apply ─────────────────────────────────────────────────────────────────────
@@ -156,6 +177,11 @@ func _set_bus_volume(bus_name: String, linear: float) -> void:
 
 
 func _apply_graphics() -> void:
+	# Engine launch flags may be consumed before scripts see them. This explicit
+	# user argument keeps test windows usable even with saved fullscreen settings.
+	if _is_mp_test_window():
+		window_mode = WindowMode.WINDOWED
+		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_RESIZE_DISABLED, false)
 	match window_mode:
 		WindowMode.WINDOWED:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)

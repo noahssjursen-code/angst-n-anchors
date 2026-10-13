@@ -148,13 +148,13 @@ func serve_hint(ship: BoatBody, mode: String) -> String:
 	if not last_failure.is_empty():
 		return last_failure
 	if _crane == null or not is_instance_valid(_crane):
-		return "No crane on this tool"
+		return "Crane unavailable"
 	if ship == null or not is_instance_valid(ship):
 		return "No ship at berth"
 	if ship.get_bulk_holds().is_empty():
 		return "Ship has no bulk holds"
 	if not _crane.can_reach_ship(ship):
-		return "Sorry mac — crane won't reach."
+		return "Vessel out of crane reach."
 	var m := mode.strip_edges().to_lower()
 	if m == MODE_LOAD:
 		if not _has_loadable_hold(ship):

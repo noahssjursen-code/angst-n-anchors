@@ -92,7 +92,20 @@ func run() -> void:
 	harbour.unregister_equipment(equipment.equipment_id())
 	equipment.free()
 	PlayerSession.persistence_mode=PlayerSession.PersistenceMode.REMOTE
-	check(not FreightService.cancel_contract("busy").get("ok",true),"remote account cannot be mutated by local cancellation")
+	check(FreightService.cancel_contract("busy").get("ok",false),"MP cancellation uses the normal persistence path")
+	book("remote-waiting")
+	for unit in FreightService.make_container_units("remote-waiting"):
+		check(yard.add_container(unit)>=0,"stage MP cancellation cargo")
+	check(FreightService.cancel_contract("remote-waiting").get("ok",false),"MP waiting cargo can be cancelled")
+	check(yard.get_containers().size()==2 and yard.get_containers()[0].freight_contract_id=="keep-me","MP cancellation removes only its quay cargo")
+	check(not FreightService.cancel_contract("loaded").get("ok",true),"MP still rejects cargo aboard")
+	check(not FreightService.cancel_contract("in-flight").get("ok",true),"MP still rejects cargo in transit")
+	book("remote-save-rejected")
+	PlayerSession._persistent_io_enabled=true
+	PlayerSession._remote_captain_ready=false
+	check(not FreightService.cancel_contract("remote-save-rejected").get("ok",true),"MP unavailable save path rejects cancellation")
+	check(FreightService._contract_index("remote-save-rejected")>=0,"MP save rejection retains booking")
+	PlayerSession._persistent_io_enabled=false
 	PlayerSession.persistence_mode=PlayerSession.PersistenceMode.LOCAL
 	# A real failed disk write, contained inside a unique temporary test folder.
 	var folder := OS.get_cache_dir().path_join("angst-cancel-test-%d" % Time.get_ticks_usec())

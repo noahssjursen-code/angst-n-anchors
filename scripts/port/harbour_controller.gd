@@ -225,6 +225,18 @@ func unplug_equipment(equip_id: String) -> void:
 	equipment_unplugged.emit(equip_id.strip_edges())
 
 
+## NPC-selected equipment must enter through the command seam, not local replay.
+func request_equipment_job(equipment_id: String, mode: String, commodity_id: String = "") -> bool:
+	var equipment := get_equipment(equipment_id)
+	if equipment == null: return false
+	if is_instance_valid(_authority_bridge):
+		return _authority_bridge.request_job(equipment.berth_id(), mode, commodity_id, "", equipment_id)
+	# Never silently start a local-only job while remote authority is unavailable.
+	if WorldGateway.is_remote(): return false
+	var ship := moored_ship(equipment.berth_id())
+	return plug_equipment(equipment_id, ship, mode, commodity_id) if ship != null else false
+
+
 func request_load(berth_id: String, commodity_id: String = "") -> bool:
 	return _request_job(berth_id, QuayEquipmentJob.MODE_LOAD, commodity_id)
 

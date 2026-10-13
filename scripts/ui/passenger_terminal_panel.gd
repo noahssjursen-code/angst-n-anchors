@@ -87,7 +87,7 @@ func _ready() -> void:
 	_routes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_routes)
 	for action: String in ["arrive", "boarding_access", "cancel"]:
-		var titles := {"arrive": "Land passengers", "boarding_access": "Open boarding access", "cancel": "Cancel sailing and return passengers"}
+		var titles := {"arrive": "Land passengers", "boarding_access": "Open boarding access", "cancel": "Cancel sailing · Return passengers"}
 		var button := _button(titles[action], func(): _send(action))
 		button.name = action
 		column.add_child(button)
@@ -137,7 +137,7 @@ func _send(action: String, id: String = "") -> void:
 	if not is_instance_valid(agent): return
 	if action == "book" and not _requests.has(id): _requests[id] = PlayerData.new_uuid()
 	var result := agent.request(action, id, str(_requests.get(id, "")))
-	_feedback.text = str(result.get("message", "")) if not result.get("ok", false) else "Request accepted. You can close this panel while passengers transfer."
+	_feedback.text = str(result.get("message", "")) if not result.get("ok", false) else "Request accepted."
 	_refresh()
 
 func _label(text: String, size: int) -> Label:

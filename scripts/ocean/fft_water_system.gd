@@ -196,7 +196,12 @@ func _process(delta: float) -> void:
 	var previous_intensity := applied_wave_intensity
 	applied_wave_intensity = lerpf(applied_wave_intensity, WaveSurface.wave_intensity, 1.0 - exp(-sim_delta / SPECTRUM_RESPONSE_SECONDS))
 	wave_intensity_velocity = (applied_wave_intensity - previous_intensity) / sim_delta
-	time += sim_delta
+	if WorldGateway.is_remote():
+		# The spectrum quantizes frequencies to repeat_time. Keep the shader
+		# phase small for float precision; stalls must not slow down the ocean.
+		time = fposmod(WorldGateway.server_unix_seconds(), repeat_time)
+	else:
+		time += sim_delta
 	_run_update_fft_assemble(sim_delta)
 
 	_readback_counter += 1

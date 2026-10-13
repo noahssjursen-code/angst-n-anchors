@@ -48,6 +48,7 @@ var structure_anchor: Variant = null
 var reference_root: Node3D
 var moving_reference := false
 var door_open: CheckButton
+var boarding_gate: CheckButton
 var placement_hint: Label
 var end_run_button: Button
 var draft_path := ""
@@ -179,6 +180,11 @@ func setup(owner_editor: ShipyardBrickEditor) -> void:
 	door_open.text = "Open door"
 	door_open.toggled.connect(_set_doors_open)
 	panel.add_child(door_open)
+	boarding_gate = CheckButton.new()
+	boarding_gate.text = "Boarding gate / gangway"
+	boarding_gate.tooltip_text = "Designate this hull-side railing as a boarding gate. Keep 2.2 m of clear deck inside it."
+	boarding_gate.toggled.connect(_set_boarding_gate)
+	panel.add_child(boarding_gate)
 	interaction_button=Button.new()
 	interaction_button.text="Interact with selected item"
 	interaction_button.pressed.connect(_interact_selected)
@@ -337,6 +343,9 @@ func _picker(title: String, color: Color, callback: Callable) -> ColorPickerButt
 
 
 func refresh_ui() -> void:
+	if boarding_gate != null:
+		boarding_gate.visible = selection.size() == 1 and str(records.get(selected,{}).get("asset_id","")).begins_with("halfwall_straight_100cm_")
+		boarding_gate.set_pressed_no_signal(bool(records.get(selected,{}).get("boarding_gate",false)))
 	editor.get("_context_drawer").show()
 	var id: String = editor.get("_brick_id")
 	if records.has(selected):
@@ -774,6 +783,8 @@ static func valid_draft(data: Variant) -> bool:
 				if not _valid_surface_record(record):
 					valid = false
 					break
+			if record.has("boarding_gate") and not record.boarding_gate is bool:
+				return false
 			if record.has("part_state"):
 				var validator:=ShipPartState.new()
 				valid=record["part_state"] is Dictionary and validator.apply_snapshot(record["part_state"],0)
@@ -1725,6 +1736,15 @@ func _furniture_candidate(point: Vector3) -> Dictionary:
 		p.y+=.85
 	return {"asset_id":id,"position":[p.x,p.y,p.z],"yaw_degrees":furniture_yaw}
 
+
+func _set_boarding_gate(enabled: bool) -> void:
+	if not records.has(selected): return
+	remember()
+	for key in records:
+		if str(records[key].get("asset_id", "")).begins_with("halfwall_straight_100cm_") and not records[key].has("boarding_gate"):
+			records[key]["boarding_gate"] = false
+	records[selected]["boarding_gate"] = enabled
+	refresh_ui()
 
 func _interact_selected() -> void:
 	if not records.has(selected): return

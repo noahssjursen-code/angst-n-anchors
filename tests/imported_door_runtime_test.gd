@@ -73,6 +73,23 @@ func run() -> void:
 	assert(door.state.door_open and door.state.door_swing == -1.0)
 	binding._apply_projection({"revision":3,"state":{"state":{"open":false}}},{})
 	assert(door.state.door_open, "Stale authority replay must not close the door")
+	# Replica presentation must animate and move the leaf collision too.
+	boat.set_meta("remote_replica", true)
+	var drawing := preload("res://scripts/network/replication_drawing_service.gd").new()
+	add_child(drawing)
+	drawing._disable_physics_in_subtree(boat)
+	assert(boat.is_physics_processing() and door.is_physics_processing())
+	assert(boat.gangway.is_physics_processing())
+	assert(not boat.get_node("PropulsionComponent").is_physics_processing())
+	for frame in 60: await get_tree().physics_frame
+	assert(door.current_door > .95, "Remote door animates authority state")
+	for item in boat.moving_colliders:
+		assert(item.collision.transform.is_equal_approx(boat._relative_transform(item.mesh)), "Remote moving collision follows visible door/gate")
+	var long_scope := "interaction-door:550e8400-e29b-41d4-a716-446655440000:imported:" + "f".repeat(64)
+	var request_id := WorldGateway.next_request_id(long_scope)
+	assert(request_id.to_utf8_buffer().size() <= 128, "Door request must fit server receipt limit")
+	assert(request_id != WorldGateway.next_request_id(long_scope), "Repeated requests retain unique identities")
+	assert(WorldGateway.next_request_id("ø".repeat(128)).to_utf8_buffer().size() <= 128)
 	print("PASS imported live doors: shared assembly, ray targeting, occlusion, open/close, late identity and authoritative replay")
 	get_tree().quit()
 

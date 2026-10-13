@@ -1,0 +1,34 @@
+Multiplayer shipwright repair - 2026-10-13
+
+Cause: the UI disabled remote stock and the purchase method rejected remote
+orders. Replication did not provide a working payment/purchase service.
+
+PortServiceDesk.purchase now awaits server confirmation. The server endpoint
+POST /v1/vessels/purchase authenticates captain ownership, selects its own stock
+blueprint/price and rejects a mismatching quote. One PostgreSQL transaction locks
+the balance, saves construction, creates ownership, debits funds and stores a
+retry receipt. Repeated orders cannot charge twice; conflicting requests fail.
+VesselSync merges the returned ship into the existing fleet, preserving an
+already active vessel. No local registration substitutes for a failed purchase.
+
+All six non-draft offers, including Coastal Express, are in shipwright_stock.json.
+This separate sale export avoids changing construction identity when prices or
+stock arrangements change. Existing construction catalog hashes are unchanged.
+tools/export_gameplay_catalog.tscn now writes both exports; copy the sale export
+to sibling server internal/gameplay/shipwright_stock.json when updating stock.
+
+Verification:
+- MP shipwright test: 20 checks against real local Docker. Actual NPC service,
+  durable independent fleet fetch, fresh-client blueprint hydration, actual boat
+  and rod station construction, retries, ownership, price/funds rejection,
+  concurrent orders and current balance returned with an old receipt.
+- Single-player/UI regression: 52 checks, zero failures.
+- Full Go suite passes, including buildability of every sale offer.
+- Local Docker rebuilt and running. Running game clients need restart.
+- Isolated test accounts; no real captain saves modified.
+
+Scope: uses existing durable captains/vessels tables, not the standalone
+gameplay-lab company economy. A unified accounting/event system is not claimed.
+Equipment/fuel purchases and contract cancellation remain separate work.
+Tests are headless Godot with live HTTP, not manual two-window playtesting.
+Other hosted servers must receive this build separately.

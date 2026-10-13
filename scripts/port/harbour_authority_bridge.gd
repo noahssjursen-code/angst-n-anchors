@@ -13,6 +13,16 @@ var _pending_mooring_by_vessel: Dictionary = {}
 var _finishing_operations: Dictionary = {}
 var _retained_scope := ""
 var _reconcile_queued := false
+var _heartbeat_elapsed := 0.0
+
+func _process(delta: float) -> void:
+	if not _active or not WorldGateway.is_remote() or not WorldGateway.is_ready() or not _valid_controller(): return
+	_heartbeat_elapsed += delta
+	if _heartbeat_elapsed < 10.0: return
+	_heartbeat_elapsed = 0.0
+	for equipment in _controller.all_equipment():
+		if equipment.is_job_active() and _owns_operation(equipment.authority_context()):
+			WorldGateway.send_command("port.operation.heartbeat", {"operation_id": equipment.operation_id()}, WorldGateway.next_request_id("equipment-heartbeat"))
 
 
 func _exit_tree() -> void:
@@ -76,14 +86,14 @@ func deactivate() -> void:
 	_pending_mooring_by_vessel.clear()
 
 
-func request_job(berth_id: String, mode: String, commodity_id: String = "", contract_id: String = "") -> bool:
+func request_job(berth_id: String, mode: String, commodity_id: String = "", contract_id: String = "", equipment_id: String = "") -> bool:
 	if not _valid_controller() or not WorldGateway.is_ready():
 		return false
 	var ship := _controller.moored_ship(berth_id)
 	if ship == null:
 		return false
-	var equipment := _controller.best_equipment_for(berth_id, ship, mode)
-	if equipment == null:
+	var equipment := _controller.get_equipment(equipment_id) if not equipment_id.is_empty() else _controller.best_equipment_for(berth_id, ship, mode)
+	if equipment == null or equipment.berth_id() != berth_id or not equipment.can_serve(ship, mode):
 		return false
 	var operation_id := WorldGateway.next_request_id("port-operation").replace(":", "-")
 	var request_id := WorldGateway.next_request_id("port-operation-request")
@@ -382,10 +392,14 @@ func _apply_projection(projection: Dictionary) -> void:
 	var state := projection.get("state", {}) as Dictionary
 	if str(state.get("port_id", "")) != _controller.port_id():
 		return
+	# Only the owning client runs the existing crane simulation. Observers use
+	# the server manifest's joints and exclusive cargo locations.
 	var operation_id := str(state.get("operation_id", projection.get("id", "")))
 	var equipment := _controller.get_equipment(str(state.get("equipment_id", "")))
 	if equipment == null:
 		return ## The port may still be streaming in; the projection stays cached.
+	if equipment is ProvisionCraneEquipmentJob and WorldGateway.is_remote() and not _owns_vessel(str(state.get("vessel_id", ""))):
+		return
 	var status := str(state.get("status", ""))
 	if status == "running":
 		if _finishing_operations.has(operation_id) or equipment.operation_id() == operation_id:
@@ -427,6 +441,10 @@ func _on_job_completed(context: Dictionary, report: Dictionary) -> void:
 	## ending is not permission to declare cargo work complete. Single-player's
 	## in-process authority can close immediately for responsive local play.
 	if WorldGateway.is_remote():
+		# Release the exclusive equipment lock; this does not authorize a
+		# freight payment or assert server completion of the contract.
+		if int(context.get("duration_ms", 0)) == 0:
+			_finish_from_local(WorldContracts.COMMAND_PORT_OPERATION_STOP, context, {"reason": "equipment_cycle_finished"})
 		return
 	_finish_from_local(WorldContracts.COMMAND_PORT_OPERATION_COMPLETE, context, report)
 

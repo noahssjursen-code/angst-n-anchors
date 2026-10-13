@@ -48,18 +48,18 @@ func initialize(epoch_unix: float) -> void:
 ## 0.0–1.0 position through the current game day.
 ## 0/1 = midnight, 0.25 = 6 am, 0.5 = noon, 0.75 = 6 pm.
 func get_time_of_day() -> float:
-	var elapsed := Time.get_unix_time_from_system() - _epoch_unix
+	var elapsed := _elapsed_seconds()
 	return fmod(elapsed, DAY_LENGTH_REAL_SECONDS) / DAY_LENGTH_REAL_SECONDS
 
 
 ## Total elapsed game-hours since epoch.
 func get_game_hours_elapsed() -> float:
-	return (Time.get_unix_time_from_system() - _epoch_unix) / SECONDS_PER_GAME_HOUR
+	return (_elapsed_seconds()) / SECONDS_PER_GAME_HOUR
 
 
 ## Integer game-day number, 0-indexed from epoch.
 func get_day_number() -> int:
-	return int((Time.get_unix_time_from_system() - _epoch_unix) / DAY_LENGTH_REAL_SECONDS)
+	return int((_elapsed_seconds()) / DAY_LENGTH_REAL_SECONDS)
 
 
 ## Sync token for multiplayer hand-off. Server serialises this; clients apply it.
@@ -97,3 +97,9 @@ func _push_to_weather() -> void:
 	var weather := get_node_or_null("/root/WeatherLighting")
 	if weather != null:
 		weather.time_of_day = get_time_of_day()
+
+
+func _elapsed_seconds() -> float:
+	# Multiplayer weather must not inherit the selected captain's saved day.
+	if WorldGateway.is_remote(): return WorldGateway.server_unix_seconds()
+	return Time.get_unix_time_from_system() - _epoch_unix

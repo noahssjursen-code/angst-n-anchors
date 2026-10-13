@@ -82,14 +82,14 @@ func save_to_disk() -> void:
 	cfg.set_value("server", "http_scheme", http_scheme)
 	cfg.set_value("server", "http_host", http_host)
 	cfg.set_value("server", "http_port", http_port)
-	var err := cfg.save(CONFIG_PATH)
+	var err := cfg.save(NetworkClientStorageScope.scoped_path(CONFIG_PATH))
 	if err != OK:
 		push_warning("ServerConfig: Failed to save config to %s, err=%d" % [CONFIG_PATH, err])
 
 
 func load_from_disk() -> void:
 	var cfg := ConfigFile.new()
-	var err := cfg.load(CONFIG_PATH)
+	var err := cfg.load(NetworkClientStorageScope.scoped_path(CONFIG_PATH))
 	if err != OK:
 		# Fallback to local default if file doesn't exist
 		use_preset(PRESET_LOCAL)

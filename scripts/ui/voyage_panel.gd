@@ -22,6 +22,7 @@ var _request_id := ""
 var _refresh_time := 0.0
 var _busy := false
 var _preview: ShipwrightPreview
+var _tablet: KontorTablet
 var _card: PanelContainer
 
 
@@ -76,23 +77,15 @@ func _process(delta: float) -> void:
 	if npc is CraneOperatorNpc or npc is HarbourMasterNpc:
 		var snapshot := LocalPlayerView.service_snapshot(npc)
 		if is_instance_valid(_operation): _operation.text = str(snapshot.get("line",""))
-		for node in _body.find_children("*","Button",true,false):
-			if not node.has_meta("service_action"): continue
-			for action in snapshot.get("actions",[]):
-				if str(action.id) == str(node.get_meta("service_action")):
-					node.disabled = not str(action.reason).is_empty()
-					node.tooltip_text = str(action.reason)
-		for node in _body.find_children("*","Label",true,false):
-			if not node.has_meta("action_reason"): continue
-			for action in snapshot.get("actions",[]):
-				if str(action.id) == str(node.get_meta("action_reason")):
-					node.text = str(action.reason)
-					node.visible = not node.text.is_empty()
+		_update_service_actions(snapshot)
 
 
 func _reset(title: String, subtitle: String) -> void:
+	if is_instance_valid(_tablet): _tablet.hide()
+	_card.show()
 	visible = true
 	_heading.text = title
+	_subtitle.show()
 	_subtitle.text = subtitle
 	_feedback.text = ""
 	_operation = null
@@ -118,7 +111,7 @@ func show_service_snapshot(snapshot: Dictionary) -> void:
 	_card.anchor_left = .38 if service_kind != "operator" else .56
 	_card.anchor_right = .98
 	_card.anchor_top = .16
-	_card.anchor_bottom = .94
+	_card.anchor_bottom = .62 if service_kind == "operator" else .94
 	_items = snapshot.get("items",[])
 	if service_kind == "operator":
 		_operator_content(snapshot)
@@ -129,7 +122,7 @@ func show_service_snapshot(snapshot: Dictionary) -> void:
 		_service_actions(harbour_snapshot)
 		_body.add_child(VoyageStyle.button("Equipment shop",_show_equipment))
 	if _items.is_empty():
-		_body.add_child(VoyageStyle.label("No vessels owned yet. Visit the shipwright." if service_kind == "harbourmaster" else "No compatible work is available here. Check your vessel's quay and free cargo space.",25))
+		_body.add_child(VoyageStyle.label("No vessels owned yet. Visit the shipwright." if service_kind == "harbourmaster" else "No work fits your vessel here.",25))
 		return
 	var columns := HBoxContainer.new()
 	_body.add_child(columns)
@@ -240,7 +233,7 @@ func _confirm_purchase(item: Dictionary, vessel_name: String) -> void:
 	VoyageStyle.row(_details,"Remaining operating cash",PlayerData.format_money(_balance()-int(item.price)))
 	_details.add_child(VoyageStyle.label("The vessel joins your fleet. The harbourmaster can then bring it alongside.",22,VoyageStyle.MUTED))
 	_request_id = PlayerData.new_uuid()
-	_details.add_child(VoyageStyle.button("Buy vessel",func(): _send("buy",{"stock_id":str(item.id),"vessel_name":vessel_name,"request_id":_request_id}),true))
+	_details.add_child(VoyageStyle.button("Buy vessel",func(): _send("buy",{"stock_id":str(item.id),"vessel_name":vessel_name,"request_id":_request_id,"expected_price_nok":int(item.price)}),true))
 	_details.add_child(VoyageStyle.button("Back to inspection",func(): _select(str(item.id))))
 
 
@@ -250,14 +243,19 @@ func _send(action: String, payload: Dictionary = {}) -> void:
 		return
 	if _busy: return
 	_busy = true
-	var result := PortServiceDesk.request(npc,action,payload)
+	var result: Dictionary
+	if action == "buy":
+		_feedback.text = "Waiting for purchase confirmation…"
+		result = await PortServiceDesk.purchase(npc,payload)
+	else:
+		result = PortServiceDesk.request(npc,action,payload)
 	_busy = false
 	var message := str(result.get("message",""))
 	if bool(result.get("ok",false)):
 		message = str((result.get("data",{}) as Dictionary).get("message","Order accepted."))
 		if action == "buy":
 			show_tablet("Today")
-			message = "Your vessel is purchased. Company tablet received — press J to open it. Visit the harbourmaster next."
+			message = "Vessel purchased. Press J for your tablet; see the harbourmaster to deploy."
 		elif action.begins_with("equipment:") or action.begins_with("equip:"): _show_equipment()
 		elif action in ["book","store","refuel","deploy"]: show_service(npc)
 	_feedback.text = message
@@ -265,69 +263,69 @@ func _send(action: String, payload: Dictionary = {}) -> void:
 
 
 func _operator_content(snapshot: Dictionary) -> void:
-	_body.add_child(VoyageStyle.label("Cargo operations",30))
-	_operation = VoyageStyle.label(str(snapshot.get("line","Waiting for a vessel.")),26)
+	_subtitle.hide()
+	_operation = VoyageStyle.label(str(snapshot.get("line","Ready.")),24)
 	_body.add_child(_operation)
-	_body.add_child(VoyageStyle.label("You can close this panel while the operator works. Completion and faults will appear as notifications.",22,VoyageStyle.MUTED))
 	_service_actions(snapshot)
-	_add_jobs(_body)
+
 
 func _service_actions(snapshot: Dictionary) -> void:
 	for action in snapshot.get("actions",[]):
 		var id := str(action.id)
-		var button := VoyageStyle.button(str(action.label),func(): _send(id),id=="load")
+		var button := VoyageStyle.button(str(action.label),func(): _send(id),id in ["load", "unload"])
 		button.set_meta("service_action",id)
-		button.disabled = not str(action.reason).is_empty()
 		_body.add_child(button)
-		var reason := VoyageStyle.label(str(action.reason),20,VoyageStyle.MUTED)
+		var reason := VoyageStyle.label("",18,VoyageStyle.MUTED)
 		reason.set_meta("action_reason",id)
-		reason.visible = not str(action.reason).is_empty()
 		_body.add_child(reason)
+	_update_service_actions(snapshot)
+
+func _update_service_actions(snapshot: Dictionary) -> void:
+	var shown_reasons: Array[String] = []
+	for action in snapshot.get("actions", []):
+		var reason := str(action.get("reason", ""))
+		var show_action := bool(action.get("visible", true))
+		for node in _body.find_children("*", "Button", true, false):
+			if str(node.get_meta("service_action", "")) != str(action.id): continue
+			node.disabled = not reason.is_empty()
+			node.tooltip_text = reason
+			node.visible = show_action
+		for node in _body.find_children("*", "Label", true, false):
+			if str(node.get_meta("action_reason", "")) != str(action.id): continue
+			node.text = reason
+			node.visible = show_action and not reason.is_empty() and reason not in shown_reasons
+			# The status line already communicates an active transfer.
+			if service_kind == "operator" and bool(snapshot.get("active", false)) and reason == "Transfer in progress.": node.visible = false
+			if node.visible: shown_reasons.append(reason)
 
 
 func show_tablet(tab: String = "Today") -> void:
 	page = tab
 	npc = null
-	var company := preview_data.get("company",{}) as Dictionary if preview_mode else LocalPlayerView.get_company_summary()
-	_reset(str(company.get("name","Company portal")),"COMPANY PORTAL   ·   " + PlayerData.format_money(_balance()))
-	var tablet := VoyageStyle.box(Color("f6f5f0"),34)
-	tablet.set_border_width_all(14)
-	tablet.border_color = Color("292c2a")
-	tablet.set_corner_radius_all(22)
-	_card.add_theme_stylebox_override("panel",tablet)
-	_subtitle.text = "Company account · " + PlayerData.format_money(_balance())
-	var tabs := HBoxContainer.new()
-	_body.add_child(tabs)
-	for title in ["Today","Jobs","Fleet","Account"]:
-		tabs.add_child(VoyageStyle.button(title,func(): show_tablet(title),title==tab))
-	tabs.add_child(VoyageStyle.button("Sea chart",func(): chart_requested.emit()))
-	_body.add_child(HSeparator.new())
-	match tab:
-		"Today":
-			var state := preview_data.get("voyage",{}) as Dictionary if preview_mode else LocalPlayerView.get_voyage_snapshot()
-			_body.add_child(VoyageStyle.label("Your next move",30))
-			_body.add_child(VoyageStyle.label(str(state.objective),26))
-			VoyageStyle.row(_body,"Vessel",str(state.get("name","")) if state.ship else "None deployed")
-			VoyageStyle.row(_body,"Location",str(state.get("port",""))+" · "+str(state.get("berth","On foot")))
-			if state.ship:
-				VoyageStyle.row(_body,"Fuel","%.0f%%" % (float(state.get("fuel",0))*100))
-				VoyageStyle.row(_body,"Lines","Bow: %s   ·   Stern: %s" % ["secured" if state.bow else "free","secured" if state.stern else "free"])
-			_add_jobs(_body)
-		"Jobs": _add_jobs(_body)
-		"Fleet":
-			for vessel in company.get("vessels",[]):
-				_body.add_child(VoyageStyle.label(VesselSpawn.vessel_name_of(vessel),28))
-				var active := LocalPlayerView.has_active_ship() and str(vessel.get("uid","")) == str(LocalPlayerView.get_active_vessel_record().get("uid",""))
-				VoyageStyle.row(_body,"Status","Deployed" if active else "Available through the harbourmaster")
-				var requirements := HarbourDeploy.ship_requirements(vessel)
-				VoyageStyle.row(_body,"Dimensions","%.0f × %.0f m" % [requirements.loa_world_m,requirements.beam_world_m])
-				VoyageStyle.row(_body,"Services",", ".join(requirements.terminal_families).replace("_"," "))
-				_body.add_child(HSeparator.new())
-			if company.get("vessels",[]).is_empty(): _body.add_child(VoyageStyle.label("Your fleet is empty. Visit the shipwright to inspect vessels for sale."))
-		"Account":
-			VoyageStyle.row(_body,"Available balance",PlayerData.format_money(_balance()))
-			for entry in company.get("recent_transactions",[]):
-				VoyageStyle.row(_body,str(entry.get("description","Transaction")),PlayerData.format_money(int(entry.get("amount_marks",0))))
+	visible = true
+	_card.hide()
+	if not is_instance_valid(_tablet):
+		_tablet = KontorTablet.new()
+		_tablet.preview_mode = preview_mode
+		_tablet.preview_snapshot = _tablet_preview_snapshot()
+		add_child(_tablet)
+		_tablet.close_requested.connect(func(): close_requested.emit())
+		_tablet.chart_requested.connect(func(): chart_requested.emit())
+		_tablet.cancel_job_requested.connect(_confirm_cancel_job)
+	_tablet.preview_mode = preview_mode
+	_tablet.preview_snapshot = _tablet_preview_snapshot()
+	_tablet.show()
+	_tablet.open_page(tab)
+
+
+func _tablet_preview_snapshot() -> Dictionary:
+	if not preview_mode: return {}
+	var company: Dictionary = preview_data.get("company", {}).duplicate(true)
+	var fleet: Array = []
+	for record: Dictionary in company.get("vessels", []):
+		fleet.append({"uid":str(record.get("uid", "")), "name":VesselSpawn.vessel_name_of(record), "status":"Alongside", "deployed":true, "dimensions":"24 × 8 m", "services":"General cargo", "fuel":.86, "port":"Øyrvik", "cargo":[{"title":"Provisions", "detail":"20 ft container · 3,200 kg · Viknes"}], "catch_mass_kg":0})
+	company["home_port_name"] = "Øyrvik"
+	return {"company":company, "balance":preview_data.get("balance", 0), "voyage":preview_data.get("voyage", {}), "fleet":fleet, "jobs":preview_data.get("jobs", []), "captain":"Noah", "remote":false}
 
 
 func _add_jobs(parent: Control) -> void:
@@ -372,6 +370,7 @@ func _confirm_cancel_job(job: Dictionary) -> void:
 		var result := FreightService.cancel_contract(str(job.get("id","")))
 		show_tablet("Jobs")
 		_feedback.text = str(result.get("data",{}).get("message","Job cancelled.")) if bool(result.get("ok",false)) else str(result.get("message","Cancellation failed."))
+		_tablet.show_feedback(_feedback.text)
 		message_requested.emit(_feedback.text)))
 
 
