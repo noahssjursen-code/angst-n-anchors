@@ -343,6 +343,10 @@ func ensure_sounder() -> void:
 		sounder.name = "ShipSounder"
 		add_child(sounder)
 
+func _enter_tree() -> void:
+	# Subclasses replace _ready without calling the base implementation.
+	if not Engine.is_editor_hint(): add_to_group("wildlife_vessels")
+
 func _ready() -> void:
 	ensure_sounder()
 	# Deck collider and anyone standing on it must see this hull pose before they move.
