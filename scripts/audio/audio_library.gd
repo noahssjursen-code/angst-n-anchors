@@ -47,6 +47,7 @@ static func bus(path: String) -> StringName:
 	return name
 
 static func distance_profile(path: String) -> Vector2:
+	if "/wildlife/gulls/" in path: return Vector2(8, 140)
 	if "/horns/" in path: return Vector2(60, 2000)
 	if "/engines/" in path: return Vector2(14, 220)
 	if "/thruster/" in path: return Vector2(5, 90)

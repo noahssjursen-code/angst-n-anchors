@@ -25,6 +25,9 @@ var _account_token := ""
 
 func fetch_captain_balance(callback:Callable)->void:
 	_request_json(HTTPClient.METHOD_GET,"/v2/captains?id="+str(_login_body.get("actor_id","")).uri_encode(),{},false,callback,8.0,_account_token)
+
+func fetch_wildlife(callback: Callable) -> void:
+	_request_json(HTTPClient.METHOD_GET, "/v2/wildlife", {}, true, callback, 4.0)
 var _recovering := false
 var _recovery_delay := 1.0
 

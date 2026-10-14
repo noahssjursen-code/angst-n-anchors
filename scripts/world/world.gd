@@ -211,6 +211,10 @@ func _rebuild() -> void:
 		print("BOOT_COST seamarks_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
 		add_child(seamarks)
 		_add_forest_streamer(flatten_zones)
+		var wildlife := CoastalBirdWorld.new()
+		wildlife.name = "CoastalBirds"
+		wildlife.configure(_world_layout, flatten_zones)
+		add_child(wildlife)
 		WorldBootstrap.trace_entry("world_plans_ready")
 		_add_atmospheric_effects()
 		_bake_berth_lanes(t, defs)

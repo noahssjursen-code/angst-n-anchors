@@ -420,6 +420,10 @@ func server_unix_seconds() -> float:
 		return (_backend as RemoteWorldBackend).server_unix_seconds()
 	return Time.get_unix_time_from_system()
 
+func fetch_wildlife(callback: Callable) -> void:
+	if _remote and _backend is RemoteWorldBackend and _backend.is_ready():
+		(_backend as RemoteWorldBackend).fetch_wildlife(callback)
+
 
 func _setup_cargo_replication() -> void:
 	fishing_catches = FishingCatchReplication.new()
