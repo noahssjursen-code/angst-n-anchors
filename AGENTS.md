@@ -73,9 +73,13 @@ Conventions:
 
 Current demos:
 - `scenes/showcases/material_library_showcase.tscn` — sourced finishes on ships, port assets, cargo and animated clothing; before/after and archived captures
+- `scenes/showcases/coastal_property_showcase.tscn` — cached marine chart and selectable 200 m coastal plots, isolated from captain saves
+- `scenes/showcases/plot_building_showcase.tscn` — alias of the custom port workshop: same data, freecam builder, sea-referenced plane and rendered model library
+- `scenes/showcases/custom_port_starter_showcase.tscn` — same workshop with the finished Littlehaven fishing port; owned first boat and native sailing checks (docs/custom-port-starter.txt)
+- `scenes/showcases/custom_port_showcase.tscn` — JSON-reconstructed island harbour, modular Blender kit, plot expansion, derived berths, finite cargo and animated container transfers; isolated from live company/MP state (see `docs/player-port-workshop.txt`)
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
 - `scenes/showcases/starter_fleet_showcase.tscn` — current imported starter vessels
-- `scenes/showcases/character_customization_showcase.tscn` — imported character and wardrobe
+- `scenes/showcases/crew_base_showcase.tscn` — new unclothed base character, shared player/NPC rig and animation review
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
 - `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
 - `scenes/showcases/audio_library_showcase.tscn` — plays the sound library with a label and explanation per clip; new wavs under resources/audio appear on their own
@@ -428,34 +432,19 @@ Actions registered in `project.godot` that gameplay code reads via `Input.is_act
 Add new actions to `project.godot` directly; there is no separate input-map JSON.
 
 
-## Character model teardown (2026-10-05)
+## New character base (15 October 2026)
 
-The JSON/cuboid character body, wardrobe, hats, texture library, generators,
-procedural rig posing and their old visual demos were intentionally deleted.
-Do not resurrect them or add primitive fallback people. CharacterVisual now loads
-the Blender mariner, and CharacterCatalog lists only the new imported wardrobe.
-The character studio uses the same rig as gameplay. New work must use Blender-authored
-models in resources/models/characters and source .blend files under
-resources/models/_source/characters. Player movement, NPC behavior/interaction,
-identity creation, appearance serialization and network contracts remain usable.
-Old saved appearance identifiers are inert migration data, not asset definitions.
-Follow resources/models/characters/README.md for the angular reference style,
-shared skeleton, independent morphs, material colours and clothing coverage.
-Noah rejected downloaded character and clothing replacements on 7 October.
-Use the original in-house Blender mariner. All old animation clips were replaced;
-keep arms on fixed-length rotations, with no keyed wrist/elbow translations or
-limb scale. On 8 October Noah requested repair of the new runtime IK and sealegs:
-CharacterLegIK owns the local player's locomotion and balance. Do not replace it
-with the discarded clips or the rejected downloaded models. Planted contacts live
-in their support frame; gait follows actual deck-relative travel. Use deck-normal
-ground contact and physics-tick acceleration; zero-time skeleton updates must not
-advance gait or snap smoothing. Uphill/downhill/cross-deck pace follows the actual
-slope, recovering as it levels. Keep the clear plane in tests/player_gait_test.tscn
-for visual motion review (Noah explicitly prefers it to obstructed ship views).
-Archive captures without blocking the main thread on bulk PNG writes.
-Verify animated poses and maximum morphs in Godot.
-Run tests/blender_character_test.tscn to verify the imported character; use the existing
---shipyard-playtest isolation flag when running these scenes to avoid live saves.
+Noah rejected the old player/NPC model and all attempted refinements. The active
+replacement is `resources/models/crew_base/crew_base.glb`, authored from the CC0
+MakeHuman base topology in Blender; source and provenance are in
+`resources/models/_source/crew_base/`. No clothing is in scope. Do not restore the
+old mariner, its wardrobe, discarded replacement attempts or primitive people.
+Old binaries still exist because filesystem deletion was rejected by execution
+policy; they are not runtime dependencies. Never claim those files were deleted.
+Preserve player movement, NPC behavior, identity/save/network data and interaction
+code. CharacterVisual is the shared adapter for local/remote players and NPCs;
+new measured grip contracts live beside crew_base.glb. Existing saved wardrobe IDs
+are inert compatibility data. All captures are archived in Pictures/machinescreenshots.
 
 ## Gameplay UI rebuild (2026-10-09)
 

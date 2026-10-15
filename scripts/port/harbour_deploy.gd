@@ -73,7 +73,7 @@ static func free_slots_for(
 	var out: Array = []
 	for slot in compatible:
 		var s := slot as QuayBerthSlot
-		if s != null and harbour.moored_ship(s.berth_id) == null:
+		if s != null and harbour.moored_ship(s.berth_id) == null and harbour.reservation_for_berth(s.berth_id).is_empty():
 			out.append(s)
 	return out
 
@@ -100,6 +100,10 @@ static func compatible_slots_for(
 		var s := slot as QuayBerthSlot
 		if s == null:
 			continue
+		if s.has_meta("custom_port_berth"):
+			var layout:Dictionary=record.get("brick_layout",{})
+			var vessel:=CustomPortVesselProjection.from_layout(authority_vessel_id(record),"",str(record.get("hull_id","")),layout)
+			if vessel.is_empty() or not CustomPortBerths.fit(s.get_meta("custom_port_berth"),vessel).ok:continue
 		if not s.accepts_loa_m(loa_world):
 			continue
 		out.append(s)

@@ -1,0 +1,72 @@
+PLAYER PORT WORKSHOP
+
+Open scenes/showcases/custom_port_showcase.tscn in Godot and press F6.
+It opens an isolated, playable example harbour in the real generated world.
+Your captain saves and multiplayer server are not changed.
+
+To start with bare coastline, run start-port-workshop.ps1 -Empty, or use
+New harbour in the workshop. Select a green coastal plot, then Start harbour.
+The first plot is included. Plots beside it can be added from the map.
+Switching sites retains a complete copy of your current harbour first.
+
+BUILD
+  Tab                  Switch between the library cursor and freecam
+  WASD, Q/E            Fly horizontally / change camera height
+  Shift                Fly faster
+  Left mouse           Place; hold to paint foundations
+  Right mouse          Remove the piece under the centre crosshair
+  Middle mouse         Pick an existing piece to move
+  R                    Rotate the placement preview
+  G                    Show/hide construction grid, berth outlines and reach
+  Left mouse           Confirm a move; right mouse or Escape cancels it
+  Ctrl+Z               Undo the last construction action or painted stroke
+  Escape               Leave freecam and walk; 1 returns to building
+  H                    Return to the harbour's safe walking position
+
+The shared deck stays 2 m above sea level. Foundations follow their own tile
+size; equipment uses its documented placement grid. Moving a stocked facility
+keeps its identity and contents. Work in progress, reservations or secured
+ships can prevent an unsafe edit. Thin fittings can be picked without adding
+physical obstacles for the walking player.
+
+Crane and hose previews show their real horizontal reach. Berth outlines show
+the area derived from your quay and bollards; an individual vessel is still
+checked for size and depth when it docks. Buildings use the modular wall,
+window, door and roof pieces in the library.
+
+TRY A VISITOR
+Build a waterfront and place bollards along its edge. Port records -> Berths
+shows the docking slots derived from that construction. Invite an empty test
+vessel, select a suitable berth, then Dock vessel. Fit, depth and occupancy
+are checked. Walk aboard by the gangway and use F at the helm. B lets go;
+I starts the engine, W/S changes throttle. Return alongside slowly and press B.
+An undocked vessel's free-sailing pose is temporary; its cargo stays in the file.
+
+TRY CARGO OR FISH
+The default example includes explicitly stocked container and bulk facilities.
+Use Port records -> Cargo, or talk to an operator, to reserve/load/unload.
+For the smaller fishing pier, use start-port-workshop.ps1 -Fishing or F6
+scenes/showcases/custom_port_fishing_showcase.tscn. Talk to its landing operator
+to unload the example Nordlys. The pump, hose and receiving bank follow the
+accepted transfer; quantities and individual fish metadata are preserved.
+
+SAVE AND REOPEN
+Port records -> Harbour lets the owner name the harbour. Its stable identity,
+construction and contents stay the same; the new name appears on the chart.
+Save writes the entire port document. Load restores it. Open accepts a saved
+JSON file after checking world identity, deck height, geometry and ship fitout;
+editing the imported copy does not overwrite its original source.
+start-port-workshop.ps1 -Travel opens a separate distance-streaming review.
+
+SIMULATE WITHOUT PLAYING
+Run test-port-data.ps1 to simulate 64 rounds of container and bulk work,
+including competing visitors, stock shortages, cancellations and save/reload.
+It writes a command trace, event journal, checkpoints and summary into a fresh
+.codex/port-data-runs folder and prints its location. It uses a separate profile.
+Use -Suite Rules for focused model checks, or -Suite All for both. A failed or
+timed-out check stops the run and retains its logs; it never touches live saves.
+
+This is the construction and data prototype. Real land purchases, shared MP
+port records, markets, production recipes and hired crews are still separate
+integration work. The detailed format, command seam and verification notes are
+in scripts/port/state/README.txt and docs/player-port-workshop.txt.

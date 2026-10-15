@@ -113,6 +113,9 @@ func _ready() -> void:
 	add_child(_player_camera)
 
 	_build_body_mesh()
+	var personal_gear:=PersonalFishingEquipment.new()
+	personal_gear.name="PersonalFishingEquipment"
+	add_child(personal_gear)
 
 	_free_cam = PlayerFreeCam.new()
 	_free_cam.name = "PlayerFreeCam"
@@ -867,3 +870,7 @@ func _planar_heading(deck: Node3D) -> float:
 	if forward.length_squared() < 0.000001:
 		return _mount_applied_yaw
 	return atan2(-forward.x, -forward.z)
+
+func standing_vessel() -> BoatBody:
+	var support:=_mount_node()
+	return support.get_meta("_boat_owner",null) as BoatBody if support!=null else null

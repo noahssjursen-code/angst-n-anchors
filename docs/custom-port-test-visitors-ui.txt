@@ -1,0 +1,32 @@
+Workshop test visitors: inspector interface
+==========================================
+
+CustomPortInspector has a compact Test visitor selector on the Berths tab.
+It is hidden and disabled by default. The workshop host must explicitly call
+set_test_visitors_enabled(true). This setting is presentation permission only;
+the panel never inserts vessel records, cargo, company assets or receipts.
+
+Preset names and IDs come from CustomPortTestVisitors.options(), shared with
+the authority admission helper. The choices are Nordlys (fishing_hook_line),
+Harbour Cargo (28_10_m) and Coastal Bulk (coastal_coaster). The row states that
+these are empty workshop vessels. Selecting a type does nothing by itself;
+pressing Invite emits test_vessel_requested(prebuilt_id). The callback rejects
+an unknown/tampered option ID and refuses to emit without an attached authority
+or when disabled. The host handles the issued admission result normally.
+
+After successful admission, select_vessel(id) -> bool refreshes the authority
+read model and selects that existing record. It updates berth/cargo details
+without any authority write. Missing IDs return false and do not manufacture
+vessels. Hosts need no access to the inspector's private dropdown controls.
+
+Reproducible focused test:
+  tests/custom_port_test_visitor_ui_test.tscn -- --shipyard-playtest
+Add --capture for the native inspector view, archived under
+C:/Users/noahs/Pictures/machinescreenshots.
+
+The test verifies opt-in/default refusal, the exact three canonical options,
+signal-only requests, invalid metadata, disabling, missing authority, public
+selection and a bounded layout with pinned dock actions. It also verifies the
+empty-harbour invitation message rather than claiming a crane incompatibility
+before any vessel exists. Existing owner storage and whole-fish inspector tests
+remain separate in tests/custom_port_inspector_test.tscn.

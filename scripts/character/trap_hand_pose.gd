@@ -17,8 +17,8 @@ func _process_modification_with_delta(_delta: float) -> void:
 	if skeleton == null or not is_instance_valid(creel):
 		return
 	if _bones.is_empty():
-		_contacts = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/characters/hand_contacts.json"))
-		_grips = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/characters/hand_grips.json"))
+		_contacts = JSON.parse_string(FileAccess.get_file_as_string(CharacterVisual.HAND_CONTACTS_PATH))
+		_grips = JSON.parse_string(FileAccess.get_file_as_string(CharacterVisual.HAND_GRIPS_PATH))
 		for side in ["L", "R"]:
 			for part in ["upper_arm", "forearm", "forearm_twist", "hand", "index_01", "index_02", "index_03", "middle_01", "middle_02", "middle_03", "ring_01", "ring_02", "ring_03", "little_01", "little_02", "little_03", "thumb_01", "thumb_02"]:
 				var bone_name := "%s.%s" % [part, side]
@@ -65,6 +65,7 @@ func _process_modification_with_delta(_delta: float) -> void:
 			pole = (skeleton.global_basis.inverse() * creel.global_basis.z).normalized()
 		_aim(skeleton, upper, lower, shoulder + axis * along + pole * height)
 		_aim(skeleton, lower, hand, shoulder + axis * distance)
+		preload("res://scripts/character/forearm_pronation.gd").align(skeleton,lower,hand,_bones["forearm_twist."+side],knuckles)
 		var pose := skeleton.get_bone_global_pose(hand)
 		pose.basis = (skeleton.global_basis.inverse() * hand_basis).orthonormalized()
 		skeleton.set_bone_global_pose(hand, pose)

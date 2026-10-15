@@ -1,0 +1,26 @@
+Workshop walking after distant freecam
+
+The construction camera can travel beyond the workshop terrain's 12 km visual
+radius. That unloads the paused player's terrain. Previously, Walk waited for
+the player's collider while leaving the remote camera as the only request
+focus, so the missing ground was never requested.
+
+The workshop now temporarily uses WorldTerrainStreamer's existing loading
+priority at the walking destination. Player physics stays paused until the
+current earthworks and nearby collider are ready. Switching to the player
+camera releases that priority. Build, map, inspector, document picker,
+document replacement and scene exit also release the workshop's request.
+H uses the same destination request when returning home while walking.
+The general world terrain streaming rules were not changed.
+
+Focused regression: tests/custom_port_walk_streaming_test.tscn
+Run with --headless -- --shipyard-playtest --empty-custom-port.
+The actual generated-world scene covers natural terrain eviction after 14.5 km
+of freecam travel, Walk recovery, cancellation by Build/map/New harbour, and H
+returning home with its collider absent. It does not replace native visual or
+foundation/terrain geometry tests.
+
+Recorded 2026-10-15: baseline stayed blocked with no nearby terrain requests
+for all 242 observations over two seconds. After the fix, 46 checks passed;
+Walk recovered in 117 ms, cancellation recovery in 91 ms, and H in 118 ms on
+this machine. These timings are observations, not a loading-time guarantee.

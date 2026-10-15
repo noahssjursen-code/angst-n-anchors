@@ -1,0 +1,1049 @@
+{
+  "format": "personal_port_snapshot_extract",
+  "schema_version": 1,
+  "example_notice": "DESIGN FIXTURE ONLY. Not accepted by the current game loader. This is an extract of authoritative world state, not a client command or complete world backup. Definitions, capacities and prices illustrate the proposal; they are not implemented or engineering-validated.",
+  "world": {
+    "id": "example-world",
+    "seed": 12345,
+    "generation_version": "fixture-1",
+    "layout_checksum": "fixture-flat-seabed",
+    "world_tick": 12000
+  },
+  "event_cursor": 42,
+  "catalog_revision": "port-kit-proposal-1",
+  "external_records_required": [
+    {
+      "kind": "company",
+      "id": "example-world/company/havik-trading"
+    },
+    {
+      "kind": "account",
+      "id": "example-world/account/havik-operating"
+    },
+    {
+      "kind": "plot_geography",
+      "id": "example-world/plot/coast-0-0"
+    }
+  ],
+  "fixture_catalog": {
+    "note": "Production definitions live in the pinned authority catalogue. All footprints use a lower-left local X/Z origin. Crane clearance is a reserved working zone, not another slab.",
+    "definitions": [
+      {
+        "id": "foundation_4x4",
+        "version": 1,
+        "footprint_mm": {
+          "x": 4000,
+          "z": 4000
+        },
+        "kind": "platform"
+      },
+      {
+        "id": "quay_8x4",
+        "version": 1,
+        "footprint_mm": {
+          "x": 8000,
+          "z": 4000
+        },
+        "kind": "platform"
+      },
+      {
+        "id": "coal_storage_bay_8x8",
+        "version": 1,
+        "footprint_mm": {
+          "x": 8000,
+          "z": 8000
+        },
+        "kind": "storage",
+        "accepted_commodities": [
+          "coal"
+        ],
+        "capacity": {
+          "mass_g": 60000000,
+          "volume_ml": 80000000
+        }
+      },
+      {
+        "id": "bulk_crane_pad_8x8",
+        "version": 1,
+        "footprint_mm": {
+          "x": 8000,
+          "z": 8000
+        },
+        "kind": "transfer",
+        "pivot_offset_mm": {
+          "x": 4000,
+          "z": 4000
+        },
+        "reach_mm": {
+          "min": 4000,
+          "max": 25000
+        },
+        "attachments": [
+          "dry_bulk_grab"
+        ]
+      },
+      {
+        "id": "coal_terminal",
+        "version": 1,
+        "module_types": [
+          "storage",
+          "transfer",
+          "market_access"
+        ]
+      }
+    ]
+  },
+  "ports": [
+    {
+      "id": "example-world/port/havik",
+      "world_id": "example-world",
+      "name": "Havik Coal Quay",
+      "revision": 7,
+      "owner": {
+        "kind": "company",
+        "id": "example-world/company/havik-trading"
+      },
+      "operator_company_id": "example-world/company/havik-trading",
+      "claimed_plot_ids": [
+        "example-world/plot/coast-0-0"
+      ],
+      "construction_id": "example-world/construction/havik",
+      "facility_ids": [
+        "example-world/facility/coal-terminal-1"
+      ],
+      "berth_ids": [
+        "example-world/berth/quay-1"
+      ],
+      "access_policy": {
+        "visit": "public",
+        "build": "company_permission",
+        "operate_equipment": "company_permission",
+        "trade": "public_open_orders"
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "example-world/claim/coast-0-0",
+      "world_id": "example-world",
+      "plot_id": "example-world/plot/coast-0-0",
+      "port_id": "example-world/port/havik",
+      "owner": {
+        "kind": "company",
+        "id": "example-world/company/havik-trading"
+      },
+      "revision": 1,
+      "claimed_at_world_tick": 100
+    }
+  ],
+  "constructions": [
+    {
+      "id": "example-world/construction/havik",
+      "port_id": "example-world/port/havik",
+      "revision": 5,
+      "catalog_revision": "port-kit-proposal-1",
+      "coordinates": {
+        "length_unit": "mm",
+        "placement_origin": "footprint_min_xz_before_rotation",
+        "world_origin_mm": {
+          "x": 100000,
+          "z": 100000
+        },
+        "sea_level_world_y_mm": -1500,
+        "deck_above_sea_level_mm": 2000,
+        "rotation_rule": "quarter_turns_about_footprint_center_then_rebase_min_xz",
+        "structural_grid_mm": 4000
+      },
+      "placements": [
+        {
+          "id": "example-world/placement/foundation-0-0",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 0,
+            "z": 0
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-4-0",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 4000,
+            "z": 0
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-8-0",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 8000,
+            "z": 0
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-12-0",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 12000,
+            "z": 0
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-16-0",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 16000,
+            "z": 0
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-20-0",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 20000,
+            "z": 0
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-0-4",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 0,
+            "z": 4000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-4-4",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 4000,
+            "z": 4000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-8-4",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 8000,
+            "z": 4000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-12-4",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 12000,
+            "z": 4000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-16-4",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 16000,
+            "z": 4000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-20-4",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 20000,
+            "z": 4000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-0-8",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 0,
+            "z": 8000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-4-8",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 4000,
+            "z": 8000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-8-8",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 8000,
+            "z": 8000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-12-8",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 12000,
+            "z": 8000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-16-8",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 16000,
+            "z": 8000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-20-8",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 20000,
+            "z": 8000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-0-12",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 0,
+            "z": 12000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-4-12",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 4000,
+            "z": 12000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-8-12",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 8000,
+            "z": 12000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-12-12",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 12000,
+            "z": 12000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-16-12",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 16000,
+            "z": 12000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-20-12",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 20000,
+            "z": 12000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-0-16",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 0,
+            "z": 16000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-4-16",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 4000,
+            "z": 16000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-8-16",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 8000,
+            "z": 16000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-12-16",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 12000,
+            "z": 16000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-16-16",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 16000,
+            "z": 16000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/foundation-20-16",
+          "definition": {
+            "id": "foundation_4x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 20000,
+            "z": 16000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/quay-0",
+          "definition": {
+            "id": "quay_8x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 0,
+            "z": 20000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/quay-8",
+          "definition": {
+            "id": "quay_8x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 8000,
+            "z": 20000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/quay-16",
+          "definition": {
+            "id": "quay_8x4",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 16000,
+            "z": 20000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "port_deck_datum",
+          "support": {
+            "mode": "solid_to_seabed",
+            "depth_below_deck_mm": 7000
+          },
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/coal-bay",
+          "definition": {
+            "id": "coal_storage_bay_8x8",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 0,
+            "z": 4000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "supported_on_platform",
+          "finish_id": "concrete"
+        },
+        {
+          "id": "example-world/placement/bulk-crane",
+          "definition": {
+            "id": "bulk_crane_pad_8x8",
+            "version": 1
+          },
+          "position_mm": {
+            "x": 0,
+            "z": 16000
+          },
+          "rotation_quarter_turns": 0,
+          "attachment": "supported_on_platform",
+          "finish_id": "yellow"
+        }
+      ]
+    }
+  ],
+  "facilities": [
+    {
+      "id": "example-world/facility/coal-terminal-1",
+      "port_id": "example-world/port/havik",
+      "revision": 2,
+      "definition": {
+        "id": "coal_terminal",
+        "version": 1
+      },
+      "owner": {
+        "kind": "company",
+        "id": "example-world/company/havik-trading"
+      },
+      "operator_company_id": "example-world/company/havik-trading",
+      "placed_instance_ids": [
+        "example-world/placement/coal-bay",
+        "example-world/placement/bulk-crane"
+      ],
+      "modules": [
+        {
+          "id": "coal-storage",
+          "type": "storage",
+          "placement_id": "example-world/placement/coal-bay",
+          "inventory_id": "example-world/inventory/coal-bay-1"
+        },
+        {
+          "id": "coal-transfer",
+          "type": "transfer",
+          "placement_id": "example-world/placement/bulk-crane",
+          "berth_id": "example-world/berth/quay-1",
+          "inventory_ids": [
+            "example-world/inventory/coal-bay-1"
+          ],
+          "attachment_id": "dry_bulk_grab",
+          "accepted_commodity_ids": [
+            "coal"
+          ]
+        },
+        {
+          "id": "coal-trade",
+          "type": "market_access",
+          "inventory_ids": [
+            "example-world/inventory/coal-bay-1"
+          ],
+          "allowed_order_sides": [
+            "buy",
+            "sell"
+          ]
+        }
+      ],
+      "state": {
+        "status": "operational"
+      }
+    }
+  ],
+  "berths": [
+    {
+      "id": "example-world/berth/quay-1",
+      "port_id": "example-world/port/havik",
+      "revision": 1,
+      "construction_id": "example-world/construction/havik",
+      "quay_edge_local_mm": {
+        "from": {
+          "x": 0,
+          "z": 24000
+        },
+        "to": {
+          "x": 24000,
+          "z": 24000
+        }
+      },
+      "water_outward_local_xz": {
+        "x": 0,
+        "z": 1
+      },
+      "vessel_limits": {
+        "length_mm": 22000,
+        "beam_mm": 7000,
+        "draft_mm": 3000
+      },
+      "approach_keepout_local_mm": {
+        "min": {
+          "x": -4000,
+          "z": 24000
+        },
+        "max": {
+          "x": 28000,
+          "z": 60000
+        }
+      },
+      "mooring_sockets": [
+        {
+          "id": "west-bollard",
+          "local_mm": {
+            "x": 2000,
+            "z": 23500
+          },
+          "attachment": "port_deck_datum"
+        },
+        {
+          "id": "east-bollard",
+          "local_mm": {
+            "x": 22000,
+            "z": 23500
+          },
+          "attachment": "port_deck_datum"
+        }
+      ],
+      "equipment_module_refs": [
+        {
+          "facility_id": "example-world/facility/coal-terminal-1",
+          "module_id": "coal-transfer"
+        }
+      ]
+    }
+  ],
+  "berth_occupancy": [],
+  "inventories": [
+    {
+      "id": "example-world/inventory/coal-bay-1",
+      "revision": 3,
+      "location": {
+        "kind": "facility_storage_module",
+        "facility_id": "example-world/facility/coal-terminal-1",
+        "module_id": "coal-storage"
+      },
+      "custodian": {
+        "kind": "company",
+        "id": "example-world/company/havik-trading"
+      },
+      "capacity": {
+        "mass_g": 60000000,
+        "volume_ml": 80000000
+      },
+      "rules": {
+        "accepted_commodity_ids": [
+          "coal"
+        ],
+        "storage_mode": "loose_bulk"
+      }
+    }
+  ],
+  "lots": [
+    {
+      "id": "example-world/lot/coal-001",
+      "revision": 1,
+      "commodity_id": "coal",
+      "owner": {
+        "kind": "company",
+        "id": "example-world/company/havik-trading"
+      },
+      "custodian": {
+        "kind": "company",
+        "id": "example-world/company/havik-trading"
+      },
+      "location": {
+        "kind": "inventory",
+        "id": "example-world/inventory/coal-bay-1"
+      },
+      "quantity": {
+        "amount": 25000000,
+        "unit": "g"
+      },
+      "occupied_volume_ml": 33333334,
+      "quality": {
+        "grade": "standard"
+      },
+      "origin": {
+        "kind": "fixture_seed",
+        "reference_id": "example-initial-stock"
+      }
+    }
+  ],
+  "market_orders": [
+    {
+      "id": "example-world/market-order/buy-coal-1",
+      "revision": 1,
+      "owner": {
+        "kind": "company",
+        "id": "example-world/company/havik-trading"
+      },
+      "port_id": "example-world/port/havik",
+      "inventory_id": "example-world/inventory/coal-bay-1",
+      "side": "buy",
+      "status": "open",
+      "commodity_filter": {
+        "commodity_id": "coal",
+        "grade": "standard"
+      },
+      "quantity": {
+        "amount": 10000000,
+        "unit": "g"
+      },
+      "filled_quantity": {
+        "amount": 0,
+        "unit": "g"
+      },
+      "price": {
+        "currency": "NOK",
+        "amount": 1200,
+        "per_quantity": {
+          "amount": 1000000,
+          "unit": "g"
+        },
+        "settlement_rounding": "floor_cumulative_nok"
+      },
+      "settlement_rule": "For each completed transfer, pay floor(total_filled_g * 1200 / 1000000) minus prior settled NOK; use exact integer arithmetic so splitting deliveries cannot change total payment.",
+      "settlement_nok": 0,
+      "delivery": {
+        "kind": "unload_at_berth",
+        "berth_ids": [
+          "example-world/berth/quay-1"
+        ]
+      },
+      "reservation_ids": [
+        "example-world/reservation/coal-money",
+        "example-world/reservation/coal-space"
+      ],
+      "created_at_world_tick": 12000,
+      "expires_at_world_tick": 98400
+    }
+  ],
+  "reservations": [
+    {
+      "id": "example-world/reservation/coal-money",
+      "revision": 1,
+      "holder": {
+        "kind": "market_order",
+        "id": "example-world/market-order/buy-coal-1"
+      },
+      "kind": "funds",
+      "account_id": "example-world/account/havik-operating",
+      "amount": {
+        "currency": "NOK",
+        "amount": 12000
+      }
+    },
+    {
+      "id": "example-world/reservation/coal-space",
+      "revision": 1,
+      "holder": {
+        "kind": "market_order",
+        "id": "example-world/market-order/buy-coal-1"
+      },
+      "kind": "inventory_capacity",
+      "inventory_id": "example-world/inventory/coal-bay-1",
+      "capacity": {
+        "mass_g": 10000000,
+        "volume_ml": 13333334
+      }
+    }
+  ],
+  "cargo_units": [],
+  "transfer_jobs": [],
+  "processing_jobs": [],
+  "derived_presentation": {
+    "note": "These are rebuild instructions, not another copy of stock. Public projections can expose fill bands without disclosing private lots or account reservations.",
+    "stock_visuals": [
+      {
+        "placement_id": "example-world/placement/coal-bay",
+        "source_inventory_id": "example-world/inventory/coal-bay-1",
+        "style": "coal_pile",
+        "fill_rule": "derive_from_authoritative_lots_and_catalogue_capacity"
+      }
+    ]
+  }
+}

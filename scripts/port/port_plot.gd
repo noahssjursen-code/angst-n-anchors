@@ -175,7 +175,7 @@ func _spawn_harbour_staff() -> void:
 	add_child(agent)
 
 	## Snap feet onto apron/foundation collision once StaticBodies exist.
-	call_deferred("_snap_staff_to_ground", [hm, sw, agent])
+	# These are service controllers only; there are no physical port staff.
 
 
 func _staff_apron_local() -> Vector3:

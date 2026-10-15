@@ -80,7 +80,7 @@ func run() -> void:
 	menu._on_new_captain()
 	check(menu._creator.visible, "captain appearance creation restored")
 	menu._on_creator_confirmed("Test", CharacterAppearance.default_appearance())
-	check(menu._company_setup.visible and menu._company_setup._intro.text.contains("shipwright"), "local company creation keeps shipwright purchase flow")
+	check(menu._company_setup.visible and menu._company_setup._intro.text.contains("coastal home") and menu._company_setup._starter_buttons.is_empty(), "new captain receives finished home without career selection")
 
 	# Only this unique scratch directory participates in persistence checks.
 	var scratch := OS.get_cache_dir().path_join("angst-menu-restore-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()])

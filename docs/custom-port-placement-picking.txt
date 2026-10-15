@@ -1,0 +1,64 @@
+CUSTOM PORT CONSTRUCTION PICKING
+
+CustomPortPlacementPicker is an editor-only visual selector. Gameplay collision
+stays unchanged: gutters, corner trim, drainage grates and rescue ladders do not
+need new solid boxes just to let a builder remove or move them.
+
+API:
+  configure(presenter: CustomPortPresenter)
+  rebuild()
+  pick(world_origin, world_direction, maximum_distance = 500.0)
+  clear()
+  stats()
+
+Configure after creating the presenter, and rebuild after an accepted placement
+snapshot changes. A hit returns placement_id, distance in world metres, world
+position, a normal facing the ray, and the mesh face index. No hit returns {}.
+This is presentation evidence only: the existing editor/state command still
+decides whether removal or movement is permitted.
+
+Call pick only in construction mode. Supply the distance to the first ordinary
+world collider as maximum_distance, with a small surface-coincidence tolerance,
+so picking cannot see through terrain or a ship. Keep the existing collider-ID
+fallback for animated NPCs: skinned bind-pose triangles are deliberately skipped.
+Run selection before the shared build-plane intersection; aiming horizontally
+at a wall must not disable selection simply because placement has no floor hit.
+
+Each rigid Mesh resource gets one native TriangleMesh BVH. Tight local AABBs
+reject unrelated instances before the exact finite-segment query. The picker
+does not traverse the scene hierarchy or loop over triangle arrays every frame,
+and never treats an empty mesh bounding box or a crane's working envelope as a
+selection hit. Geometry-cache entries are reused between snapshot rebuilds and
+invalidated when the underlying mesh changes. Unused entries are retired.
+
+Node transforms are read when picking, preserving parent rotations, non-uniform
+scale and moving door hinges without rebuilding their mesh triangles. Replaced
+or freed visual nodes are held weakly and cannot remain selectable. Hidden
+meshes and distance-hidden fittings are ignored. Shader displacement and skinned
+animation are not baked into this rigid construction selector.
+
+Focused native verification: tests/custom_port_placement_picker_test.tscn with
+-- --shipyard-playtest. Captures are archived in
+C:/Users/noahs/Pictures/machinescreenshots.
+
+The 15 October native run passed 45 checks and exited cleanly. It selected all
+four colliderless fittings, removed them through ordinary editor commands while
+preserving the wall/quay, and repeated picking after JSON reconstruction. It
+also checked open-door/parent transforms, empty space inside a hollow mesh,
+two-sided surfaces, nearer-hit ordering, the world-occlusion distance limit and
+shared mesh reuse. No physical collision objects were added. The small 11-mesh
+fixture averaged 16.45 microseconds over 100 picks; see the separate full-harbour
+performance scene for a representative large build.
+
+tests/custom_port_picker_performance_test.tscn measures the complete 674-piece
+Nordvik model without launching a full world. The native run used 772 selectable
+instances and 634 cached meshes. Cold setup took 243.6 ms; a warm rebuild took
+2.60 ms. One hundred interleaved deck, gutter, crane and empty-space rays averaged
+0.950 ms (p95 0.989 ms, maximum 1.096 ms), with all 75 expected hits and 25 misses
+correct. This stayed below the 2-3 ms steady-frame review threshold, so no extra
+placement-envelope approximation was introduced. Pass
+--port-picker-performance-output followed by an absolute JSON output filename.
+
+The underlying physics-free BVH API is documented by Godot:
+https://docs.godotengine.org/en/stable/classes/class_trianglemesh.html
+https://docs.godotengine.org/en/stable/classes/class_mesh.html#class-mesh-method-generate-triangle-mesh

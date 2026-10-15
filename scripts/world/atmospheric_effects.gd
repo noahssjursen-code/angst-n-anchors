@@ -7,7 +7,6 @@ signal lightning_strike(intensity: float, distance_m: float, world_position: Vec
 ## Reads weather state from the WeatherLighting autoload. No world or port knowledge.
 
 const RAIN_FIELD_SCRIPT    := preload("res://scripts/weather/rain_field.gd")
-const WEATHER_HUD_SCRIPT   := preload("res://scripts/weather/weather_hud.gd")
 const WEATHER_AUDIO_SCRIPT := preload("res://scripts/weather/weather_audio_system.gd")
 
 var _lightning_light:      DirectionalLight3D
@@ -31,7 +30,6 @@ func _ready() -> void:
 	_spawn_rain_field()
 	_spawn_lightning_system()
 	_spawn_weather_audio()
-	_spawn_weather_hud()
 
 
 func _process(delta: float) -> void:
@@ -76,12 +74,6 @@ func _spawn_weather_audio() -> void:
 	add_child(audio)
 	if audio.has_method("_on_lightning_strike"):
 		lightning_strike.connect(Callable(audio, "_on_lightning_strike"))
-
-
-func _spawn_weather_hud() -> void:
-	var hud    := WEATHER_HUD_SCRIPT.new()
-	hud.name   = "WeatherHUD"
-	add_child(hud)
 
 
 func _update_lightning(delta: float) -> void:

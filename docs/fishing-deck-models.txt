@@ -1,0 +1,42 @@
+Fishing deck model pass — 15 October 2026
+
+Production assets
+-----------------
+The shared insulated catch box/lid, bait preparation bench, twin mooring bitts
+and roller fairlead are replaced with editable Blender models. The catch box
+keeps its existing hold component, capacity, inspection and connection sockets.
+The workbench remains a decorative fitting, not an added handling task.
+
+Rebuild these five assets with Blender:
+  tools are in resources/models/_source/fishing_kit/refine_deck_fittings.py
+This finish pass runs after the original fishing/coastal/port kit generators.
+Editable .blend files remain in each existing kit's source folder. GLB meshes
+are grouped by finish; runtime materials use the shared marine material library.
+
+The stock Coastal Line Fisher now has five continuous stern bulwark segments
+instead of one isolated segment. New parts are appended, preserving existing
+placement indices (in particular the catch hold). Existing saved custom vessel
+layouts are not rewritten; they retain their authored walls. Shared fitting
+models and gangway corrections apply to those boats when reloaded.
+
+Gangway
+-------
+The previous straight ramp landed 0.9 m inside solid concrete. It now meets
+the quay lip and has a separate shallow hinged tongue, with tapered frame ends
+and matching walk collision. The tongue follows the quay orientation rather
+than tilting through it as the boat moves. Existing boarding gate, mooring,
+replication, obstruction and reach rules remain in use.
+
+Review
+------
+scenes/showcases/fishing_deck_showcase.tscn
+Run with -- --shipyard-playtest. Left/right changes the six inspection cameras;
+--capture archives all views in Pictures/machinescreenshots and exits.
+
+tests/ship_gangway_test.tscn
+Run with -- --shipyard-playtest --vessel=fishing_hook_line --close-quay
+Optional --rotated and --remote-replica. Checks actual capsule boarding in both
+directions, both sides, moving hull, walk clearance, gate closure, saved layout
+preservation and visible ramp geometry clear of the quay. It archives captures.
+
+Rods, harpe, fish-sale mechanics and player movement are outside this model pass.

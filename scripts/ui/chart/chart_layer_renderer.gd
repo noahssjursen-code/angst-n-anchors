@@ -20,7 +20,8 @@ const C_TRAFFIC_PORT := Color(0.20, 0.66, 0.62, 0.46)
 const C_TRAFFIC_VESSEL := Color(0.18, 0.76, 0.86, 0.96)
 const C_TRAFFIC_WAITING := Color(0.96, 0.66, 0.18, 0.98)
 ## Pay expand cost a few harbours per frame so world-view open stays smooth.
-const HARBOUR_EXPAND_BUDGET := 4
+const HARBOUR_EXPAND_BUDGET := 1
+const HARBOUR_GEOMETRY_SPAN_M := 9000.0
 const HARBOUR_VIEW_MARGIN_M := 900.0
 const HARBOUR_LABEL_SPAN_M := 4500.0
 const HARBOUR_OCCUPANCY_SPAN_M := 2800.0
@@ -28,9 +29,13 @@ const HARBOUR_OCCUPANCY_SPAN_M := 2800.0
 var snapshot
 var base := BaseRaster.new()
 var coastline := CoastlineIndex.new()
+var plots := ChartPlotLayer.new()
 var weather := RasterLayer.new(RasterLayer.Kind.WEATHER)
 var last_draw_usec := 0
 var draw_count := 0
+var geography_draw_count := 0
+var last_geography_usec := 0
+var last_contact_usec := 0
 var _route_navigation: MarineRoutePlanner
 var _contract_route_cache: Dictionary = {}
 var _shipping_lane_lines: Array[Dictionary] = []
@@ -44,12 +49,16 @@ func set_snapshot(next) -> void:
 	_shipping_ramps.clear()
 	_route_navigation = null
 	weather.invalidate()
-	ChartHarbourPlan.clear_cache()
+	ChartHarbourPlan.prepare_snapshot(snapshot)
 	if snapshot != null and snapshot.layout != null:
 		base.prepare(snapshot.layout)
 		coastline.prepare(snapshot.layout)
+		plots.prepare(snapshot.layout)
 		_route_navigation = MarineRoutePlanner.new(snapshot.layout)
 		_prepare_shipping_lanes()
+	else:
+		plots.index = null
+		plots.mesh = null
 
 
 func prepare_overlays(bounds: Rect2, layers: ChartLayerManager, game_hours: float) -> void:
@@ -69,32 +78,58 @@ func render(
 	fast_interaction: bool = false,
 ) -> void:
 	var started := Time.get_ticks_usec()
+	render_geography(canvas, ctx, layers, fast_interaction)
+	render_contacts(canvas, ctx, layers, nav, selected_port, show_port_card)
+	last_draw_usec = Time.get_ticks_usec() - started
+
+
+func render_geography(canvas: CanvasItem, ctx: Dictionary,
+		layers: ChartLayerManager, fast_interaction := false) -> void:
+	var started := Time.get_ticks_usec()
 	var chart: Rect2 = ctx["chart_rect"]
 	var bounds: Rect2 = ctx["world_bounds"]
+	# Reuse cached detail even during a drag; only schedule new bakes on settle.
 	base.draw(canvas, chart, bounds, not fast_interaction)
 	if layers.is_visible("weather"):
 		weather.draw(canvas, chart, bounds)
 	if layers.is_visible("weather") and not fast_interaction:
 		weather.draw_wind(canvas, chart, bounds)
 		_draw_fronts(canvas, ctx)
-	if not fast_interaction:
+	if not fast_interaction and float(ctx.world_span) <= HARBOUR_GEOMETRY_SPAN_M:
 		_draw_coastline(canvas, ctx)
+	if layers.is_visible("plots"):
+		plots.draw(canvas, ctx)
 	_draw_grid(canvas, ctx)
 	if layers.is_visible("traffic"):
 		_draw_shipping_lanes(canvas, ctx)
-		_draw_traffic_contacts(canvas, ctx)
-	if layers.is_visible("routes"):
-		_draw_contract_routes(canvas, ctx, nav)
 	## Lazy harbour silhouettes under port dots (all visible sites).
 	if not fast_interaction:
 		_draw_visible_harbours(canvas, ctx)
+	geography_draw_count += 1
+	last_geography_usec = Time.get_ticks_usec() - started
+
+
+func render_contacts(canvas: CanvasItem, ctx: Dictionary, layers: ChartLayerManager,
+		nav: ChartNavSnapshot, selected_port: String, show_port_card := true) -> void:
+	var started := Time.get_ticks_usec()
+	if layers.is_visible("traffic"):
+		_draw_traffic_contacts(canvas, ctx)
+	if layers.is_visible("routes"):
+		_draw_contract_routes(canvas, ctx, nav)
 	_draw_ports(canvas, ctx, selected_port, layers.is_visible("annotations"))
+	if float(ctx.world_span) <= HARBOUR_OCCUPANCY_SPAN_M and snapshot != null:
+		for port in snapshot.ports:
+			if str(port.get("source",""))=="custom":continue
+			var pos := port.get("position", Vector3.INF) as Vector3
+			if pos.is_finite() and (ctx.world_bounds as Rect2).has_point(Vector2(pos.x, pos.z)):
+				_draw_harbour_occupancy(canvas, ctx, str(port.get("id", "")))
 	if layers.is_visible("nav_vectors"):
 		_draw_ship(canvas, ctx, nav)
 	## Home-port pick uses a Control dossier panel — skip the canvas card.
 	if show_port_card and not selected_port.is_empty():
 		_draw_port_card(canvas, ctx, selected_port, nav)
-	last_draw_usec = Time.get_ticks_usec() - started
+	last_contact_usec = Time.get_ticks_usec() - started
+	last_draw_usec = last_contact_usec + last_geography_usec
 	draw_count += 1
 
 
@@ -135,6 +170,14 @@ func hit_test_port(screen: Vector2, ctx: Dictionary, radius_px: float = 18.0) ->
 		if distance < best_distance:
 			best_distance = distance
 			best = str(port.get("id", ""))
+	if best.is_empty() and float(ctx.get("world_span",INF))<=HARBOUR_GEOMETRY_SPAN_M:
+		var at:=world_at(screen,ctx)
+		for port in snapshot.ports:
+			if str(port.get("source",""))!="custom":continue
+			var plan:=ChartHarbourPlan.for_port(str(port.id),null,snapshot)
+			if plan==null or not plan.bounds.has_point(at):continue
+			for polygon in plan.platform_polys:
+				if Geometry2D.is_point_in_polygon(at,polygon):return str(port.id)
 	return best
 
 
@@ -181,7 +224,12 @@ func debug_stats() -> Dictionary:
 	return {
 		"draw_usec": last_draw_usec,
 		"draw_count": draw_count,
+		"geography_draw_count": geography_draw_count,
+		"geography_draw_usec": last_geography_usec,
+		"contacts_draw_usec": last_contact_usec,
 		"base_build_usec": base.build_usec,
+		"base": base.debug_stats(),
+		"plots": plots.debug_stats(),
 		"weather": weather.debug_stats(),
 		"shipping_lane_lines": _shipping_lane_lines.size(),
 	}
@@ -503,13 +551,19 @@ func _draw_visible_harbours(canvas: CanvasItem, ctx: Dictionary) -> void:
 		return
 	var bounds: Rect2 = ctx["world_bounds"]
 	var span := float(ctx.get("world_span", bounds.size.x))
+	if span > HARBOUR_GEOMETRY_SPAN_M:
+		return
 	var show_labels := span <= HARBOUR_LABEL_SPAN_M
-	var show_occupancy := span <= HARBOUR_OCCUPANCY_SPAN_M
 	var view := bounds.grow(HARBOUR_VIEW_MARGIN_M)
 	var tree := Engine.get_main_loop() as SceneTree
 	var expands_left := HARBOUR_EXPAND_BUDGET
 	var need_more := false
 	for port in snapshot.ports:
+		if str(port.get("source",""))=="custom":
+			var construction:=ChartHarbourPlan.for_port(str(port.get("id","")),tree,snapshot)
+			if construction!=null and (view.intersects(construction.bounds) or view.has_point(Vector2(construction.world_origin.x,construction.world_origin.z))):
+				construction.draw(canvas,ctx,false)
+			continue
 		var position := port.get("position", Vector3(INF, INF, INF)) as Vector3
 		if not position.is_finite():
 			continue
@@ -534,8 +588,6 @@ func _draw_visible_harbours(canvas: CanvasItem, ctx: Dictionary) -> void:
 		if plan.bounds.size.x > 1.0 and not view.intersects(plan.bounds):
 			continue
 		plan.draw(canvas, ctx, show_labels)
-		if show_occupancy:
-			_draw_harbour_occupancy(canvas, ctx, port_id)
 	if need_more:
 		## Fill remaining plans over subsequent frames.
 		canvas.queue_redraw()
@@ -620,6 +672,20 @@ func _draw_port_card(
 	var info: Dictionary = snapshot.port_info(port_id)
 	if info.is_empty():
 		return
+	if str(info.get("source",""))=="custom":
+		var distance:="—"
+		if nav!=null and nav.has_ship():distance=_distance((info.position as Vector3).distance_to(nav.ship_position))
+		var rows:=custom_port_card_rows(info,distance)
+		var chart_rect: Rect2=ctx.chart_rect
+		var card:=Rect2(chart_rect.end-Vector2(308,126),Vector2(296,112))
+		canvas.draw_rect(card,Color(.92,.91,.82,.97))
+		canvas.draw_rect(card,Color(.12,.20,.20,.88),false,1.0)
+		for index in rows.size():
+			var line:=rows[index]
+			while ThemeDB.fallback_font.get_string_size(line,HORIZONTAL_ALIGNMENT_LEFT,-1,11).x>card.size.x-20 and line.length()>2:
+				line=line.left(line.length()-2)+"…"
+			canvas.draw_string(ThemeDB.fallback_font,card.position+Vector2(10,19+index*22),line,HORIZONTAL_ALIGNMENT_LEFT,-1,11,Color(.08,.14,.14))
+		return
 	var chart: Rect2 = ctx["chart_rect"]
 	## Navigation mode only — home-port pick uses the Control dossier panel.
 	var panel := Rect2(chart.end.x - 268.0, chart.end.y - 132.0, 256.0, 118.0)
@@ -659,6 +725,13 @@ func _draw_port_card(
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 			Color(0.08, 0.14, 0.14),
 		)
+
+
+static func custom_port_card_rows(info: Dictionary, range_text: String = "—") -> Array[String]:
+	return [str(info.get("display_name",info.get("id",""))).to_upper(),
+		"Constructed port · %d constructed berths"%int(info.get("derived_berth_count",0)),
+		"Company ref: "+str(info.get("owner_company_id","—")),
+		"Range "+range_text]
 
 
 static func grid_interval(world_span: float) -> float:

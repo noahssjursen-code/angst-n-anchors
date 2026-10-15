@@ -1,0 +1,35 @@
+Player inventory implementation — feature/player-inventory
+
+Six hotbar slots plus 24 bag slots. TAB opens a separate on-person panel;
+1–6 select/stow personal gear. Clicking an item and destination swaps slots.
+Company storage stays in existing port warehouse leases/lots, shown in the tablet.
+Land ownership does not change warehouse access in this pass.
+
+The tablet Equipment shop sells rods (1800 NOK) and harpes (950 NOK), instantly
+into an empty personal slot. Harbourmaster tackle actions are removed. No drone
+animation or purchasable clothing yet; inventory schema has clothing references
+and extensible per-item attributes for later work.
+
+Player-held rigs reuse the authored rod/harpe and existing line, fight, hand pose
+and fishing visual replication. Imported fishing boats keep a holder and catch
+crate. Deck passengers can deposit catches: server checks accepted player/vessel
+publications and equipped personal gear. The catch holds belong to the vessel
+owner; each fish retains its catcher. Landing currently pays the vessel owner.
+
+Local purchases save balance and inventory together with rollback on failure.
+Multiplayer uses private player_inventory projections and inventory.ensure,
+inventory.purchase, inventory.move and inventory.select commands. PostgreSQL
+commits price-checked debits, inventory, events and retry receipts in one transaction.
+Client save documents cannot grant personal inventory. Save version 7 adds local
+personal inventory and migrates paid legacy tackle, preserving overflow records.
+
+Validation: native inventory command/input/held-model tests; existing tablet and
+voyage UI regressions; fishing visual replication including rod/harpe, hands, line,
+fish and stow cleanup; Go authority persistence/privacy/capacity/retry tests; real
+HTTP command/privacy tests; passenger publication/hold attribution tests.
+Captures archived under C:/Users/noahs/Pictures/machinescreenshots.
+
+Full two-client PostgreSQL/Docker playtest remains unverified: Docker Desktop
+could not start due to a dockerInference socket error. No Docker reset or public
+DigitalOcean deployment was performed. Matching MP server code must be deployed
+before this new client inventory works on that server.

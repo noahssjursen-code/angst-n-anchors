@@ -1,0 +1,109 @@
+DATA-ONLY PORT PLAY SESSION
+15 October 2026
+
+tests/custom_port_simulation_test.tscn runs one deterministic, combined cargo
+session through CustomPortState. It creates no meshes, physics, player saves,
+network connection, fake economy service or runtime vessel inventory.
+
+The compact explicit fixture has a 100 x 40 m quay, three bollards deriving two
+berths, separate reachable container/bulk cranes and two finite public yards.
+Four visiting companies bring two Harbour Cargo ships and two Coastal Bulk
+ships. Vessel records come from CustomPortVesselProjection.from_prebuilt:
+the container ships have two real securing beds; the coasters have their actual
+120 t hold. The container mass ceiling is an explicit 48 t scenario ceiling,
+not an invented payload rating for the physical bed. Initial vessel evidence
+and subsequent snapshots are checked against the actual prebuilt definitions.
+
+The water survey and small construction catalog are explicit simulation inputs;
+this fixture does not claim to be an approved geographic site in a real world.
+
+Session
+
+Seed 915731 fixes vessel arrival/unloading order and bulk quantities. Sixty-four
+rounds alternate container and bulk work. Two visitors compete for the same
+finite stock; a cancelled reservation allows the other company to take it.
+Both vessels load the available batch, return it in partial unloads and leave.
+There are only three 20ft containers and 150,000 kg of ore in the complete
+system. Repeated throughput is movement of those same goods, not production.
+
+The command trace includes occupied-berth arrivals, insufficient stock, stale
+revisions, foreign actors, negative quantities, conflicting reuse of request
+IDs, attempted departure with reserved cargo, failed over-unloads and retries
+of accepted commands. Every rejected or repeated command must leave the full
+state unchanged and emit no event or account change.
+
+After each command, the test sums quantities/mass across every yard and vessel,
+grouped by the complete lot identity excluding quantity. This catches missing
+goods, duplicated goods, renamed lots and changed nested custom attributes.
+It also checks each bulk hold's physical commodity/consignment and kilogram
+projection while loaded. Reservations do not count as additional goods.
+
+Every accepted event crosses a JSON boundary into an independent replica.
+Repeated event delivery must be harmless. Five checkpoints save and reload
+both states through CustomPortRepository, including outstanding reservations
+and loaded ships. A retry after reload must find the durable command receipt.
+
+The complete command trace is then read FROM DISK into a fresh state and run
+again. Every response signature, intermediate state hash, ordered event and
+final state must match. A separate event-only reconstruction of the saved
+journal must also reach that final state. Reuse the same schema/catalog/rules
+when comparing traces; future rule changes require deliberate version handling.
+
+Run
+
+From the game directory, run test-port-data.ps1. It finds an installed Godot
+(or accepts -GodotPath), uses a new isolated profile, runs this simulation and
+keeps all evidence. -Suite Rules selects the focused data/berth/catch/physical
+fitout/transform/repository/collection/naming checks; -Suite All runs both.
+Use -OutputDirectory to choose the parent for the fresh per-run directory.
+The runner requires a zero exit code, the scene's completion marker and no
+script/runtime errors; a timeout or missing marker is a failure. It restores
+the caller's APPDATA environment even on failure. It never deletes old runs.
+
+Direct engine invocation remains available:
+
+Godot --headless --path <game>
+  res://tests/custom_port_simulation_test.tscn -- --shipyard-playtest
+  --port-simulation-output=<absolute empty evidence directory>
+
+Use an isolated APPDATA profile, as with the other port tests. The isolation
+flag is required. Without an output argument, evidence goes to that isolated
+profile's user://custom-port-simulation-test directory. Use a fresh evidence
+directory when intentionally changing the fixture: repository safeguards must
+not overwrite a divergent saved revision from an earlier scenario.
+
+Outputs
+
+- command-trace.json: initial snapshot, exact catalog, ordered commands with
+  expected responses/state hashes, complete accepted event journal and checkpoint
+  references. It is sufficient to reproduce the session without scene objects.
+- summary.json: command outcomes, cumulative throughput, conserved starting and
+  ending stock, failures and authority/replica final hashes.
+- checkpoint-*-authority.json and checkpoint-*-replica.json: full validated,
+  checksummed repository files, usable as intermediate restart documents.
+
+Verified result
+
+64 rounds: 32 container and 32 bulk, with 128 successful vessel load/return
+visits. There were 936 command attempts, 762 accepted events, 20 harmless
+command retries and 154 rejected attempts. Five save/reload checkpoints passed.
+The final run, exact command rerun and event-only reconstruction took about 29.9 s.
+All 3 containers and 150,000 kg of ore returned with their exact attributes.
+Cumulative loading was 96 container units and 5,260,800 kg including the repeated
+ore movements. Final state hash:
+  b7d1c107fedb5f75025e3c3fa8d733eb10f99c1d6e8769f7679c4186c6ba1f54
+
+Evidence is in the chat workspace:
+  outputs/port-simulation-20261015-0034/
+An initial fixture setup used the wrong handling-mode label for its container
+crane and was corrected before any cargo command ran. The successful session
+found no domain-code defect and made no production service changes.
+
+Scope
+
+Cargo transfers currently have no payment rule, so the test requires ZERO
+account changes; it does not claim to test freight settlement, company ledger
+atomicity or the multiplayer database. It verifies the deterministic local
+port model, real installed capacity projections, persistence and reconstruction.
+Network transport, live crane animation, navigation and server authentication
+remain the responsibility of their respective integration tests.

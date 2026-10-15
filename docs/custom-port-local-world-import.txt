@@ -1,0 +1,127 @@
+LOCAL CUSTOM PORTS IN THE NORMAL WORLD
+Implemented and checked 15 October 2026
+
+What this does
+
+The actual World scene can optionally read selected custom-port JSON files and
+reconstruct their buildings, quays, fixtures and visible stored goods at their
+saved world coordinates. They stream in near the camera and remain on the live
+chart when distant. The chart uses the saved platform outlines, including holes
+and angled pieces, instead of generating a replacement harbour.
+
+This is deliberately a read-only local presentation bridge. It does not turn
+an imported company reference into ownership, grant vessels or stock to the
+captain, create jobs, sell land, change money, change the home port, or install a
+working cargo/docking service. The interactive operators explain that services
+are not connected. Building/editing and data simulation remain in the workshop.
+
+Opening selected files
+
+Launch the game normally with explicit user arguments after the Godot '--':
+
+  --custom-port-document=C:/absolute/path/to/first-port.json
+  --custom-port-document=C:/absolute/path/to/second-port.json
+
+Quote the entire argument when the path contains spaces. Up to 32 files may be
+selected. Absolute and user:// paths follow CustomPortRepository's existing
+path contract; no directories are scanned and no files are written or watched.
+Raw validated JSON and the versioned repository envelope both work. Repository
+backup recovery is reported in the import report without rewriting the primary.
+
+Select the matching local world through the normal game entry flow. The saved
+seed, generation version and layout checksum must match that world's finalized
+identity. A 15 km workshop save is not interchangeable with a 40 km world just
+because the seed matches. The importer does not rewrite identity or coordinates
+to make a file fit. All deck roots use the existing sea + 2 m plane (Y = 0.5 m).
+
+With no custom-port-document argument, the importer is absent and normal World
+startup is unchanged. Multiplayer refuses these local files before reading
+them, including when a remote session is not yet fully connected.
+
+Validation and generated scenery
+
+The entire batch is validated before any directory entry, terrain cut or forest
+exclusion is published. A bad file, wrong world, duplicate port/plot, overlapping
+custom plot, generated-port identifier collision, or generated-footprint conflict
+rejects the batch. Imported source files and the generated ports remain intact.
+
+World waits for its asynchronous bridge planning to finish before import so
+late bridge approaches cannot appear through an accepted custom plot. Reserved
+geometry includes the generated port terrain/forest footprint records, settlement
+exclusions, and completed bridge deck/approach/road-link exclusion polygons.
+These are deliberately conservative reservations: a parcel overlapping reserved
+scenery may reject even when its current buildings do not occupy that part.
+Ellipse-shaped reservations use their oriented rectangular bounds. Buoy/open-sea
+navigational marks are not land ownership records and are outside this land
+reservation check. This is not a server property registry or land purchase proof.
+
+The World.custom_port_import_report dictionary exposes the result, accepted
+records, public summaries, loaded source paths and any repository recovery
+warnings. Rejections also print their concrete code/errors and show a short
+in-game notice. A waiting result means bridge plans are still being finalized.
+
+Authority and lifecycle boundaries
+
+- CustomPortWorldImport owns one CustomPortStreamer. Imported fixture vessels
+  never instantiate: normal vessel services remain the only live ship owner.
+- PortCatalog stores passive summaries separately, with source-owner cleanup.
+  Existing generated port IDs, proximity, freight, home and routing queries are
+  unchanged. ChartDataSnapshot merges the passive entries explicitly.
+- No real berth slots are exposed by passive presenters. Mooring posts, cargo
+  pads, yard drops and containers opt out of live discovery before entering the
+  tree. Replacement containers inherit the same policy after a stock refresh.
+  Models and solid collision remain, as do operators' read-only responses.
+- Crane models have no auto-operator and no active input/processing loop. The
+  fish plant has no receiving-inventory binding or live settlement handler.
+- Exiting the source removes only its own directory entries. An older source
+  cannot erase a replacement source's entry with the same port ID. Streamer
+  teardown clears its terrain/forest layers; distance unloading never deletes
+  data, chart summaries or construction earthworks.
+- This source has no save call, command dispatcher, company balance, fleet
+  mutation, server transport or deployment. Ordinary local captain persistence
+  remains owned by existing gameplay; the importer itself never changes it.
+
+Verified checks
+
+tests/custom_port_world_import_test.tscn: 27 focused checks, headless PASS.
+Explicit repeated arguments, default off, remote before filesystem access,
+bounded selection, exact identity, full batch validation, ID/plot/reservation
+conflicts, deck plane, no partial publication, live chart merge, source-owned
+teardown and unchanged input hashes.
+
+tests/custom_port_spatial_safety_test.tscn: 69 checks, headless PASS.
+The common State boundary rejects finite JSON coordinates that cannot be
+represented by engine geometry: float32 overflow, local/world rectangle endpoint
+overflow or collapse, origin+placement overflow, unrepresentable yaw radians,
+and asset edges collapsed by local/world coordinate precision. Rejection occurs
+before polygon clipping, indexing or publication; generic finite64 financial
+values and ordinary world coordinates retain their original semantics. This
+also covers repository, streamer and import ingress and unchanged source hashes.
+The 27-check import suite passed again after this correction.
+
+tests/custom_port_passive_projection_test.tscn: 15 checks, headless PASS.
+Complete Nordvik construction and all six container models still render; no
+imported target enters live cargo/mooring/berth discovery. A newer stock snapshot
+reconstructs five containers with discovery still disabled. The unrelated live
+bollard remains registered, and the operator signal remains available.
+
+tests/custom_port_main_world_test.tscn: 21 checks, native D3D12 PASS, clean exit.
+It instantiates scenes/world.tscn itself with two explicitly authored isolated
+files. Normal generated home spawn, exact finalized layout, no fleet grant,
+passive directory/live chart, complete streamed harbour, no fixture ship,
+terrain footprint, distance unload/return, source hashes and World teardown are
+checked. It uses an isolated APPDATA and --shipyard-playtest; no live captain.
+The review camera travels for this test; this is not an autopilot/sailing claim.
+
+Viewed native screenshots, archived at:
+C:/Users/noahs/Pictures/machinescreenshots/custom-port-main-world-1792032195-6392-01-imported-fishing-pier.png
+C:/Users/noahs/Pictures/machinescreenshots/custom-port-main-world-1792032201-6392-02-live-chart-imported-outline.png
+
+Next integration work
+
+The existing local/remote authority still needs durable custom-port records,
+authenticated company ownership, globally exclusive plot purchases, authorized
+construction commands, real vessel identity/capacity binding, and transactions
+that commit port stock, ship cargo and money together. No MP custom-port command
+or database publication has been implemented by this local import. Do not use
+the public summary or a file's owner_company_id as an authorization decision.

@@ -141,7 +141,8 @@ func test_vessel(id: String,side: int) -> void:
 				record = VesselSpawn.normalize_record({"uid":"gangway-"+id,"name":entry.display,"hull_id":entry.hull_id,"brick_layout":entry.prebuilt_layout})
 	boat = VesselSpawn.instantiate_from_record(record) as ImportedDraftVessel
 	boat.freeze = true
-	boat.transform = port.global_transform * Transform3D(Basis.IDENTITY,Vector3(side*(10+boat.beam_m*.5+2.5),-boat.draft_m,0))
+	var gap := .75 if OS.get_cmdline_user_args().has("--close-quay") else 2.5
+	boat.transform = port.global_transform * Transform3D(Basis.IDENTITY,Vector3(side*(10+boat.beam_m*.5+gap),-boat.draft_m,0))
 	var saved_draft := JSON.stringify(boat.draft)
 	add_child(boat)
 	await wait_frames(10)
@@ -168,7 +169,23 @@ func test_vessel(id: String,side: int) -> void:
 		var middle := (bridge.ship_end+bridge.shore_end)*.5
 		camera.global_position = middle+port.global_basis*Vector3(-side*6,3.2,5.5)
 		camera.look_at(middle+Vector3.UP*.6)
-		check(absf(port.to_local(bridge.shore_end).x)<10 and absf(bridge.shore_end.y-1.735)<.01,id+" lands on physical quay")
+		check(absf(port.to_local(bridge.shore_end).x)<10 and absf(bridge.shore_end.y-1.75)<.01,id+" lands on physical quay lip")
+		var buried_vertices := 0
+		for visual in bridge._walk.find_children("*","MeshInstance3D",true,false):
+			var mesh_buried := 0
+			var lowest := Vector3(0,INF,0)
+			var mesh:Mesh=visual.mesh
+			for surface in mesh.get_surface_count():
+				var arrays:=mesh.surface_get_arrays(surface)
+				for vertex:Vector3 in arrays[Mesh.ARRAY_VERTEX]:
+					var quay_local:Vector3=port.to_local(visual.to_global(vertex))
+					# The tongue seats 8 mm into the surface; structural frame must clear it.
+					if absf(quay_local.x)<9.999 and quay_local.y<1.675:
+						buried_vertices+=1
+						mesh_buried+=1
+						if quay_local.y<lowest.y:lowest=quay_local
+			if mesh_buried>0:print("BURIED ",visual.get_path()," vertices=",mesh_buried," lowest=",lowest)
+		check(buried_vertices==0,id+" visible gangway frame clears concrete (buried vertices: %d)" % buried_vertices)
 		var toward_ship := (bridge.ship_end-bridge.shore_end).normalized()
 		toward_ship.y = 0
 		toward_ship = toward_ship.normalized()

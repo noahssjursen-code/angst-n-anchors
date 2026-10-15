@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "grid_step_m": 2.0,
+  "items": [
+    {"id":"foundation","name":"Foundation 4 × 4 m","category":"Structure","description":"Level port foundation extending down into the ground or seabed.","cells":[2,2],"height_m":1.0,"anchor":"top","material":"concrete_cast","colour":"9eaba7"},
+    {"id":"foundation_8m","name":"Foundation 8 × 8 m","category":"Structure","description":"A larger concrete foundation for quickly building broad quays. Joins the same 4 m structural grid and extends down to the seabed.","cells":[4,4],"height_m":1.0,"anchor":"top","material":"concrete_cast","colour":"9eaba7"},
+    {"id":"quay","name":"Quay section","category":"Waterfront","description":"A concrete landing along the waterfront.","cells":[4,2],"height_m":2.0,"anchor":"top","material":"concrete_worn","colour":"788b89"},
+    {"id":"pier","name":"Timber pier","category":"Waterfront","description":"A small pier on supporting posts.","cells":[4,2],"height_m":1.0,"anchor":"top","material":"timber_weathered","colour":"ad9568"},
+    {"id":"bollard","name":"Mooring bollard","category":"Equipment","description":"Existing harbour bollard. Place on a foundation, quay or pier.","cells":[1,1],"height_m":1.1,"visual":"bollard","requires_support":true,"material":"concrete_cast","colour":"9eaba7"},
+    {"id":"container_crane_bay","name":"Container crane + yard","category":"Equipment","description":"Existing harbour T-crane and container yard. The cargo area follows the crane's reach along the quay. Arrow faces water. Place on foundations.","height_m":40.0,"visual":"container_crane","requires_support":true,"support_items":["foundation","foundation_8m","quay"],"material":"concrete_worn","colour":"788b89"},
+    {"id":"bulk_crane_bay","name":"Bulk crane + yard","category":"Equipment","description":"Existing harbour grab crane with a receiving area inside its working reach. Arrow faces water. Place on foundations.","height_m":46.0,"visual":"bulk_crane","requires_support":true,"support_items":["foundation","foundation_8m","quay"],"material":"concrete_worn","colour":"788b89"},
+    {"id":"warehouse","name":"Warehouse","category":"Buildings","description":"Placeholder storage building.","cells":[6,4],"height_m":6.0,"material":"warehouse_sheet","colour":"526c70"},
+    {"id":"workshop","name":"Workshop","category":"Buildings","description":"Placeholder workshop building.","cells":[4,4],"height_m":4.0,"material":"warehouse_sheet","colour":"c1916a"}
+  ]
+}

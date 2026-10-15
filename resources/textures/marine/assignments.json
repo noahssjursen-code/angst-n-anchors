@@ -70,7 +70,10 @@
     "Fixed_Underframe": "working_steel",
     "Fixed_LiftingFrame": "machinery_enamel",
     "Fixed_LiftSteel": "brushed_steel",
-    "Fixed_RotatingSteel": "brushed_steel"
+    "Fixed_RotatingSteel": "brushed_steel",
+    "Fixed_FishBoxPolymer": "moulded_polymer",
+    "Fixed_FishBoxBlue": "moulded_polymer",
+    "Fixed_CuttingBoard": "moulded_polymer"
   },
   "preserve": [
     "Glass, windows and optical lenses",
@@ -101,50 +104,6 @@
     "Fixed_Concrete_",
     "Container_Paint"
   ],
-  "character_uv": {
-    "Top": {
-      "asset": "Fabric030",
-      "repeat": 1,
-      "normal_scale": 0.2,
-      "roughness": 1.0
-    },
-    "Trousers": {
-      "asset": "Fabric030",
-      "repeat": 4,
-      "normal_scale": 0.3,
-      "roughness": 1.0
-    },
-    "Headwear": {
-      "asset": "Fabric030",
-      "repeat": 4,
-      "normal_scale": 0.23,
-      "roughness": 1.0
-    },
-    "Footwear": {
-      "asset": "Rubber004",
-      "repeat": 4,
-      "normal_scale": 0.24,
-      "roughness": 0.85
-    },
-    "Sole": {
-      "asset": "Rubber004",
-      "repeat": 4,
-      "normal_scale": 0.2,
-      "roughness": 1.0
-    },
-    "Outerwear": {
-      "asset": "Rubber004",
-      "repeat": 5,
-      "normal_scale": 0.12,
-      "roughness": 0.85
-    },
-    "Trim": {
-      "asset": "Fabric030",
-      "repeat": 4,
-      "normal_scale": 0.18,
-      "roughness": 1.0
-    }
-  },
   "asset_overrides": {
     "composite_ferry": {
       "Paint_HullUpper": "composite_enamel",

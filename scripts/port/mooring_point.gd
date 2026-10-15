@@ -76,8 +76,9 @@ func _remove_legacy_marker() -> void:
 
 
 func _rebuild_bollard_visual() -> void:
-	if not is_inside_tree():
-		call_deferred("_rebuild_bollard_visual")
+	# _ready builds the initial visual. A detached/deleting point must not keep
+	# rescheduling itself forever after a ship streams out of the scene.
+	if not is_inside_tree() or is_queued_for_deletion():
 		return
 
 	_remove_legacy_marker()

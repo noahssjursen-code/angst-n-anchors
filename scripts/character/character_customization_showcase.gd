@@ -40,7 +40,7 @@ func _ready() -> void:
 	title.add_theme_font_size_override("font_size", 24)
 	column.add_child(title)
 	var subtitle := Label.new()
-	subtitle.text = "Blender mariner • 1.80 m • shared rig"
+	subtitle.text = "Crew base • 1.80 m • shared rig"
 	column.add_child(subtitle)
 	controls = CharacterAppearanceControls.new()
 	column.add_child(controls)
@@ -124,6 +124,12 @@ func _capture(args: PackedStringArray) -> void:
 	if args.has("--walk"): character.play_motion(&"walk")
 	for i in range(10): await get_tree().process_frame
 	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(args[args.find("--capture")+1])
+	var image := get_viewport().get_texture().get_image()
+	var archive := "C:/Users/noahs/Pictures/machinescreenshots"
+	DirAccess.make_dir_recursive_absolute(archive)
+	image.save_png(archive.path_join("crew-studio-%d-%d.png" % [Time.get_unix_time_from_system(), Time.get_ticks_usec()]))
+	var capture_index := args.find("--capture") + 1
+	if capture_index < args.size() and not args[capture_index].begins_with("--"):
+		image.save_png(args[capture_index])
 	print("CHARACTER STUDIO CAPTURE ", character.animation_player.get_animation_list() if character.animation_player != null else [])
 	get_tree().quit()

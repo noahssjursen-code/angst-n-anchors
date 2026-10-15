@@ -24,13 +24,62 @@ var quay_meta: Array[Dictionary] = []
 var asphalt_polys: Array[PackedVector2Array] = []
 var asphalt_meta: Array[Dictionary] = []
 var bounds := Rect2()
+var custom_construction := false
+var platform_polys: Array[PackedVector2Array] = []
+var exposed_edges: Array[PackedVector2Array] = []
 
 static var _cache: Dictionary = {} ## port_id -> ChartHarbourPlan
-static var _cache_snapshot_id := 0
+static var _cache_world_key := ""
+static var _cache_record_keys: Dictionary = {}
+static var _prepared_snapshot_id := 0
 
 
 static func clear_cache() -> void:
 	_cache.clear()
+	_cache_world_key = ""
+	_cache_record_keys.clear()
+	_prepared_snapshot_id = 0
+
+
+## Directory revisions create new chart snapshots, but unchanged harbour
+## geometry remains valid. Rebuild only changed / removed records; a world
+## replacement (even with the same geography) owns a separate runtime cache.
+static func prepare_snapshot(chart_snapshot) -> void:
+	if chart_snapshot == null:
+		clear_cache()
+		return
+	var snapshot_id: int = chart_snapshot.get_instance_id()
+	if snapshot_id == _prepared_snapshot_id:
+		return
+	var layout_key := str(chart_snapshot.layout_checksum)
+	if layout_key.is_empty() and chart_snapshot.layout != null:
+		layout_key = str(chart_snapshot.layout.get_instance_id())
+	var world_key := JSON.stringify([
+		chart_snapshot.preview,
+		chart_snapshot.live_world_id,
+		chart_snapshot.world_seed,
+		chart_snapshot.generation_version,
+		chart_snapshot.world_size_m,
+		chart_snapshot.world_preset,
+		layout_key,
+	])
+	if world_key != _cache_world_key:
+		clear_cache()
+		_cache_world_key = world_key
+	var next_records: Dictionary = {}
+	for info in chart_snapshot.ports:
+		var pid := str(info.get("id", "")).strip_edges()
+		if pid.is_empty():
+			continue
+		var record_key: int = info.hash()
+		next_records[pid] = record_key
+		if _cache_record_keys.has(pid) and int(_cache_record_keys[pid]) != record_key:
+			_cache.erase(pid)
+	for pid in _cache_record_keys:
+		if not next_records.has(pid):
+			_cache.erase(pid)
+	_cache_record_keys = next_records
+	_prepared_snapshot_id = snapshot_id
 
 
 ## Drop one port so the next draw re-expands with fresh catalog/summary pose.
@@ -43,15 +92,17 @@ static func is_cached(port_id: String) -> bool:
 
 
 static func for_port(port_id: String, tree: SceneTree, chart_snapshot) -> ChartHarbourPlan:
-	var snapshot_id: int = chart_snapshot.get_instance_id() if chart_snapshot != null else 0
-	if snapshot_id != _cache_snapshot_id:
-		clear_cache()
-		_cache_snapshot_id = snapshot_id
+	prepare_snapshot(chart_snapshot)
 	var pid := port_id.strip_edges()
 	if pid.is_empty():
 		return null
 	if _cache.has(pid):
 		return _cache[pid] as ChartHarbourPlan
+	var info: Dictionary=chart_snapshot.port_info(pid) if chart_snapshot!=null else {}
+	if str(info.get("source",""))=="custom":
+		var custom:=from_custom_summary(info)
+		_cache[pid]=custom
+		return custom
 	var data := resolve_port_data(pid, tree, chart_snapshot)
 	if data == null or data.layout_graph == null:
 		## Cache misses so we do not re-expand every frame.
@@ -63,6 +114,9 @@ static func for_port(port_id: String, tree: SceneTree, chart_snapshot) -> ChartH
 
 
 static func resolve_port_data(port_id: String, tree: SceneTree, chart_snapshot) -> PortData:
+	# A passive construction summary must never acquire a legacy generated port,
+	# even if a live registry happens to contain a conflicting identifier.
+	if chart_snapshot!=null and str(chart_snapshot.port_info(port_id).get("source",""))=="custom":return null
 	var live: bool = chart_snapshot == null or not chart_snapshot.preview
 	if tree != null and live:
 		var harbour := HarbourRegistry.controller(port_id)
@@ -116,6 +170,22 @@ static func resolve_port_data(port_id: String, tree: SceneTree, chart_snapshot) 
 				def.region_kind = PortDefinition.RegionKind.LEGACY_ISLAND
 		def.ground_mode = PortDefinition.GroundMode.WORLD_TERRAIN
 	return PortExpander.expand(def, int(chart_snapshot.world_seed), chart_snapshot.layout)
+
+
+static func from_custom_summary(info: Dictionary) -> ChartHarbourPlan:
+	var plan:=ChartHarbourPlan.new()
+	plan.custom_construction=true
+	plan.port_id=str(info.get("id",""))
+	plan.world_origin=info.get("position",Vector3.ZERO)
+	var raw_bounds: Array=info.get("built_bounds_m",[])
+	if raw_bounds.size()==4:plan.bounds=Rect2(float(raw_bounds[0]),float(raw_bounds[1]),float(raw_bounds[2]),float(raw_bounds[3]))
+	for raw in info.get("platform_polygons_m",[]):
+		var polygon:=PackedVector2Array()
+		for point in raw:polygon.append(Vector2(float(point[0]),float(point[1])))
+		if polygon.size()>=3:plan.platform_polys.append(polygon)
+	for raw in info.get("exposed_edges_m",[]):
+		if raw.size()==2:plan.exposed_edges.append(PackedVector2Array([Vector2(float(raw[0][0]),float(raw[0][1])),Vector2(float(raw[1][0]),float(raw[1][1]))]))
+	return plan
 
 
 static func from_port_data(data: PortData) -> ChartHarbourPlan:
@@ -178,6 +248,12 @@ static func from_port_data(data: PortData) -> ChartHarbourPlan:
 
 
 func draw(canvas: CanvasItem, ctx: Dictionary, show_labels: bool = true) -> void:
+	if custom_construction:
+		# Draw each actual platform, preserving concave outlines and inner gaps.
+		# Only exposed construction edges are stroked; tile joins are not a grid.
+		for polygon in platform_polys:_fill_poly(canvas,ctx,polygon,Color(.22,.25,.25,1))
+		for edge in exposed_edges:_stroke_open(canvas,ctx,edge,C_DOCK_FACE,1.5)
+		return
 	_fill_poly(canvas, ctx, foundation_poly, C_FOUNDATION)
 	_stroke_poly(canvas, ctx, foundation_poly, C_FOUNDATION_EDGE, 1.8)
 	for i in range(asphalt_polys.size()):

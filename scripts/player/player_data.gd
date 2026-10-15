@@ -64,6 +64,9 @@ var active_vessel: Dictionary = {}
 ## Authoritative company/economy aggregate. Kept JSON-safe so the exact same
 ## contract can be persisted locally or hydrated from a future server.
 var company: Dictionary = {}
+var personal_inventory: Dictionary = PlayerInventoryState.empty()
+## Local catch custody and sale receipts; multiplayer lives in authority projections.
+var local_fishing: Dictionary = {}
 
 const LEGACY_STARTER_TEMPLATE_PATH := "user://shipwright_orders/starter_cargo_ship.json"
 const LEGACY_STARTER_HULL_ID := "cargo_ship"
@@ -106,6 +109,7 @@ var tutorial_seen: Dictionary = {}
 var starter_trawler_claimed: bool = false
 
 ## Captain-chosen home quay. Defaults to the world seed's first coastal port.
+var home_port_document: Dictionary = {}
 var home_port_id: String = "port-home"
 
 
@@ -391,6 +395,8 @@ func to_dict() -> Dictionary:
 		"owned_vessels":            owned_out,
 		"active_vessel":            active_out,
 		"company":                  company.duplicate(true),
+		"personal_inventory":       PlayerInventoryState.normalize(personal_inventory),
+		"local_fishing": local_fishing.duplicate(true),
 		"appearance":               appearance.to_dict(),
 		# v2 additions
 		"accepted_contracts":       accepted_contracts.duplicate(true),
@@ -400,6 +406,7 @@ func to_dict() -> Dictionary:
 		"tutorial_seen":            tutorial_seen.duplicate(),
 		"starter_trawler_claimed":  starter_trawler_claimed,
 		"home_port_id":             home_port_id,
+		"home_port_document": home_port_document.duplicate(true),
 	}
 
 
@@ -423,6 +430,9 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	var company_raw: Variant = d.get("company", {})
 	if typeof(company_raw) == TYPE_DICTIONARY:
 		pd.company = (company_raw as Dictionary).duplicate(true)
+	pd.personal_inventory = PlayerInventoryState.normalize(d.get("personal_inventory",{}))
+	if d.get("local_fishing", {}) is Dictionary:
+		pd.local_fishing = d.get("local_fishing", {}).duplicate(true)
 	pd.appearance = CharacterAppearance.from_dict(d.get("appearance", {}) as Dictionary)
 	# v2 additions — default to empty / sentinel for v1 saves (forward compat).
 	var contracts_raw: Variant = d.get("accepted_contracts", [])
@@ -440,6 +450,7 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	if typeof(tut_raw) == TYPE_DICTIONARY:
 		pd.tutorial_seen = (tut_raw as Dictionary).duplicate()
 	pd.starter_trawler_claimed = bool(d.get("starter_trawler_claimed", false))
+	pd.home_port_document = d.get("home_port_document", {}).duplicate(true) if d.get("home_port_document", {}) is Dictionary else {}
 	var home_port := str(d.get("home_port_id", "port-home")).strip_edges()
 	pd.home_port_id = home_port if not home_port.is_empty() else "port-home"
 	# Save v6 migration: existing captains receive a compatible company wrapper
@@ -465,5 +476,21 @@ static func from_dict(d: Dictionary) -> PlayerData:
 			str(pd.company.get("id", "")), pd.home_port_id, int(Time.get_unix_time_from_system())
 		)]
 		pd.company["onboarding_complete"] = not pd.owned_vessels.is_empty()
+	# Migrate paid portable tackle once. Boat consumables keep their existing stores.
+	if not d.has("personal_inventory"):
+		for vessel: Dictionary in pd.owned_vessels:
+			var retained: Array=[]
+			for item: Dictionary in VesselEquipment.normalize(vessel.get("purchased_items",[])):
+				if item.item_id not in ["fishing_rod","harpe"]: retained.append(item);continue
+				var remaining:=int(item.quantity)
+				for unit in int(item.quantity):
+					var result:=PlayerInventoryState.change(pd.personal_inventory,"inventory.purchase",{"item_id":item.item_id},str(item.uid)+("-%d"%unit if unit>0 else ""))
+					if not result.ok:break
+					pd.personal_inventory=result.inventory;remaining-=1
+				if remaining>0:
+					item.quantity=remaining;retained.append(item)
+			vessel.purchased_items=retained
+			vessel.erase("equipped_fishing_item")
+			if str(pd.active_vessel.get("uid",""))==str(vessel.get("uid","")):pd.active_vessel=vessel.duplicate(true)
 	pd.repair_save_consistency()
 	return pd

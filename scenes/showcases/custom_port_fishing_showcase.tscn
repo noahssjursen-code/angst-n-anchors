@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/port/building/custom_port_showcase.gd" id="1"]
+[node name="FishingPortWorkshop" type="Node3D"]
+script = ExtResource("1")
+example_kind = 1

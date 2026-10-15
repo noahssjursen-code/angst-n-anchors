@@ -1,0 +1,2555 @@
+{
+  "version": 1,
+  "units": "metres",
+  "axis": "Godot +Y up; local -Z is exterior / water",
+  "datum": "Finished deck y=0; roofs at y=3m; edge fittings hang below y=0",
+  "assets": [
+    {
+      "id": "tractor_tire_fender",
+      "name": "Hanging tractor tyre",
+      "model_path": "res://resources/models/parts/custom_harbour/tractor_tire_fender.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/tractor_tire_fender.blend",
+      "footprint_m": [
+        1.5,
+        0.62
+      ],
+      "height_m": 1.88,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "edge",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            -1.12,
+            -0.34
+          ],
+          "size_m": [
+            1.42,
+            1.42,
+            0.47
+          ]
+        }
+      ],
+      "sockets": {
+        "Edge": [
+          0.0,
+          0.0,
+          -0.0
+        ],
+        "Contact": [
+          0.0,
+          -1.12,
+          -0.57
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -0.7521,
+          -1.8325,
+          -0.575
+        ],
+        "max": [
+          0.7521,
+          0.1283,
+          0.265
+        ]
+      },
+      "triangles": 5240,
+      "notes": "Deck datum at anchor plates; hangs below the lip. No berth capacity implied."
+    },
+    {
+      "id": "lifering_station",
+      "name": "Lifebuoy and throw line",
+      "model_path": "res://resources/models/parts/custom_harbour/lifering_station.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/lifering_station.blend",
+      "footprint_m": [
+        1.0,
+        0.6
+      ],
+      "height_m": 2.02,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "surface",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            1,
+            0
+          ],
+          "size_m": [
+            0.2,
+            2,
+            0.2
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.455,
+          0.0,
+          -0.18
+        ],
+        "max": [
+          0.455,
+          2.0,
+          0.2665
+        ]
+      },
+      "triangles": 4372,
+      "notes": "Decorative safety fitting; rescue interaction is not implemented."
+    },
+    {
+      "id": "quay_edge_4m",
+      "name": "Flush quay edge \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_edge_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_edge_4m.blend",
+      "footprint_m": [
+        4,
+        0.7
+      ],
+      "height_m": 0.45,
+      "category": "Quay fittings",
+      "snap_m": 4,
+      "placement_kind": "edge",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            -0.22,
+            0.34
+          ],
+          "size_m": [
+            4,
+            0.44,
+            0.68
+          ]
+        }
+      ],
+      "sockets": {
+        "Start": [
+          -2.0,
+          0.0,
+          -0.0
+        ],
+        "End": [
+          2.0,
+          0.0,
+          -0.0
+        ],
+        "Edge": [
+          0.0,
+          0.0,
+          -0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          -0.44,
+          -0.05
+        ],
+        "max": [
+          2.0,
+          0.024,
+          0.6825
+        ]
+      },
+      "triangles": 1148,
+      "notes": "Flush coping with no raised trip kerb. Foundations remain separate.",
+      "footprint_polygon_m": [
+        [
+          -2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0.68
+        ],
+        [
+          -2,
+          0.68
+        ]
+      ]
+    },
+    {
+      "id": "pallet_stack",
+      "name": "Three empty timber pallets",
+      "model_path": "res://resources/models/parts/custom_harbour/pallet_stack.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/pallet_stack.blend",
+      "footprint_m": [
+        1.2,
+        0.8
+      ],
+      "height_m": 0.489,
+      "category": "Cargo details",
+      "snap_m": 0.5,
+      "placement_kind": "surface",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            0.245,
+            0
+          ],
+          "size_m": [
+            1.2,
+            0.49,
+            0.8
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.6,
+          0.0,
+          -0.4
+        ],
+        "max": [
+          0.6,
+          0.489,
+          0.4
+        ]
+      },
+      "triangles": 7968,
+      "notes": "Visual prop, not an inventory quantity or container slot."
+    },
+    {
+      "id": "timber_bundle",
+      "name": "Strapped sawn timber",
+      "model_path": "res://resources/models/parts/custom_harbour/timber_bundle.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/timber_bundle.blend",
+      "footprint_m": [
+        1.3,
+        4.0
+      ],
+      "height_m": 1.08,
+      "category": "Cargo details",
+      "snap_m": 1,
+      "placement_kind": "surface",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            0.54,
+            0
+          ],
+          "size_m": [
+            1.3,
+            1.08,
+            4
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.65,
+          0.0,
+          -1.9964
+        ],
+        "max": [
+          0.65,
+          1.0725,
+          1.9964
+        ]
+      },
+      "triangles": 4968,
+      "notes": "Visual stock bundle; quantities and ownership come from port stock records."
+    },
+    {
+      "id": "workshop_wall_4m",
+      "name": "Workshop wall \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/workshop_wall_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/workshop_wall_4m.blend",
+      "footprint_m": [
+        4,
+        0.28
+      ],
+      "height_m": 3,
+      "category": "Workshop",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            0.0,
+            1.5,
+            0
+          ],
+          "size_m": [
+            4,
+            3,
+            0.28
+          ]
+        }
+      ],
+      "sockets": {
+        "Start": [
+          -2.0,
+          0.0,
+          -0.0
+        ],
+        "End": [
+          2.0,
+          0.0,
+          -0.0
+        ],
+        "RoofDatum": [
+          0.0,
+          3.0,
+          -0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          0.0,
+          -0.1505
+        ],
+        "max": [
+          2.0,
+          3.0,
+          0.115
+        ]
+      },
+      "triangles": 2928,
+      "notes": "",
+      "paint_regions": [
+        "Office cladding",
+        "Ivory trim"
+      ]
+    },
+    {
+      "id": "workshop_window_4m",
+      "name": "Workshop window \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/workshop_window_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/workshop_window_4m.blend",
+      "footprint_m": [
+        4,
+        0.38
+      ],
+      "height_m": 3,
+      "category": "Workshop",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            -1.59,
+            1.5,
+            0
+          ],
+          "size_m": [
+            0.8200000000000001,
+            3,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            1.59,
+            1.5,
+            0
+          ],
+          "size_m": [
+            0.8200000000000001,
+            3,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            0.0,
+            0.475,
+            0
+          ],
+          "size_m": [
+            2.36,
+            0.95,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            0.0,
+            2.675,
+            0
+          ],
+          "size_m": [
+            2.36,
+            0.6499999999999999,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            0,
+            1.65,
+            0
+          ],
+          "size_m": [
+            2.36,
+            1.4,
+            0.12
+          ]
+        }
+      ],
+      "sockets": {
+        "Start": [
+          -2.0,
+          0.0,
+          -0.0
+        ],
+        "End": [
+          2.0,
+          0.0,
+          -0.0
+        ],
+        "RoofDatum": [
+          0.0,
+          3.0,
+          -0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          0.0,
+          -0.33
+        ],
+        "max": [
+          2.0,
+          3.0,
+          0.115
+        ]
+      },
+      "triangles": 6096,
+      "notes": "",
+      "paint_regions": [
+        "Office cladding",
+        "Ivory trim"
+      ]
+    },
+    {
+      "id": "workshop_door_4m",
+      "name": "Decorative closed door \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/workshop_door_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/workshop_door_4m.blend",
+      "footprint_m": [
+        4,
+        0.28
+      ],
+      "height_m": 3,
+      "category": "Workshop",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            -1.33,
+            1.5,
+            0
+          ],
+          "size_m": [
+            1.3399999999999999,
+            3,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            1.33,
+            1.5,
+            0
+          ],
+          "size_m": [
+            1.3399999999999999,
+            3,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            0.0,
+            2.65,
+            0
+          ],
+          "size_m": [
+            1.32,
+            0.7000000000000002,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            0,
+            1.13,
+            0
+          ],
+          "size_m": [
+            1.32,
+            2.26,
+            0.28
+          ]
+        }
+      ],
+      "sockets": {
+        "Start": [
+          -2.0,
+          0.0,
+          -0.0
+        ],
+        "End": [
+          2.0,
+          0.0,
+          -0.0
+        ],
+        "RoofDatum": [
+          0.0,
+          3.0,
+          -0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          0.0,
+          -0.185
+        ],
+        "max": [
+          2.0,
+          3.0,
+          0.14
+        ]
+      },
+      "triangles": 4440,
+      "notes": "Closed exterior decoration with solid collision. No doorway interaction or interior.",
+      "paint_regions": [
+        "Office cladding",
+        "Ivory trim"
+      ]
+    },
+    {
+      "id": "workshop_open_bay_4m",
+      "name": "Closed workshop shutter \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/workshop_open_bay_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/workshop_open_bay_4m.blend",
+      "footprint_m": [
+        4,
+        0.52
+      ],
+      "height_m": 3,
+      "category": "Workshop",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            -1.8,
+            1.5,
+            0
+          ],
+          "size_m": [
+            0.3999999999999999,
+            3,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            1.8,
+            1.5,
+            0
+          ],
+          "size_m": [
+            0.3999999999999999,
+            3,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            0.0,
+            2.825,
+            0
+          ],
+          "size_m": [
+            3.2,
+            0.3500000000000001,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            0,
+            1.325,
+            0
+          ],
+          "size_m": [
+            3.2,
+            2.65,
+            0.28
+          ]
+        }
+      ],
+      "sockets": {
+        "Start": [
+          -2.0,
+          0.0,
+          -0.0
+        ],
+        "End": [
+          2.0,
+          0.0,
+          -0.0
+        ],
+        "RoofDatum": [
+          0.0,
+          3.0,
+          -0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          0.0,
+          -0.3425
+        ],
+        "max": [
+          2.0,
+          3.0,
+          0.19
+        ]
+      },
+      "triangles": 7036,
+      "notes": "Decorative closed 3.2m roller shutter. Solid collision; no interior. Asset ID retained for existing port saves.",
+      "paint_regions": [
+        "Office cladding",
+        "Ivory trim"
+      ]
+    },
+    {
+      "id": "workshop_roof_4m",
+      "name": "Workshop roof \u00b7 4 \u00d7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/workshop_roof_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/workshop_roof_4m.blend",
+      "footprint_m": [
+        4,
+        4
+      ],
+      "height_m": 3.18,
+      "category": "Workshop",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            3.08,
+            0
+          ],
+          "size_m": [
+            4,
+            0.16,
+            4
+          ]
+        }
+      ],
+      "sockets": {
+        "WallTop": [
+          0.0,
+          3.0,
+          -0.0
+        ],
+        "North": [
+          0.0,
+          3.0,
+          -2.0
+        ],
+        "South": [
+          0.0,
+          3.0,
+          2.0
+        ],
+        "East": [
+          2.0,
+          3.0,
+          -0.0
+        ],
+        "West": [
+          -2.0,
+          3.0,
+          -0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          3.0,
+          -2.0
+        ],
+        "max": [
+          2.0,
+          3.1765,
+          2.0
+        ]
+      },
+      "triangles": 888,
+      "notes": "Underside fixed at deck +3m. Repeat across any rectangular building.",
+      "layer": "roof"
+    },
+    {
+      "id": "workshop_roof_edge_4m",
+      "name": "Workshop gutter edge \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/workshop_roof_edge_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/workshop_roof_edge_4m.blend",
+      "footprint_m": [
+        4,
+        0.35
+      ],
+      "height_m": 3.22,
+      "category": "Workshop",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -2.0,
+          2.93,
+          -0.28
+        ],
+        "max": [
+          2.0,
+          3.21,
+          0.15
+        ]
+      },
+      "triangles": 972,
+      "notes": "",
+      "layer": "roof_edge"
+    },
+    {
+      "id": "workshop_corner_trim",
+      "name": "Workshop corner trim",
+      "model_path": "res://resources/models/parts/custom_harbour/workshop_corner_trim.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/workshop_corner_trim.blend",
+      "footprint_m": [
+        0.32,
+        0.32
+      ],
+      "height_m": 3,
+      "category": "Workshop",
+      "snap_m": 0.5,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.14,
+          0.0,
+          -0.1575
+        ],
+        "max": [
+          0.1575,
+          3.0,
+          0.14
+        ]
+      },
+      "triangles": 216,
+      "notes": "",
+      "layer": "trim"
+    },
+    {
+      "id": "foundation_triangle_4m",
+      "name": "Triangle foundation \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/foundation_triangle_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/foundation_triangle_4m.blend",
+      "footprint_m": [
+        4,
+        4
+      ],
+      "height_m": 1,
+      "category": "Foundations",
+      "snap_m": 4,
+      "placement_kind": "foundation",
+      "colliders": [],
+      "sockets": {
+        "SupportDatum": [
+          0.0,
+          -0.24,
+          -0.0
+        ],
+        "PlanCorner0": [
+          -2.0,
+          0.0,
+          -2.0
+        ],
+        "PlanCorner1": [
+          2.0,
+          0.0,
+          2.0
+        ],
+        "PlanCorner2": [
+          -2.0,
+          0.0,
+          2.0
+        ],
+        "WaterEdge0": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          -1.0,
+          -2.0
+        ],
+        "max": [
+          2.0,
+          0.0,
+          2.0
+        ]
+      },
+      "triangles": 16,
+      "notes": "Deck datum Y0. Exact polygon top/collision; SupportDatum extends below the cap to the sampled seabed. No invisible square in the cut corner.",
+      "footprint_polygon_m": [
+        [
+          -2,
+          -2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          -2,
+          2
+        ]
+      ],
+      "water_edge_indices": [
+        0
+      ],
+      "foundation": {
+        "support_node": "SupportDatum",
+        "cap_thickness_m": 0.24,
+        "authored_support_depth_m": 0.76,
+        "default_depth_m": 1.0
+      },
+      "layer": "foundation",
+      "surface": "foundation"
+    },
+    {
+      "id": "quay_triangle_4m",
+      "name": "Diagonal quay \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_triangle_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_triangle_4m.blend",
+      "footprint_m": [
+        4,
+        4
+      ],
+      "height_m": 1,
+      "category": "Foundations",
+      "snap_m": 4,
+      "placement_kind": "foundation",
+      "colliders": [],
+      "sockets": {
+        "SupportDatum": [
+          0.0,
+          -0.24,
+          -0.0
+        ],
+        "PlanCorner0": [
+          -2.0,
+          0.0,
+          -2.0
+        ],
+        "PlanCorner1": [
+          2.0,
+          0.0,
+          2.0
+        ],
+        "PlanCorner2": [
+          -2.0,
+          0.0,
+          2.0
+        ],
+        "WaterEdge0": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0543,
+          -1.0,
+          -2.0
+        ],
+        "max": [
+          2.0,
+          0.0,
+          2.0543
+        ]
+      },
+      "triangles": 552,
+      "notes": "Deck datum Y0. Exact polygon top/collision; SupportDatum extends below the cap to the sampled seabed. No invisible square in the cut corner.",
+      "footprint_polygon_m": [
+        [
+          -2,
+          -2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          -2,
+          2
+        ]
+      ],
+      "water_edge_indices": [
+        0
+      ],
+      "foundation": {
+        "support_node": "SupportDatum",
+        "cap_thickness_m": 0.24,
+        "authored_support_depth_m": 0.76,
+        "default_depth_m": 1.0
+      },
+      "layer": "foundation",
+      "surface": "quay"
+    },
+    {
+      "id": "foundation_chamfer_4m",
+      "name": "Chamfered foundation \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/foundation_chamfer_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/foundation_chamfer_4m.blend",
+      "footprint_m": [
+        4,
+        4
+      ],
+      "height_m": 1,
+      "category": "Foundations",
+      "snap_m": 4,
+      "placement_kind": "foundation",
+      "colliders": [],
+      "sockets": {
+        "SupportDatum": [
+          0.0,
+          -0.24,
+          -0.0
+        ],
+        "PlanCorner0": [
+          -2.0,
+          0.0,
+          -2.0
+        ],
+        "PlanCorner1": [
+          1.0,
+          0.0,
+          -2.0
+        ],
+        "PlanCorner2": [
+          2.0,
+          0.0,
+          -1.0
+        ],
+        "PlanCorner3": [
+          2.0,
+          0.0,
+          2.0
+        ],
+        "PlanCorner4": [
+          -2.0,
+          0.0,
+          2.0
+        ],
+        "WaterEdge1": [
+          1.5,
+          0.0,
+          -1.5
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          -1.0,
+          -2.0
+        ],
+        "max": [
+          2.0,
+          0.0,
+          2.0
+        ]
+      },
+      "triangles": 32,
+      "notes": "Deck datum Y0. Exact polygon top/collision; SupportDatum extends below the cap to the sampled seabed. No invisible square in the cut corner.",
+      "footprint_polygon_m": [
+        [
+          -2,
+          -2
+        ],
+        [
+          1,
+          -2
+        ],
+        [
+          2,
+          -1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          -2,
+          2
+        ]
+      ],
+      "water_edge_indices": [
+        1
+      ],
+      "foundation": {
+        "support_node": "SupportDatum",
+        "cap_thickness_m": 0.24,
+        "authored_support_depth_m": 0.76,
+        "default_depth_m": 1.0
+      },
+      "layer": "foundation",
+      "surface": "foundation"
+    },
+    {
+      "id": "quay_chamfer_4m",
+      "name": "Chamfered quay \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_chamfer_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_chamfer_4m.blend",
+      "footprint_m": [
+        4,
+        4
+      ],
+      "height_m": 1,
+      "category": "Foundations",
+      "snap_m": 4,
+      "placement_kind": "foundation",
+      "colliders": [],
+      "sockets": {
+        "SupportDatum": [
+          0.0,
+          -0.24,
+          -0.0
+        ],
+        "PlanCorner0": [
+          -2.0,
+          0.0,
+          -2.0
+        ],
+        "PlanCorner1": [
+          1.0,
+          0.0,
+          -2.0
+        ],
+        "PlanCorner2": [
+          2.0,
+          0.0,
+          -1.0
+        ],
+        "PlanCorner3": [
+          2.0,
+          0.0,
+          2.0
+        ],
+        "PlanCorner4": [
+          -2.0,
+          0.0,
+          2.0
+        ],
+        "WaterEdge0": [
+          -0.5,
+          0.0,
+          -2.0
+        ],
+        "WaterEdge1": [
+          1.5,
+          0.0,
+          -1.5
+        ],
+        "WaterEdge2": [
+          2.0,
+          0.0,
+          0.5
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -2.0,
+          -1.0,
+          -2.022
+        ],
+        "max": [
+          2.022,
+          0.0,
+          2.0
+        ]
+      },
+      "triangles": 1080,
+      "notes": "Deck datum Y0. Exact polygon top/collision; SupportDatum extends below the cap to the sampled seabed. No invisible square in the cut corner.",
+      "footprint_polygon_m": [
+        [
+          -2,
+          -2
+        ],
+        [
+          1,
+          -2
+        ],
+        [
+          2,
+          -1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          -2,
+          2
+        ]
+      ],
+      "water_edge_indices": [
+        0,
+        1,
+        2
+      ],
+      "foundation": {
+        "support_node": "SupportDatum",
+        "cap_thickness_m": 0.24,
+        "authored_support_depth_m": 0.76,
+        "default_depth_m": 1.0
+      },
+      "layer": "foundation",
+      "surface": "quay"
+    },
+    {
+      "id": "warehouse_roof_8x4",
+      "name": "Pitched roof \u00b7 8 \u00d7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/warehouse_roof_8x4.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/warehouse_roof_8x4.blend",
+      "footprint_m": [
+        8,
+        4
+      ],
+      "height_m": 5.51,
+      "category": "Waterfront buildings",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            -2.0,
+            4.2,
+            0
+          ],
+          "size_m": [
+            4.66476151587624,
+            0.12,
+            4
+          ],
+          "rotation_degrees": [
+            0,
+            0,
+            30.96375653207352
+          ]
+        },
+        {
+          "position_m": [
+            2.0,
+            4.2,
+            0
+          ],
+          "size_m": [
+            4.66476151587624,
+            0.12,
+            4
+          ],
+          "rotation_degrees": [
+            0,
+            0,
+            -30.96375653207352
+          ]
+        }
+      ],
+      "sockets": {
+        "Ridge-2": [
+          0.0,
+          5.4,
+          2.0
+        ],
+        "Ridge2": [
+          0.0,
+          5.4,
+          -2.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -4.5174,
+          -1.1856,
+          -2.0
+        ],
+        "max": [
+          4.521,
+          6.8152,
+          2.0
+        ]
+      },
+      "triangles": 3672,
+      "notes": "8m clear building width; repeat 4m along the ridge. Eaves at +3m, ridge +5.4m.",
+      "layer": "roof"
+    },
+    {
+      "id": "office_roof_8x4",
+      "name": "Upper-storey roof \u00b7 8 \u00d7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/office_roof_8x4.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/office_roof_8x4.blend",
+      "footprint_m": [
+        8,
+        4
+      ],
+      "height_m": 8.51,
+      "category": "Waterfront buildings",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            -2.0,
+            7.2,
+            0
+          ],
+          "size_m": [
+            4.66476151587624,
+            0.12,
+            4
+          ],
+          "rotation_degrees": [
+            0,
+            0,
+            30.96375653207352
+          ]
+        },
+        {
+          "position_m": [
+            2.0,
+            7.2,
+            0
+          ],
+          "size_m": [
+            4.66476151587624,
+            0.12,
+            4
+          ],
+          "rotation_degrees": [
+            0,
+            0,
+            -30.96375653207352
+          ]
+        }
+      ],
+      "sockets": {
+        "Ridge-2": [
+          0.0,
+          8.4,
+          2.0
+        ],
+        "Ridge2": [
+          0.0,
+          8.4,
+          -2.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -4.5174,
+          1.8144,
+          -2.0
+        ],
+        "max": [
+          4.521,
+          9.8152,
+          2.0
+        ]
+      },
+      "triangles": 3672,
+      "notes": "For the decorative office upper facade. Fixed eaves +6m and ridge +8.4m.",
+      "layer": "roof"
+    },
+    {
+      "id": "warehouse_gable_8m",
+      "name": "Timber gable \u00b7 8 m",
+      "model_path": "res://resources/models/parts/custom_harbour/warehouse_gable_8m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/warehouse_gable_8m.blend",
+      "footprint_m": [
+        8,
+        0.38
+      ],
+      "height_m": 5.55,
+      "category": "Waterfront buildings",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -4.3811,
+          2.814,
+          -0.2642
+        ],
+        "max": [
+          4.3811,
+          5.666,
+          0.08
+        ]
+      },
+      "triangles": 7620,
+      "notes": "Closes the end above two standard 4m walls. Shares the +3m wall datum.",
+      "layer": "roof_trim",
+      "paint_regions": [
+        "Office cladding",
+        "Ivory trim"
+      ]
+    },
+    {
+      "id": "office_gable_8m",
+      "name": "Upper-storey gable \u00b7 8 m",
+      "model_path": "res://resources/models/parts/custom_harbour/office_gable_8m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/office_gable_8m.blend",
+      "footprint_m": [
+        8,
+        0.38
+      ],
+      "height_m": 8.55,
+      "category": "Waterfront buildings",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -4.3811,
+          5.814,
+          -0.2642
+        ],
+        "max": [
+          4.3811,
+          8.666,
+          0.08
+        ]
+      },
+      "triangles": 7620,
+      "notes": "Gable for the decorative office upper facade; fixed base +6m.",
+      "layer": "roof_trim",
+      "paint_regions": [
+        "Office cladding",
+        "Ivory trim"
+      ]
+    },
+    {
+      "id": "harbour_office_upper_floor",
+      "name": "Office upper facade \u00b7 8 m",
+      "model_path": "res://resources/models/parts/custom_harbour/harbour_office_upper_floor.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/harbour_office_upper_floor.blend",
+      "footprint_m": [
+        8.38,
+        8.38
+      ],
+      "height_m": 6,
+      "category": "Waterfront buildings",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            -4,
+            4.5,
+            0
+          ],
+          "size_m": [
+            0.28,
+            3,
+            8
+          ]
+        },
+        {
+          "position_m": [
+            4,
+            4.5,
+            0
+          ],
+          "size_m": [
+            0.28,
+            3,
+            8
+          ]
+        },
+        {
+          "position_m": [
+            0,
+            4.5,
+            4
+          ],
+          "size_m": [
+            8,
+            3,
+            0.28
+          ]
+        },
+        {
+          "position_m": [
+            0,
+            4.5,
+            -4
+          ],
+          "size_m": [
+            8,
+            3,
+            0.28
+          ]
+        }
+      ],
+      "sockets": {
+        "Start": [
+          -4.0,
+          3.0,
+          -4.0
+        ],
+        "End": [
+          0.0,
+          3.0,
+          -4.0
+        ],
+        "RoofDatum": [
+          -2.0,
+          6.0,
+          -4.0
+        ],
+        "Start.001": [
+          0.0,
+          3.0,
+          -4.0
+        ],
+        "End.001": [
+          4.0,
+          3.0,
+          -4.0
+        ],
+        "RoofDatum.001": [
+          2.0,
+          6.0,
+          -4.0
+        ],
+        "Start.002": [
+          4.0,
+          3.0,
+          4.0
+        ],
+        "End.002": [
+          0.0,
+          3.0,
+          4.0
+        ],
+        "RoofDatum.002": [
+          2.0,
+          6.0,
+          4.0
+        ],
+        "Start.003": [
+          0.0,
+          3.0,
+          4.0
+        ],
+        "End.003": [
+          -4.0,
+          3.0,
+          4.0
+        ],
+        "RoofDatum.003": [
+          -2.0,
+          6.0,
+          4.0
+        ],
+        "Start.004": [
+          -4.0,
+          3.0,
+          4.0
+        ],
+        "End.004": [
+          -4.0,
+          3.0,
+          -0.0
+        ],
+        "RoofDatum.004": [
+          -4.0,
+          6.0,
+          2.0
+        ],
+        "Start.005": [
+          -4.0,
+          3.0,
+          -0.0
+        ],
+        "End.005": [
+          -4.0,
+          3.0,
+          -4.0
+        ],
+        "RoofDatum.005": [
+          -4.0,
+          6.0,
+          -2.0
+        ],
+        "Start.006": [
+          4.0,
+          3.0,
+          -4.0
+        ],
+        "End.006": [
+          4.0,
+          3.0,
+          -0.0
+        ],
+        "RoofDatum.006": [
+          4.0,
+          6.0,
+          -2.0
+        ],
+        "Start.007": [
+          4.0,
+          3.0,
+          -0.0
+        ],
+        "End.007": [
+          4.0,
+          3.0,
+          4.0
+        ],
+        "RoofDatum.007": [
+          4.0,
+          6.0,
+          2.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -4.33,
+          3.0,
+          -4.33
+        ],
+        "max": [
+          4.33,
+          6.0,
+          4.33
+        ]
+      },
+      "triangles": 48768,
+      "notes": "Decorative exterior only: no stairs, floors or interior. Assemble over an 8 \u00d7 8m shell; finish with upper-storey roof. Asset ID retained for saved ports.",
+      "layer": "upper_floor",
+      "paint_regions": [
+        "Office cladding",
+        "Ivory trim"
+      ]
+    },
+    {
+      "id": "warehouse_downpipe",
+      "name": "Gutter downpipe",
+      "model_path": "res://resources/models/parts/custom_harbour/warehouse_downpipe.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/warehouse_downpipe.blend",
+      "footprint_m": [
+        0.3,
+        0.4
+      ],
+      "height_m": 2.85,
+      "category": "Waterfront buildings",
+      "snap_m": 0.5,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.07,
+          0.0171,
+          -0.2036
+        ],
+        "max": [
+          0.07,
+          2.8118,
+          0.13
+        ]
+      },
+      "triangles": 840,
+      "notes": "",
+      "layer": "wall_trim"
+    },
+    {
+      "id": "office_downpipe",
+      "name": "Upper-storey gutter downpipe",
+      "model_path": "res://resources/models/parts/custom_harbour/office_downpipe.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/office_downpipe.blend",
+      "footprint_m": [
+        0.3,
+        0.4
+      ],
+      "height_m": 5.85,
+      "category": "Waterfront buildings",
+      "snap_m": 0.5,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.07,
+          0.0171,
+          -0.2036
+        ],
+        "max": [
+          0.07,
+          5.8118,
+          0.13
+        ]
+      },
+      "triangles": 1548,
+      "notes": "",
+      "layer": "wall_trim"
+    },
+    {
+      "id": "door_canopy_4m",
+      "name": "Covered loading porch \u00b7 4 \u00d7 2 m",
+      "model_path": "res://resources/models/parts/custom_harbour/door_canopy_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/door_canopy_4m.blend",
+      "footprint_m": [
+        4,
+        2
+      ],
+      "height_m": 3.09,
+      "category": "Waterfront buildings",
+      "snap_m": 1,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            -1.85,
+            1.32,
+            -0.85
+          ],
+          "size_m": [
+            0.18,
+            2.64,
+            0.18
+          ]
+        },
+        {
+          "position_m": [
+            1.85,
+            1.32,
+            -0.85
+          ],
+          "size_m": [
+            0.18,
+            2.64,
+            0.18
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -2.075,
+          0.0,
+          -1.0715
+        ],
+        "max": [
+          2.075,
+          3.0513,
+          1.0715
+        ]
+      },
+      "triangles": 1836,
+      "notes": "",
+      "layer": "surface"
+    },
+    {
+      "id": "sign_harbour",
+      "name": "Harbour office sign",
+      "model_path": "res://resources/models/parts/custom_harbour/sign_harbour.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/sign_harbour.blend",
+      "footprint_m": [
+        3.2,
+        0.46
+      ],
+      "height_m": 2.9,
+      "category": "Waterfront buildings",
+      "snap_m": 0.5,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -1.55,
+          2.44,
+          -0.223
+        ],
+        "max": [
+          1.55,
+          2.88,
+          -0.125
+        ]
+      },
+      "triangles": 1708,
+      "notes": "",
+      "layer": "wall_trim"
+    },
+    {
+      "id": "sign_workshop",
+      "name": "Workshop sign",
+      "model_path": "res://resources/models/parts/custom_harbour/sign_workshop.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/sign_workshop.blend",
+      "footprint_m": [
+        3.2,
+        0.46
+      ],
+      "height_m": 2.9,
+      "category": "Waterfront buildings",
+      "snap_m": 0.5,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -1.55,
+          2.44,
+          -0.223
+        ],
+        "max": [
+          1.55,
+          2.88,
+          -0.125
+        ]
+      },
+      "triangles": 1524,
+      "notes": "",
+      "layer": "wall_trim"
+    },
+    {
+      "id": "sign_warehouse",
+      "name": "Warehouse sign",
+      "model_path": "res://resources/models/parts/custom_harbour/sign_warehouse.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/sign_warehouse.blend",
+      "footprint_m": [
+        3.2,
+        0.46
+      ],
+      "height_m": 2.9,
+      "category": "Waterfront buildings",
+      "snap_m": 0.5,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -1.55,
+          2.44,
+          -0.223
+        ],
+        "max": [
+          1.55,
+          2.88,
+          -0.125
+        ]
+      },
+      "triangles": 2244,
+      "notes": "",
+      "layer": "wall_trim"
+    },
+    {
+      "id": "sign_fish",
+      "name": "Fish receiving sign",
+      "model_path": "res://resources/models/parts/custom_harbour/sign_fish.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/sign_fish.blend",
+      "footprint_m": [
+        3.2,
+        0.46
+      ],
+      "height_m": 2.9,
+      "category": "Waterfront buildings",
+      "snap_m": 0.5,
+      "placement_kind": "building",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -1.55,
+          2.44,
+          -0.223
+        ],
+        "max": [
+          1.55,
+          2.88,
+          -0.125
+        ]
+      },
+      "triangles": 1464,
+      "notes": "",
+      "layer": "wall_trim"
+    },
+    {
+      "id": "quay_bench",
+      "name": "Timber quay bench",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_bench.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_bench.blend",
+      "footprint_m": [
+        2,
+        0.75
+      ],
+      "height_m": 0.94,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "surface",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            0.46,
+            0
+          ],
+          "size_m": [
+            2,
+            0.92,
+            0.65
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -1.0,
+          0.0,
+          -0.31
+        ],
+        "max": [
+          1.0,
+          0.9262,
+          0.3638
+        ]
+      },
+      "triangles": 1512,
+      "notes": ""
+    },
+    {
+      "id": "dock_service_pedestal",
+      "name": "Shore power and water pedestal",
+      "model_path": "res://resources/models/parts/custom_harbour/dock_service_pedestal.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/dock_service_pedestal.blend",
+      "footprint_m": [
+        0.6,
+        0.6
+      ],
+      "height_m": 1.32,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "surface",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            0.65,
+            0
+          ],
+          "size_m": [
+            0.5,
+            1.3,
+            0.45
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.29,
+          0.0,
+          -0.315
+        ],
+        "max": [
+          0.29,
+          1.31,
+          0.275
+        ]
+      },
+      "triangles": 796,
+      "notes": "Visible sockets and tap; utility supply is not simulated yet."
+    },
+    {
+      "id": "mooring_warp_coil",
+      "name": "Coiled mooring rope",
+      "model_path": "res://resources/models/parts/custom_harbour/mooring_warp_coil.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/mooring_warp_coil.blend",
+      "footprint_m": [
+        1.8,
+        1.2
+      ],
+      "height_m": 0.08,
+      "category": "Cargo details",
+      "snap_m": 0.5,
+      "placement_kind": "surface",
+      "colliders": [],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.5217,
+          -0.1046,
+          -0.5081
+        ],
+        "max": [
+          0.9123,
+          0.1786,
+          0.5673
+        ]
+      },
+      "triangles": 9960,
+      "notes": "Loose deck dressing, not a second mooring constraint."
+    },
+    {
+      "id": "net_storage_cage",
+      "name": "Net and float storage cage",
+      "model_path": "res://resources/models/parts/custom_harbour/net_storage_cage.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/net_storage_cage.blend",
+      "footprint_m": [
+        1.2,
+        0.8
+      ],
+      "height_m": 1.38,
+      "category": "Cargo details",
+      "snap_m": 0.5,
+      "placement_kind": "surface",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            0.69,
+            0
+          ],
+          "size_m": [
+            1.2,
+            1.38,
+            0.8
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -0.6,
+          0.0,
+          -0.4
+        ],
+        "max": [
+          0.6,
+          1.35,
+          0.4
+        ]
+      },
+      "triangles": 5832,
+      "notes": ""
+    },
+    {
+      "id": "bulk_retaining_wall_4m",
+      "name": "Bulk retaining wall \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/bulk_retaining_wall_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/bulk_retaining_wall_4m.blend",
+      "footprint_m": [
+        4,
+        0.86
+      ],
+      "height_m": 1.94,
+      "category": "Cargo details",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            0.95,
+            0
+          ],
+          "size_m": [
+            4,
+            1.9,
+            0.55
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -2.0,
+          0.0,
+          -0.425
+        ],
+        "max": [
+          2.0,
+          1.91,
+          0.425
+        ]
+      },
+      "triangles": 740,
+      "notes": "Freestanding precast stock bay wall; inventory remains in the connected store."
+    },
+    {
+      "id": "quay_guardrail_4m",
+      "name": "Open quay railing \u00b7 4 m",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_guardrail_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_guardrail_4m.blend",
+      "footprint_m": [
+        4,
+        0.22
+      ],
+      "height_m": 1.14,
+      "category": "Quay fittings",
+      "snap_m": 4,
+      "placement_kind": "building",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            0.56,
+            0
+          ],
+          "size_m": [
+            4,
+            1.12,
+            0.14
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -2.09,
+          0.0,
+          -0.09
+        ],
+        "max": [
+          2.09,
+          1.128,
+          0.09
+        ]
+      },
+      "triangles": 544,
+      "notes": "For pedestrian edges; keep ship mooring faces clear."
+    },
+    {
+      "id": "quay_triangle_8m",
+      "name": "Diagonal quay \u00b7 8 m",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_triangle_8m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_triangle_8m.blend",
+      "footprint_m": [
+        8,
+        8
+      ],
+      "height_m": 1,
+      "category": "Foundations",
+      "snap_m": 8,
+      "placement_kind": "foundation",
+      "colliders": [],
+      "sockets": {
+        "SupportDatum": [
+          0.0,
+          -0.24,
+          -0.0
+        ]
+      },
+      "bounds_m": {
+        "min": [
+          -4.0,
+          -1.0,
+          -4.0
+        ],
+        "max": [
+          4.0,
+          -0.004,
+          4.0
+        ]
+      },
+      "triangles": 16,
+      "notes": "Full 8m diagonal edge. Shares exact footprint and extending collision with the 4m kit.",
+      "footprint_polygon_m": [
+        [
+          -4,
+          -4
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          -4,
+          4
+        ]
+      ],
+      "water_edge_indices": [
+        0
+      ],
+      "foundation": {
+        "support_node": "SupportDatum",
+        "cap_thickness_m": 0.24,
+        "authored_support_depth_m": 0.76,
+        "default_depth_m": 1.0
+      },
+      "layer": "foundation",
+      "surface": "quay"
+    },
+    {
+      "id": "quay_diagonal_coping_4m",
+      "name": "Diagonal coping \u00b7 4 m tile",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_diagonal_coping_4m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_diagonal_coping_4m.blend",
+      "footprint_m": [
+        5.656854249492381,
+        0.7
+      ],
+      "height_m": 0.45,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "edge",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            -0.22,
+            0.34
+          ],
+          "size_m": [
+            5.656854249492381,
+            0.44,
+            0.68
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -2.8284,
+          -0.44,
+          -0.05
+        ],
+        "max": [
+          2.8284,
+          0.024,
+          0.68
+        ]
+      },
+      "triangles": 612,
+      "notes": "Authored 22.5 degree mitre for a 45 degree change of quay direction. Deck remains flush.",
+      "layer": "coping",
+      "footprint_polygon_m": [
+        [
+          -2.8284271247461903,
+          0
+        ],
+        [
+          2.8284271247461903,
+          0
+        ],
+        [
+          2.5467619023324857,
+          0.68
+        ],
+        [
+          -2.5467619023324857,
+          0.68
+        ]
+      ]
+    },
+    {
+      "id": "quay_diagonal_coping_8m",
+      "name": "Diagonal coping \u00b7 8 m tile",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_diagonal_coping_8m.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_diagonal_coping_8m.blend",
+      "footprint_m": [
+        11.313708498984761,
+        0.7
+      ],
+      "height_m": 0.45,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "edge",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            -0.22,
+            0.34
+          ],
+          "size_m": [
+            11.313708498984761,
+            0.44,
+            0.68
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -5.6569,
+          -0.44,
+          -0.05
+        ],
+        "max": [
+          5.6569,
+          0.024,
+          0.68
+        ]
+      },
+      "triangles": 1012,
+      "notes": "Authored 22.5 degree mitre for a 45 degree change of quay direction. Deck remains flush.",
+      "layer": "coping",
+      "footprint_polygon_m": [
+        [
+          -5.656854249492381,
+          0
+        ],
+        [
+          5.656854249492381,
+          0
+        ],
+        [
+          5.375189027078676,
+          0.68
+        ],
+        [
+          -5.375189027078676,
+          0.68
+        ]
+      ]
+    },
+    {
+      "id": "quay_edge_mitre_left",
+      "name": "Quay coping \u00b7 left angled joint",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_edge_mitre_left.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_edge_mitre_left.blend",
+      "footprint_m": [
+        4,
+        0.7
+      ],
+      "height_m": 0.45,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "edge",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            -0.22,
+            0.34
+          ],
+          "size_m": [
+            4,
+            0.44,
+            0.68
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -2.0,
+          -0.44,
+          -0.05
+        ],
+        "max": [
+          2.0,
+          0.024,
+          0.68
+        ]
+      },
+      "triangles": 452,
+      "notes": "Authored 22.5 degree mitre for a 45 degree change of quay direction. Deck remains flush.",
+      "layer": "coping",
+      "footprint_polygon_m": [
+        [
+          -2.0,
+          0
+        ],
+        [
+          2.0,
+          0
+        ],
+        [
+          2.0,
+          0.68
+        ],
+        [
+          -1.7183347775862954,
+          0.68
+        ]
+      ]
+    },
+    {
+      "id": "quay_edge_mitre_right",
+      "name": "Quay coping \u00b7 right angled joint",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_edge_mitre_right.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_edge_mitre_right.blend",
+      "footprint_m": [
+        4,
+        0.7
+      ],
+      "height_m": 0.45,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "edge",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            -0.22,
+            0.34
+          ],
+          "size_m": [
+            4,
+            0.44,
+            0.68
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -2.0,
+          -0.44,
+          -0.05
+        ],
+        "max": [
+          2.0,
+          0.024,
+          0.68
+        ]
+      },
+      "triangles": 452,
+      "notes": "Authored 22.5 degree mitre for a 45 degree change of quay direction. Deck remains flush.",
+      "layer": "coping",
+      "footprint_polygon_m": [
+        [
+          -2.0,
+          0
+        ],
+        [
+          2.0,
+          0
+        ],
+        [
+          1.7183347775862954,
+          0.68
+        ],
+        [
+          -2.0,
+          0.68
+        ]
+      ]
+    },
+    {
+      "id": "quay_edge_mitre_both",
+      "name": "Quay coping \u00b7 both angled joint",
+      "model_path": "res://resources/models/parts/custom_harbour/quay_edge_mitre_both.glb",
+      "source_path": "res://resources/models/_source/custom_harbour/quay_edge_mitre_both.blend",
+      "footprint_m": [
+        4,
+        0.7
+      ],
+      "height_m": 0.45,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "edge",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            -0.22,
+            0.34
+          ],
+          "size_m": [
+            4,
+            0.44,
+            0.68
+          ]
+        }
+      ],
+      "sockets": {},
+      "bounds_m": {
+        "min": [
+          -2.0,
+          -0.44,
+          -0.05
+        ],
+        "max": [
+          2.0,
+          0.024,
+          0.68
+        ]
+      },
+      "triangles": 452,
+      "notes": "Authored 22.5 degree mitre for a 45 degree change of quay direction. Deck remains flush.",
+      "layer": "coping",
+      "footprint_polygon_m": [
+        [
+          -2.0,
+          0
+        ],
+        [
+          2.0,
+          0
+        ],
+        [
+          1.7183347775862954,
+          0.68
+        ],
+        [
+          -1.7183347775862954,
+          0.68
+        ]
+      ]
+    },
+    {
+      "id": "quay_bollard",
+      "name": "Tee mooring bollard",
+      "model_path": "res://resources/models/parts/port_kit/quay_tee_bollard.glb",
+      "source_path": "res://resources/models/_source/port_kit/quay_tee_bollard.blend",
+      "footprint_m": [
+        1.1,
+        0.9
+      ],
+      "height_m": 1.1,
+      "category": "Quay fittings",
+      "snap_m": 0.5,
+      "placement_kind": "surface",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            0.43,
+            0
+          ],
+          "size_m": [
+            1.05,
+            0.86,
+            0.78
+          ]
+        }
+      ],
+      "sockets": {},
+      "existing_asset": true
+    },
+    {
+      "id": "quay_ladder",
+      "name": "Quay rescue ladder",
+      "model_path": "res://resources/models/parts/harbour_kit/quay_ladder.glb",
+      "source_path": "res://resources/models/_source/harbour_kit/quay_ladder.blend",
+      "footprint_m": [
+        0.8,
+        0.65
+      ],
+      "height_m": 3.5,
+      "category": "Quay fittings",
+      "snap_m": 1,
+      "placement_kind": "edge",
+      "colliders": [],
+      "sockets": {},
+      "existing_asset": true
+    },
+    {
+      "id": "quay_light",
+      "name": "Harbour light",
+      "model_path": "res://resources/models/parts/harbour_kit/quay_light.glb",
+      "source_path": "res://resources/models/_source/harbour_kit/quay_light.blend",
+      "footprint_m": [
+        0.5,
+        0.5
+      ],
+      "height_m": 7.8,
+      "category": "Quay fittings",
+      "snap_m": 1,
+      "placement_kind": "surface",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            3.7,
+            0
+          ],
+          "size_m": [
+            0.22,
+            7.4,
+            0.22
+          ]
+        }
+      ],
+      "sockets": {},
+      "existing_asset": true
+    },
+    {
+      "id": "arch_fender",
+      "name": "Rubber arch fender",
+      "model_path": "res://resources/models/parts/harbour_kit/arch_fender.glb",
+      "source_path": "res://resources/models/_source/harbour_kit/arch_fender.blend",
+      "footprint_m": [
+        0.8,
+        0.5
+      ],
+      "height_m": 1.65,
+      "category": "Quay fittings",
+      "snap_m": 1,
+      "placement_kind": "edge",
+      "colliders": [
+        {
+          "position_m": [
+            0,
+            -0.9,
+            -0.23
+          ],
+          "size_m": [
+            0.8,
+            1.5,
+            0.46
+          ]
+        }
+      ],
+      "sockets": {},
+      "existing_asset": true
+    },
+    {
+      "id": "drain_2m",
+      "name": "Flush drainage grate",
+      "model_path": "res://resources/models/parts/harbour_kit/drain_2m.glb",
+      "source_path": "res://resources/models/_source/harbour_kit/drain_2m.blend",
+      "footprint_m": [
+        2,
+        0.32
+      ],
+      "height_m": 0.11,
+      "category": "Quay fittings",
+      "snap_m": 1,
+      "placement_kind": "surface",
+      "colliders": [],
+      "sockets": {},
+      "existing_asset": true
+    }
+  ]
+}

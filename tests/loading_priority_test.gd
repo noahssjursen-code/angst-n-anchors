@@ -1,5 +1,8 @@
 extends Node
 
+class CanopyFixtureLayout extends RefCounted:
+	var half_extent_m := 0.0
+
 func _ready() -> void:
 	run.call_deferred()
 
@@ -30,22 +33,20 @@ func run() -> void:
 	assert(near._chunks.has(Vector2i(10,0)),"Bridge erased unrelated near forest")
 	near.free()
 	var far := DistantForest.new()
-	var mm := MultiMesh.new()
-	mm.transform_format=MultiMesh.TRANSFORM_3D
-	mm.mesh=BoxMesh.new()
-	mm.instance_count=2
-	mm.set_instance_transform(0,a)
-	mm.set_instance_transform(1,b)
-	var node := MultiMeshInstance3D.new()
-	node.multimesh=mm
-	node.set_meta("forest_bounds",Rect2(0,0,3000,100))
-	far.add_child(node)
-	far.trees=2
+	far.layout = CanopyFixtureLayout.new()
+	far.cell_m = 1000.0
+	ForestTreeMesh.request_assets()
+	while not ForestTreeMesh.assets_ready(): await get_tree().process_frame
+	for species in 4: far.meshes.append(ForestTreeMesh.species_mesh(species, false))
+	var records := PackedFloat32Array([10,0,10,1,2600,0,10,1])
+	far.display_batches[Vector2i.ZERO] = [records, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]
+	far.upload_batch(Vector2i.ZERO)
+	var node: MultiMeshInstance3D = far.rendered_batches[Vector2i.ZERO].nodes[0]
+	var expected := node.multimesh.get_instance_transform(1)
 	far.add_exclusions([zone])
 	while not far.exclusion_jobs.is_empty(): far._process_exclusions()
-	assert(node.multimesh.instance_count==1 and node.multimesh.get_instance_transform(0)==b)
+	assert(node.multimesh.instance_count==1 and node.multimesh.get_instance_transform(0)==expected)
 	assert(far.trees==1)
-	var records := PackedFloat32Array([10,0,10,1,2600,0,10,1])
 	assert(DistantForest.filter_placements(records,[zone])==PackedFloat32Array([2600,0,10,1]))
 	far.free()
 	print("LOADING PRIORITY PASS: 1 km ring, identical road markings, local forest exclusions")

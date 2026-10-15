@@ -16,6 +16,8 @@ var sample_count := 0
 var last_build_usec := 0
 var _time_bucket := -9223372036854775808
 var _view_key := ""
+var _world_key := ""
+var cache_hits := 0
 var _wind: PackedVector2Array = PackedVector2Array()
 var _sea: PackedFloat32Array = PackedFloat32Array()
 var _raster_cols := COLS
@@ -37,8 +39,18 @@ func prepare(snapshot, visible_world: Rect2, game_hours: float) -> bool:
 	var lod := _weather_lod(visible_world)
 	var snapped := _snap_bounds(visible_world, lod.x, lod.y)
 	var bucket := floori(game_hours / WEATHER_MAX_AGE_H)
-	var next_key := "%d:%d:%d:%d:%d:%d:%d:%d" % [
-		snapshot.world_seed,
+	var world_key := ChartRasterCache.world_key(snapshot.layout)
+	# The overscan exists to reuse a weather image during movement. Do not
+	# discard it simply because zoom changed the snapped rectangle a little.
+	# Reuse only when its real sample spacing is at least as fine as requested.
+	if texture != null and world_key == _world_key and bucket == _time_bucket \
+			and world_rect.encloses(visible_world) \
+			and world_rect.size.x / _raster_cols <= snapped.size.x / lod.x \
+			and world_rect.size.y / _raster_rows <= snapped.size.y / lod.y:
+		cache_hits += 1
+		return false
+	var next_key := "%s:%d:%d:%d:%d:%d:%d:%d" % [
+		world_key,
 		roundi(snapped.position.x),
 		roundi(snapped.position.y),
 		roundi(snapped.size.x),
@@ -50,6 +62,7 @@ func prepare(snapshot, visible_world: Rect2, game_hours: float) -> bool:
 	if next_key == _view_key and texture != null:
 		return false
 	_view_key = next_key
+	_world_key = world_key
 	_time_bucket = bucket
 	_raster_cols = lod.x
 	_raster_rows = lod.y
@@ -143,6 +156,7 @@ func debug_stats() -> Dictionary:
 		"cache_rebuilds": rebuild_count,
 		"samples": sample_count,
 		"build_usec": last_build_usec,
+		"cache_hits": cache_hits,
 	}
 
 

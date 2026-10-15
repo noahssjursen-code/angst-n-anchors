@@ -29,10 +29,20 @@ static func model(parent: Node3D, id: String, position: Vector3, yaw: float = 0.
 		PortModelLod.attach(node, id if id.begins_with("res://") else ROOT + id + ".glb")
 	SurfaceMaterialLibrary.apply(node, id.get_file().get_basename())
 	if id == "quay_light" and not Engine.is_editor_hint():
-		var lamp := preload("res://scripts/port/harbour_area_light.gd").new()
-		node.add_child(lamp)
-		lamp.position = Vector3(0,7.4,-1.2)
+		attach_area_light(node)
 	return node
+
+## Share the existing authored diffuser position and daylight-driven component
+## with custom-port placements. Call only for real models, never editor ghosts.
+static func attach_area_light(node: Node3D) -> SpotLight3D:
+	if Engine.is_editor_hint(): return null
+	var existing := node.get_node_or_null("HarbourAreaLight") as SpotLight3D
+	if existing != null: return existing
+	var lamp := preload("res://scripts/port/harbour_area_light.gd").new()
+	lamp.name = "HarbourAreaLight"
+	lamp.position = Vector3(0,7.4,-1.2)
+	node.add_child(lamp)
+	return lamp
 
 static func repeated(parent: Node3D, id: String, poses: Array[Transform3D]) -> void:
 	if poses.is_empty(): return

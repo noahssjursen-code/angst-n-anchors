@@ -1,0 +1,267 @@
+PLAYER-BUILT PORT WORKSHOP
+
+Open scenes/showcases/custom_port_showcase.tscn in Godot and run that scene (F6).
+scenes/showcases/plot_building_showcase.tscn opens this same workshop; it is an alias,
+not a separate building system.
+Alternatively run start-port-workshop.ps1 for a windowed, separate-profile launch.
+Use its -Empty option to start without the example and open the coastline picker.
+Use -Starter for Littlehaven: the finished first fishing port and owned fishing
+boat. Building and expansion are available later. This opens the same workshop;
+see docs/custom-port-starter.txt for scope and checks.
+Use -Fishing to open the smaller Skjærvik fishing pier, or run
+scenes/showcases/custom_port_fishing_showcase.tscn directly with F6. It has one
+berth, a compact fish landing plant, a decorative building and an arrived Nordlys with
+420 kg of cod and one 38.5 kg halibut. These are explicit scenario contents.
+Placing the same plant from the library always creates empty storage.
+No existing port is deleted.
+It starts on a real generated island with Nordvik, a complete harbour injected
+from data. It is isolated from captain saves and the multiplayer server.
+
+Nordvik has a sheltered fishing inlet, a projecting bulk quay and an industrial
+container apron. Angled 4 m and 8 m pieces, matching mitred coping and differing
+wharf depths break up the perimeter. Gabled timber buildings, signs, guttering,
+net cages, ropes, benches and shore service cabinets are actual library models.
+Buildings are closed exterior decorations. Their doors and roller shutters
+have solid collision; there are no interiors or stairs. NPCs work outside.
+The office's second storey is an exterior facade, not an accessible floor.
+
+To reconstruct your own document, run start-port-workshop.ps1 -PortFile followed
+by the JSON file's path. Both raw port snapshots and repository save envelopes
+are accepted after validation. The world identity must match this workshop.
+Its origin, structures, stores, vessels and owner are read from the document;
+edits save to a separate imported-port file, leaving the supplied source intact.
+
+New harbour opens the map so you can choose any other indexed coastal plot in
+this world. Inspect the green square, then press Start harbour here. The current
+harbour is saved intact in custom_ports/retained before switching; cancelling or
+an invalid choice changes nothing. Each new harbour gets its own file and no
+invented ships, stock or equipment. Its depths are surveyed from the real terrain.
+The camera moves to the shore and the player gets a dry ground position. Building
+still uses the single plane at sea+2 m, even on steep land. Large hillside cuts
+remain retaining walls; this does not automatically construct island access roads.
+
+CONTROLS
+
+Choose a piece from the left library. Tab switches between the library cursor
+and free flight. WASD moves, Q/E changes camera height, Shift flies faster.
+Left click places; hold and move to paint foundations. Right click removes the
+aimed-at placement. R rotates. Ctrl+Z undoes the last construction stroke.
+
+Search the library by name or dimensions, or narrow it to a category. The
+equipped piece stays highlighted; its footprint and edge-snap or crane-reach
+details remain below the list. Enter equips a sole search result. Escape leaves
+the search field; Tab returns to free flight. Typing never fires build shortcuts.
+
+Every piece uses the same deck plane, 2 metres above sea level. Camera height
+does not affect it. Choose 4 x 4 m foundations for detail or 8 x 8 m foundations
+for larger yards. Foundations snap to their own dimensions and extend down
+to the seabed. Triangle and chamfer tiles have matching collision and exact
+footprints; their cut-away corners are not invisible square obstructions.
+Modular roof planes share the floor-cell centres, so a room built from 4 m wall
+pieces can be closed with matching 4 m roofs. Roof-edge strips stay on the wall
+edges. This preview snapping applies at negative coordinates and after rotation;
+loading an older authored building never shifts its saved parts.
+
+Esc switches between walking and building. The permanent tool in hotbar slot 1
+also returns to building. F talks to a placed operator.
+H returns the player to a current foundation or dry ground. Arrival waits for
+matching collision, and removed foundations cannot remain stale home points.
+M opens the coastal plot map.
+G hides/shows construction overlays. Cargo yards have plain unmarked asphalt.
+
+Plots opens the existing chart with owned plots in blue and available adjoining
+plots in green. Click a plot to inspect its price and budget, then choose Buy plot.
+Selecting or closing the map never purchases land.
+The isolated workshop starts with one plot and a 250,000 NOK test budget;
+each adjoining plot costs 25,000 NOK. New water is sampled incrementally so
+expanded quay edges can acquire berths. This is a workshop budget, not the
+production company's account or a live land market.
+
+Save/Load (or Ctrl+S) writes/restores the current port document. Open… selects
+another JSON harbour, preserves the current one, and opens a separate writable
+copy. The selected source file stays untouched. The file picker begins in the
+workshop's saved-port directory; the retained subfolder contains earlier builds.
+Save validation
+checks world identity, version and checksum. A previous valid version is kept
+as a backup. The saved filename appears after saving; hover it for the full path. Existing
+captain, vessel, company and multiplayer saves are not changed by this scene.
+
+PORT RECORDS
+
+Berths are derived from consecutive bollards on exposed quay edges. The fit
+check considers vessel length, beam, draft, under-keel clearance, surveyed
+water, occupied spaces and actual crane reach. There are four example slots.
+
+The example vessels are built from their real imported construction:
+- Nordlys: 14 x 5 m fishing vessel with a 600 kg catch tank.
+- Harbour Cargo: 24 x 8 m vessel with two installed 20-foot container beds.
+- Coastal Bulk: 32 x 10 m vessel with its 120-tonne bulk hold.
+- An oversized data-only visitor deliberately fails the berth-size checks.
+
+Select a vessel and berth, then dock. Cargo actions act as that vessel's company.
+Docked ships use their existing authored boarding gates and gangways. The
+accepted berth record opens the shore-side gate and positions the walkable ramp;
+departure closes and removes it. This also restores from a saved harbour.
+Reserve shore stock, then load the reservation. The container crane animates
+the already accepted data transfer to the actual ship slots. Unloading moves
+the cargo back. A duplicate event does not replay the lift; departure or a
+replacement snapshot clears temporary hook cargo and restores committed stock.
+Bulk transfers use the existing grab crane, including jaws, hoist and slew.
+Each scoop respects the grab's capacity. Stockpile and hold-fill meshes show
+progress while the accepted mass remains in the data; departure or interrupted
+playback restores the committed contents and clears temporary material.
+Coal and ore occupy separate receiving bays inside the crane's yard. Multiple
+shipments of the same commodity share its visible pile while keeping separate
+lot records; the grab visits that commodity's bay. Unrelated piles stay still.
+
+Bulk cargo must fit the ship's actual separate holds. A hold carries one commodity
+from one shipment; spare weight capacity does not let coal mix with iron ore, or
+two separate consignments share a single hold. Reservations account for this before
+loading starts. Ships with multiple holds can carry separate cargoes, and a larger
+shipment can fill more than one hold. Accepted mass is checked against the real
+installed hold contents, including after saving and reconstructing the harbour.
+
+New crane placements include their receiving yard and an EMPTY storage record.
+They do not create free containers or an infinite resource mound. Storage can
+be opened to visiting companies through the owner's Storage tab. Capacity and
+handling types come from the installed equipment; a fish tank is not a spare
+container deck. Permission to transfer is not a simulated sale or payment.
+
+DATA AND ASSETS
+
+scripts/port/building/custom_port_example.gd authors the complete initial port.
+CustomPortState validates it and processes commands. CustomPortEditor sends
+those same commands for construction; undo sends inverse construction commands
+at the current revision, never an old snapshot over cargo or visiting vessels.
+CustomPortPresenter reconstructs geometry and contents from a snapshot.
+CustomPortTransferPresenter animates accepted container, bulk and catch events.
+Fish use the real hose and installed vessel tank. Whole specimens transfer intact;
+their identity, species, size, weight and other attributes stay in the saved lots.
+The pump only displays accepted changes; it never pays money or withdraws fish
+again. Public collection/delivery remains controlled by the store settings.
+
+See scripts/port/state/README.txt for the JSON document and command API.
+Geometry uses metre coordinates relative to the port origin. No meshes, scene
+paths, physics or renderer phases are required to reconstruct a saved port.
+
+The hold checks use the existing document format. Valid existing saves need no
+migration; a save with cargo that cannot fit its recorded holds is rejected instead
+of restoring invisible cargo. Older abstract test vessels without installed-hold
+metadata retain aggregate capacity checks, without promising a matching ship model.
+
+Building into a hillside cuts the streamed terrain only beneath the installed
+platform footprints. The deck stays 2 m above sea level; deeper seabed remains
+unchanged. Exposed cut edges receive retaining faces and matching collision.
+Removing or undoing construction restores the original terrain in that area.
+Save/load derives the same cuts from the port record, without storing meshes.
+A painted stroke batches this work until release. Freecam remains available;
+walking waits for the replacement terrain collider before resuming.
+
+resources/data/ports/custom_harbour_assets.json is the authored asset manifest.
+Blender source is under resources/models/_source/custom_harbour; game assets
+are under resources/models/parts/custom_harbour. Existing crane machinery is
+reused. The kit includes quay fittings, tires, ladders, liferings, lighting,
+timber/pallet details, modular workshop walls, windows, doors and roofs, plus
+triangle/chamfer foundations and quay corners. NPCs use the existing mariner.
+
+BOUNDARIES OF THIS PASS
+
+This is the construction/data workshop, not a migration of all generated ports.
+The document/command seam is suitable for the existing authority gateway, but
+no new multiplayer endpoints or database migration are deployed here. Plot
+purchases need the company ledger and ownership registry committed atomically
+when connected to the real service.
+
+Water evidence is a conservative sampled local berth survey, not a navigation
+route to open sea. It does not prove every unsampled rock or shoreline triangle
+is clear. Production, mines, logging output, processing recipes, markets, paid
+trade, NPC shipping schedules and hired crews are not implemented by a model
+placed in this library. Those can later consume the same port/storage records.
+An excavation into a steep coast can leave a high retaining wall: construction
+does not automatically create a path back onto the surrounding island. The
+workshop streams the actual forest. Built footprints clear near and distant
+trees; removing them restores the original woodland. Unbuilt owned land stays
+wooded. Coarse world canopy tint is left unchanged so a small foundation cannot
+erase a whole map texel.
+
+The separate custom_port_streaming_showcase.tscn consumes two world-matched
+documents with the real terrain, forest and ocean. Use start-port-workshop.ps1
+-Travel, then 1/2 to visit either port, 3 to move offshore and 4 to edit Nordvik
+while away. Tab switches freecam/cursor. Only nearby port models remain loaded;
+records, stock and ground/tree modifiers remain available at every distance.
+Existing vessel replication owns ships; this consumer does not spawn the frozen
+workshop examples. This scene does not publish anything to a multiplayer server.
+
+Container pads have real physical bed dimensions but no authored safe mass
+rating in the current game. The example's 48,000 kg ceiling is explicitly a
+scenario value; it is not a calculated vessel deadweight rating.
+
+VERIFICATION SCENES
+
+Run with -- --shipyard-playtest so no live captain data is opened:
+  tests/custom_port_data_test.tscn           commands, ownership, finite stock
+  tests/custom_port_berths_test.tscn         geometry, water and vessel fit
+  tests/custom_port_repository_test.tscn     saves, backup and conflicts
+  tests/custom_port_editor_test.tscn         snapping, grouping and undo
+  tests/custom_port_shapes_test.tscn         exact angled-tile footprints
+  tests/custom_port_projection_test.tscn     real ship capacity and contents
+  tests/custom_port_physical_import_test.tscn declared fitout versus actual models
+  tests/custom_port_transfer_test.tscn       crane playback and interruption
+  tests/custom_port_linked_yard_transfer_test.tscn separate yard/crane selection
+  tests/custom_port_bulk_transfer_test.tscn  grab cycles, full unload and interruption
+  tests/custom_port_bulk_stock_test.tscn     separate commodity bays and stable layout
+  tests/custom_port_showcase_input_test.tscn actual workshop input modes
+  tests/custom_port_library_test.tscn       search, categories and real dimensions
+  tests/custom_port_workshop_flow_test.tscn  build, expand, save/load, dock/load
+  tests/custom_port_empty_workshop_test.tscn first build on an empty parcel
+  tests/custom_port_site_plan_test.tscn     indexed coast/world/empty document rules
+  tests/custom_port_site_workshop_test.tscn choose coast, retain/open saves, safe arrival
+  tests/custom_port_document_injection_test.tscn JSON reconstruction from disk
+  tests/custom_port_boarding_test.tscn      walk aboard and ashore, restore/depart
+  tests/custom_port_earthworks_test.tscn    exact cuts, untouched coast, revisions
+  tests/custom_port_earthworks_review.tscn  native hillside, walk and wall collision
+  tests/custom_port_earthworks_workshop_test.tscn build/save/load/remove/undo cuts
+  tests/custom_port_streaming_test.tscn revisions, residency, deletion and ownership
+  tests/custom_port_streaming_lifecycle_test.tscn presenter teardown and vessel ownership
+  tests/custom_port_forest_test.tscn       reversible near/distant tree clearance
+  tests/custom_port_catch_data_test.tscn   whole fish, exact hold packing and reservations
+  tests/custom_port_fish_landing_test.tscn real pump, both directions and interruption
+  tests/custom_port_fishing_workshop_test.tscn compact pier, actual inspector, catch save/load
+
+start-port-workshop.ps1 -Travel -Capture runs the native two-port travel checks
+and archives four views. Forest MultiMesh checks require native rendering.
+
+The empty test requires --empty-custom-port. The document test requires
+--port-document=<absolute JSON path>. Both also accept --capture for native review.
+The earthworks workshop test requires --port-document pointing to a steep-coast
+port document with spare owned ground; it also accepts --capture.
+
+Native review captures are archived in C:/Users/noahs/Pictures/machinescreenshots.
+The workshop accepts --capture-custom-port; the transfer/flow tests accept
+--capture. Captures are evidence to inspect, not substitutes for interaction
+and data checks.
+
+NEW HARBOUR VISITORS AND SAILING
+
+An empty parcel has no vessels or free stock. After building a quay and placing
+bollards, open Port records -> Berths. Test visitor -> Invite adds an explicit
+empty Nordlys, Harbour Cargo or Coastal Bulk record. Select a derived berth and
+Dock vessel. This tests the actual installed vessel dimensions, holds and berth
+fit. Invitations are isolated workshop fixtures, not live fleet purchases.
+They persist with the port document. Invalid or occupied berths still refuse.
+
+Walk aboard via the gangway, F at the helm, B to let go, I for the engine and
+W/S for throttle. Sail back alongside slowly and press B to secure the lines.
+See docs/custom-port-sailing-session.txt for controls and checked tolerances.
+Durable cargo and occupancy are saved; free-sailing physics and position are
+session-only. A saved undocked record can be docked again from Port records.
+
+The Skjaervik fishing pier is available through start-port-workshop.ps1 -Fishing
+or scenes/showcases/custom_port_fishing_showcase.tscn. It includes a receiving
+plant and explicitly stocked example Nordlys for testing finite fish landing.
+Its operator opens the bound fish store and a compatible docked vessel directly.
+Generic Port records still opens Berths. See docs/custom-port-operator-context.txt.
+
+The records panel constrains itself to the current viewport, including hidden
+refreshes and a small resized game window; contents scroll while actions remain
+accessible. See docs/custom-port-inspector-layout.txt for the actual-host check.

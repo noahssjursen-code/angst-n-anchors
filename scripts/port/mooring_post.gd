@@ -12,6 +12,8 @@ enum MooringVisual {
 const DEFAULT_DOCKING_BOLLARD_MODEL := "res://resources/data/meshes/docks/docking_bollard.json"
 const IMPORTED_BOLLARD := "res://resources/models/parts/port_kit/quay_tee_bollard.glb"
 var _rope_anchor: Node3D
+## Read-only imported harbour previews keep the model/collision only.
+var service_discovery_enabled := true
 
 ## Line attachment height differs per visual; docking bollard follows `MooringPoint` cleat height.
 @export var anchor_local_position: Vector3 = Vector3(0.0, 0.52, 0.0)
@@ -74,7 +76,7 @@ var _show_interact_sphere: bool = true
 
 func _ready() -> void:
 	_rebuild()
-	if not Engine.is_editor_hint():
+	if not Engine.is_editor_hint() and service_discovery_enabled:
 		add_to_group(MooringComponent.DOCK_MOORING_GROUP)
 
 

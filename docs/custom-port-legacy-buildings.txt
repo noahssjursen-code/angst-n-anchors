@@ -1,0 +1,23 @@
+Legacy whole-building placeholders
+=================================
+
+The custom port build library no longer offers the original Warehouse (12 x 8 x
+6 m) or Workshop (8 x 8 x 4 m) solid boxes. Use the authored Workshop category's
+4 m walls, working door, windows, open bay and roofs to construct a usable room.
+
+Both original IDs remain in CustomPortCatalog with build_library_visible:false.
+The flag only affects library choices. Saved JSON still validates and presents
+the same mesh, collision dimensions, pose and custom attributes. Existing pieces
+may still be moved or removed. This is not an authority/schema migration.
+
+The existing whole-building models are not safe visual replacements without a
+separate footprint/collision change. Godot measured the full imported meshes:
+  warehouse_12x18: 12.62 x 20.56 m footprint, 6.89 m tall (including canopy)
+  harbour_office: 12.66 x 10.38 m footprint, 4.985 m tall
+  cargo_shelter_8m: 8.40 x 8.394 m footprint, 5.569 m tall
+The warehouse and office are deliberately closed exterior shells. They are not
+substituted or distorted to fit the legacy boxes.
+
+Focused verification: tests/custom_port_library_test.tscn with
+--headless -- --shipyard-playtest. It covers hidden choices, retained modular
+pieces, search/categories, equip signals and legacy JSON/mesh/collider recovery.

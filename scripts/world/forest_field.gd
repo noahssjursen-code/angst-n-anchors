@@ -12,6 +12,8 @@ const FULL_INLAND_M := 55.0
 const MAX_SLOPE := 0.80
 const MAX_HEIGHT_M := 900.0
 const COVERAGE_MAP_SIZE := 256
+const EXCLUSION_CELL_M := 16.0
+const MAX_INDEX_CELLS_PER_ZONE := 256
 
 
 static var world_seed: int = 0
@@ -22,14 +24,22 @@ static var _initialized := false
 static var _coverage_texture: ImageTexture
 static var _world_half_extent_m := 20000.0
 static var _flatten_zones: Array = []
-static var _zone_chunks: Dictionary = {}
+static var _base_flatten_zones: Array = []
+static var _base_zone_chunks: Dictionary = {}
+static var _custom_port_exclusions: Dictionary = {}
+static var _custom_port_sources: Dictionary = {}
+static var _custom_zone_index: Dictionary = {}
 
 
 static func initialize(layout: Object, seed: int, flatten_zones: Array = []) -> void:
 	_layout = layout
 	world_seed = seed
-	_flatten_zones = flatten_zones
-	_zone_chunks.clear()
+	_base_flatten_zones = flatten_zones.duplicate(true)
+	_flatten_zones = _base_flatten_zones.duplicate()
+	_custom_port_exclusions.clear()
+	_custom_port_sources.clear()
+	_base_zone_chunks.clear()
+	_custom_zone_index.clear()
 	_world_half_extent_m = float(layout.half_extent_m) if layout != null else 20000.0
 	_ensure_noise()
 	_coverage_texture = bake_coverage_map()
@@ -40,16 +50,56 @@ static func clear() -> void:
 	_layout = null
 	_coverage_texture = null
 	_flatten_zones = []
-	_zone_chunks.clear()
+	_base_flatten_zones = []
+	_custom_port_exclusions.clear()
+	_custom_port_sources.clear()
+	_base_zone_chunks.clear()
+	_custom_zone_index.clear()
 	_initialized = false
 
 
 ## Main-thread installation of infrastructure corridors after background planning.
 ## Worker canopy jobs own copies, so existing work never reads a mutated array.
 static func add_exclusions(zones: Array) -> void:
-	_flatten_zones = _flatten_zones.duplicate()
-	_flatten_zones.append_array(zones)
-	_zone_chunks.clear()
+	_base_flatten_zones = _base_flatten_zones.duplicate()
+	_base_flatten_zones.append_array(zones.duplicate(true))
+	_base_zone_chunks.clear()
+	_rebuild_exclusions()
+
+
+## Replaceable world-data layers, independent of a port's loaded scene. The
+## coarse base coverage image/cache deliberately does not include these cuts.
+static func set_custom_port_exclusions(owner_key: String, zones: Array, source_id := 0) -> bool:
+	if owner_key.is_empty(): return false
+	if zones.is_empty():
+		# An old renderer may exit after its replacement has already published
+		# the same port. Its teardown must not remove the replacement's layer.
+		if source_id != 0 and int(_custom_port_sources.get(owner_key, 0)) != source_id:
+			return false
+		if not _custom_port_exclusions.has(owner_key): return false
+		_custom_port_exclusions.erase(owner_key)
+		_custom_port_sources.erase(owner_key)
+	else:
+		_custom_port_sources[owner_key] = source_id
+		if _custom_port_exclusions.get(owner_key, []) == zones: return false
+		_custom_port_exclusions[owner_key] = zones.duplicate(true)
+	_rebuild_exclusions()
+	return true
+
+
+static func base_exclusions() -> Array:
+	return _base_flatten_zones.duplicate(true)
+
+
+static func _rebuild_exclusions() -> void:
+	_flatten_zones = _base_flatten_zones.duplicate()
+	var custom_zones: Array = []
+	var owners := _custom_port_exclusions.keys()
+	owners.sort()
+	for owner in owners:
+		_flatten_zones.append_array(_custom_port_exclusions[owner])
+		custom_zones.append_array(_custom_port_exclusions[owner])
+	_custom_zone_index = exclusion_index(custom_zones)
 
 
 static func is_initialized() -> bool:
@@ -67,7 +117,7 @@ static func world_half_extent_m() -> float:
 
 
 ## 0 = bare rock / shore / pad, 1 = dense boreal canopy.
-static func sample(world_xz: Vector2) -> float:
+static func sample(world_xz: Vector2, include_custom_ports := true) -> float:
 	if _layout == null:
 		return 0.0
 	_ensure_noise()
@@ -77,7 +127,7 @@ static func sample(world_xz: Vector2) -> float:
 	var inland := -distance
 	if inland < MIN_INLAND_M:
 		return 0.0
-	if _inside_flatten_zone(world_xz):
+	if _inside_flatten_zone(world_xz, include_custom_ports):
 		## Rectangular facility pads + port town forest_clear polygons.
 		return 0.0
 
@@ -108,7 +158,7 @@ static func bake_coverage_map() -> ImageTexture:
 		return ImageTexture.create_from_image(image)
 	var cache_key := ""
 	if _layout is WorldLayout:
-		cache_key="forest-coverage-v1:%s:%d:%s" % [_layout.layout_checksum,world_seed,WorldGenerationCache.digest(_flatten_zones)]
+		cache_key="forest-coverage-v1:%s:%d:%s" % [_layout.layout_checksum,world_seed,WorldGenerationCache.digest(_base_flatten_zones)]
 		var cached := WorldGenerationCache.read(cache_key)
 		if cached.get("pixels") is PackedByteArray and cached.pixels.size()==COVERAGE_MAP_SIZE*COVERAGE_MAP_SIZE:
 			image=Image.create_from_data(COVERAGE_MAP_SIZE,COVERAGE_MAP_SIZE,false,Image.FORMAT_R8,cached.pixels)
@@ -120,7 +170,7 @@ static func bake_coverage_map() -> ImageTexture:
 		var world_z := lerpf(-half, half, (float(y) + 0.5) / denom)
 		for x in range(COVERAGE_MAP_SIZE):
 			var world_x := lerpf(-half, half, (float(x) + 0.5) / denom)
-			var density := sample(Vector2(world_x, world_z))
+			var density := sample(Vector2(world_x, world_z), false)
 			image.set_pixel(x, y, Color(density, density, density))
 	if not cache_key.is_empty(): WorldGenerationCache.write(cache_key,{"pixels":image.get_data()})
 	image.generate_mipmaps()
@@ -137,11 +187,47 @@ static func _estimate_slope(world_xz: Vector2) -> float:
 	return clampf(sqrt(dx * dx + dz * dz), 0.0, 1.0)
 
 
-static func _inside_flatten_zone(world_xz: Vector2) -> bool:
+static func _inside_flatten_zone(world_xz: Vector2, include_custom_ports := true) -> bool:
+	if include_custom_ports and inside_exclusion_index(world_xz, _custom_zone_index):
+		return true
 	var coord := Vector2i(floori(world_xz.x / 1000.0), floori(world_xz.y / 1000.0))
-	if not _zone_chunks.has(coord):
-		_zone_chunks[coord] = WorldTerrainStreamer.zones_intersecting_chunk(_flatten_zones, coord, 1000.0)
-	return inside_flatten_zones(world_xz, _zone_chunks[coord])
+	if not _base_zone_chunks.has(coord):
+		_base_zone_chunks[coord] = WorldTerrainStreamer.zones_intersecting_chunk(_base_flatten_zones, coord, 1000.0)
+	return inside_flatten_zones(world_xz, _base_zone_chunks[coord])
+
+
+## Conservative candidate buckets only. The final predicate still evaluates
+## each original polygon/rotated rectangle, including holes between tiles.
+## Legacy rectangle/falloff zones and very large polygons stay in a fallback
+## list; they keep their original predicate without allocating an unbounded
+## grid. Jobs own their index; edits replace it rather than mutate it.
+static func exclusion_index(zones: Array) -> Dictionary:
+	if zones.is_empty(): return {}
+	var buckets: Dictionary = {}
+	var large: Array = []
+	for zone in zones:
+		if not zone.has("polygon"):
+			large.append(zone)
+			continue
+		var bounds := WorldTerrainStreamer._zone_influence_bounds(zone)
+		var first := Vector2i(floori(bounds.position.x / EXCLUSION_CELL_M), floori(bounds.position.y / EXCLUSION_CELL_M))
+		var last := Vector2i(floori(bounds.end.x / EXCLUSION_CELL_M), floori(bounds.end.y / EXCLUSION_CELL_M))
+		if bounds.size == Vector2.ZERO or (last.x-first.x+1)*(last.y-first.y+1) > MAX_INDEX_CELLS_PER_ZONE:
+			large.append(zone)
+			continue
+		for z in range(first.y, last.y+1):
+			for x in range(first.x, last.x+1):
+				var key := Vector2i(x,z)
+				if not buckets.has(key): buckets[key] = []
+				buckets[key].append(zone)
+	return {"buckets": buckets, "large": large}
+
+
+static func inside_exclusion_index(world_xz: Vector2, index: Dictionary) -> bool:
+	if index.is_empty(): return false
+	var key := Vector2i(floori(world_xz.x / EXCLUSION_CELL_M), floori(world_xz.y / EXCLUSION_CELL_M))
+	return inside_flatten_zones(world_xz, index.buckets.get(key, [])) \
+		or inside_flatten_zones(world_xz, index.large)
 
 
 static func inside_flatten_zones(world_xz: Vector2, zones: Array) -> bool:

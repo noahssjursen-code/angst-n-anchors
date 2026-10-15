@@ -1,0 +1,21 @@
+{
+  "source": "resources\\models\\_source\\crew_base\\crew_base.blend",
+  "seat_origin_in_source_m": [
+    1.3877787807814457e-17,
+    0.006950284354388714,
+    0.8674346804618835
+  ],
+  "seat_origin": "underside of posed pelvis at cushion contact",
+  "lods": {
+    "near": {
+      "triangles": 6860,
+      "meshes": 2,
+      "file": "seated_passenger_near.glb"
+    },
+    "far": {
+      "triangles": 1769,
+      "meshes": 2,
+      "file": "seated_passenger_far.glb"
+    }
+  }
+}

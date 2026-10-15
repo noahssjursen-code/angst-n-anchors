@@ -1,0 +1,50 @@
+SERVICE TRANSFORM PREVIEW DIAGNOSTIC
+
+tests/custom_port_service_preview_probe.tscn is a scene-free, bounded diagnostic.
+It uses the actual 674-piece Nordvik example and catalog, 264 explicit surveyed
+water cells, finite stocked terminals, and installed prebuilt vessels. A second
+fixture replaces the container terminal with the actual fish landing plant,
+keeping 674 pieces. Each measures nine distinct snapped moves before docking,
+after docking, and while a real stock reservation is active. No edit is committed.
+
+15 October 2026, initial measurements (milliseconds, mean):
+                       idle       docked      reserved
+Container crane        67.01      65.89       1.53
+Fish landing plant     66.05      65.73       1.52
+
+Existing transform-command preflight costs 0.19-0.20ms unreserved and about
+0.42ms reserved; copying the candidate is about 0.9ms. Whole-candidate validation
+costs about 65ms. The existing local support/overlap helper alone costs about
+5ms for the large crane footprint and 1.1ms for the fish plant. Geometry-only
+results are diagnostic measurements, not accepted permission decisions.
+
+Implemented bounded seam: CustomPortState.preflight_nonstructural_transform
+retains the actual transform command's identity, ownership and reservation
+preflight. Its result intentionally exposes command_allowed, not a complete
+ok/placement decision. The editor then uses its existing local geometry checks
+for pieces that cannot change platforms, mooring anchors or berth topology.
+Platforms/bollards, unknown kinds and explicit mooring/berth-edge assets retain
+full validation. Final apply() remains unchanged and fully validates commands.
+No reservation or reach rules were copied into the editor.
+
+The complete baseline JSON includes each position, rejection reason and stage
+timing. It also proves previews do not alter stock, reservations or receipts.
+The initial run passed without errors.
+
+The same diagnostic after optimization (milliseconds, mean):
+                       idle       docked      reserved
+Container crane         6.18       6.10       1.60
+Fish landing plant      2.28       2.19       1.54
+
+Largest measured fresh preview was 8.36ms for the crane and 3.07ms for the plant.
+These are observations, not brittle timing assertions. Reserved equipment still
+rejects before geometry. Each of the 54 measured moves retained the same result
+as full candidate validation, and no source state changed.
+
+tests/custom_port_service_preview_test.tscn passed 101 focused checks: cold full
+authority-command parity for valid moves, overlap, missing support, out-of-plot,
+unchanged pose, docked vessels, reserved stock, both cranes linked to a separate
+yard, and unreserved stocked plants beside reserved equipment. It also verifies
+foreign/stale/extra-field requests, projection-cache preservation, structural
+fallback, and final authority refusal of a forged green ghost. No broad suite
+or unchanged rendering test was rerun for this preview-only change.

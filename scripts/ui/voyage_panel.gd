@@ -120,7 +120,6 @@ func show_service_snapshot(snapshot: Dictionary) -> void:
 		var harbour_snapshot:=snapshot.duplicate(true)
 		harbour_snapshot.actions=harbour_snapshot.get("actions",[]).filter(func(a):return not (str(a.id).begins_with("equipment:") or str(a.id).begins_with("equip:")))
 		_service_actions(harbour_snapshot)
-		_body.add_child(VoyageStyle.button("Equipment shop",_show_equipment))
 	if _items.is_empty():
 		_body.add_child(VoyageStyle.label("No vessels owned yet. Visit the shipwright." if service_kind == "harbourmaster" else "No work fits your vessel here.",25))
 		return

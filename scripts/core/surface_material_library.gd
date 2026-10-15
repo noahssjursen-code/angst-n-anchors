@@ -78,7 +78,7 @@ static func character_material(original: Material, part_name: String = "") -> Ma
 	# a rigid world/rest-space finish onto skinning, or replace a clothing print.
 	var copy := original.duplicate() as StandardMaterial3D
 	if copy == null: return original.duplicate()
-	var spec: Dictionary = assignments().character_uv.get(original.resource_name,{})
+	var spec: Dictionary = assignments().get("character_uv", {}).get(original.resource_name,{})
 	if not enabled or spec.is_empty(): return copy
 	var asset: String = spec.asset
 	var prefix := DIRECTORY+asset+"/"+asset+"_1K-PNG_"

@@ -69,7 +69,7 @@ func _commit_refuel(litres: float, price: int) -> void:
 	ship.add_fuel(litres)
 
 
-func _deploy_fleet_vessel(record: Dictionary) -> void:
+func _deploy_fleet_vessel(record: Dictionary, selected_berth_id: String = "") -> void:
 	if _passenger_storage_blocked(PlayerVessel.find_active_ship(get_tree())): return
 	if not _pending_berth_claims.is_empty() or not _pending_storage.is_empty(): return
 	_deployment_fetch_generation += 1
@@ -97,19 +97,21 @@ func _deploy_fleet_vessel(record: Dictionary) -> void:
 			accepted["name"] = str(row.get("display_name", "Vessel"))
 			accepted["display"] = accepted.name
 			accepted["scene_path"] = str(row.get("template_path", ""))
-			_claim_fleet_berth(accepted)
+			_claim_fleet_berth(accepted, selected_berth_id)
 		)
 		return
-	_claim_fleet_berth(record)
+	_claim_fleet_berth(record, selected_berth_id)
 
 
-func _claim_fleet_berth(record: Dictionary) -> void:
+func _claim_fleet_berth(record: Dictionary, selected_berth_id: String = "") -> void:
 	var resolved := VesselSpawn.resolve_deployable_record(record)
 	if resolved.is_empty():
 		deployment_finished.emit(false, "The saved vessel design cannot be built with this client.")
 		return
 	var harbour := _harbour()
 	var candidates := HarbourDeploy.compatible_slots_for(harbour, resolved, _max_ship_class())
+	if not selected_berth_id.is_empty():
+		candidates=candidates.filter(func(slot):return slot.berth_id==selected_berth_id)
 	if candidates.is_empty():
 		deployment_finished.emit(false, "No suitable berth is available for this vessel.")
 		return

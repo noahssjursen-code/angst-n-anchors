@@ -13,6 +13,7 @@ signal inventory_changed(snapshot: Dictionary)
 var _inventory := CatchHoldState.new()
 var _sight_fills: Array[MeshInstance3D] = []
 var _temperature_c := -0.8
+var _presented_mass_kg := -1.0
 
 
 func _ready() -> void:
@@ -53,6 +54,35 @@ func snapshot() -> Dictionary:
 		"temperature_c": _temperature_c,
 		"inventory": _inventory.to_dict(),
 	}
+
+
+## A read-model replacement from accepted port data, with no overflow/truncation.
+## Does not emit inventory_changed or invoke the production receiving workflow.
+func apply_projection(data: Dictionary) -> bool:
+	var incoming := CatchHoldState.from_dict(data)
+	var expected := 0.0
+	for lot in data.get("lots", []): expected += float(lot.get("mass_kg", 0))
+	if not is_finite(expected) or expected < 0 or expected > capacity_kg + .000001 or absf(incoming.total_mass_kg() - expected) > .000001: return false
+	if incoming.lots.size() != data.get("lots", []).size(): return false
+	incoming.hold_id = bank_id
+	incoming.capacity_kg = capacity_kg
+	if _inventory.changed.is_connected(_on_inventory_changed): _inventory.changed.disconnect(_on_inventory_changed)
+	_inventory = incoming
+	_inventory.changed.connect(_on_inventory_changed)
+	_presented_mass_kg = -1
+	_update_fill_visuals()
+	return true
+
+
+## Temporary sight-glass playback; snapshot()/inventory always remain committed.
+func show_transfer_mass(mass_kg: float) -> void:
+	_presented_mass_kg = clampf(mass_kg, 0, capacity_kg)
+	_update_fill_visuals()
+
+
+func clear_transfer_projection() -> void:
+	_presented_mass_kg = -1
+	_update_fill_visuals()
 
 
 func inlet_world() -> Vector3:
@@ -169,7 +199,7 @@ func _update_fill_visuals() -> void:
 	if _sight_fills.is_empty():
 		return
 	var per_tank := capacity_kg / float(_sight_fills.size())
-	var remaining := total_mass_kg()
+	var remaining := total_mass_kg() if _presented_mass_kg < 0 else _presented_mass_kg
 	for fill in _sight_fills:
 		var ratio := clampf(remaining / maxf(per_tank, 1.0), 0.0, 1.0)
 		fill.visible = ratio > 0.001

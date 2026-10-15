@@ -1,0 +1,137 @@
+CUSTOM PORTS IN THE STREAMED WORLD
+Historical read-only integration audit, 15 October 2026
+
+The bounded streaming implementation described here now exists. For its current
+API, verification and remaining production limits, read custom-port-streaming.txt.
+The numbered gaps below describe the starting state, not outstanding work in
+the completed local presentation adapter.
+
+Follow-up: the reversible forest layer identified below has now been implemented
+and verified. See custom-port-forest-clearance.txt. The findings below describe
+the starting integration gaps; production streaming/service wiring is separate.
+
+Recommendation
+
+Add one scene-owned custom-port streaming adapter beside the generated-port
+loader. Feed it validated, world-matched snapshots; retain their data when their
+meshes unload. Keep generated ports and live multiplayer services unchanged.
+The construction workshop is ready to supply geometry and finite stock, but it
+is not yet a production port service or a live-vessel authority.
+
+The next small milestone should demonstrate two saved custom ports loading and
+unloading in the real world, with correct terrain and reversible tree clearance.
+It should not add land sales, multiplayer endpoints or new economy singletons.
+
+Existing integration points
+
+- scripts/world/world.gd builds the layout, initializes ForestField, registers
+  generated port directory entries in _setup_ports(), then starts terrain and
+  forest streamers. Install the custom adapter after that world identity and
+  generated directory exist. World rebuild must remove the previous adapter.
+- scripts/world/proximity_loader.gd already schedules at most one lifecycle
+  operation per frame, checks distance every second and uses an 800 m unload
+  margin. Generated ports use a 4,800 m load radius. Reuse this mechanism with a
+  separate set of entries, rather than replacing PortPlot or PortExpander.
+- CustomPortRepository.load_state(path, expected_world, catalog) validates saved
+  records. An explicit list of isolated local documents is sufficient for the
+  first streaming scene. There is no production custom-port snapshot directory
+  or multiplayer projection yet.
+- CustomPortPresenter.load_record(snapshot, derived_berths) reconstructs the
+  actual asset library, finite shore cargo and derived berth markers. Existing
+  transfer presentation can consume accepted events while the port is loaded.
+- CustomPortEarthworks.project() and
+  WorldTerrainStreamer.set_custom_port_earthworks() already handle exact built
+  footprints. Their geometry signatures ignore cargo-only changes. Use the
+  streamer's readiness query before allowing arrival onto a replaced collider.
+- WorldGateway has projection_changed, world_event and query_projections seams.
+  The future network source can call the same adapter's snapshot/event inputs;
+  this milestone need not invent a second transport or server authority.
+
+Small loader changes actually required
+
+1. Key entries by stable port ID and support snapshot upsert/removal. The current
+   generic loader only registers entries; it cannot update or remove them.
+   Reject wrong-world/invalid records and keep the last valid record. A newer
+   snapshot received out of range must be used on the next load. An interest
+   unload must never be interpreted as deletion of the authoritative port.
+2. Measure distance to built bounds, not just the origin. Expanded ports can
+   occupy several plots. Use camera distance for presentation, but pin a port
+   containing the actual player, a boarding interaction or active local berth.
+   The current unload guard only notices a player_boat parented beneath the
+   port; independent vessels and a player walking on the quay are not protected.
+3. Make telemetry's provider key configurable: a second ProximityLoader currently
+   registers the same world.ports provider. Retain separate generated/custom
+   diagnostics without overwriting either provider.
+4. Apply the world origin once. ProximityLoader positions its returned root;
+   CustomPortPresenter also uses snapshot.origin_m. A wrapper with both transforms
+   would double the offset. Keep the authoritative origin intact and establish
+   a clear root/child transform contract. Load the presenter after entering the
+   tree, since vessel/gangway presentation uses global transforms.
+5. Measure one real port materialization. One queued lifecycle operation per
+   frame does not make the allocation of a whole 674-piece port inexpensive.
+   If necessary, budget placement creation across frames while withholding
+   arrival/interaction until collision is ready; do not expose partial authority.
+
+Production presenter safeguards
+
+CustomPortPresenter._show_vessels() currently creates frozen fixture vessels from
+the snapshot. That is useful for the data workshop, but would duplicate live MP
+replicas. A live-world mode must skip fixture vessel creation and bind existing
+vessel nodes by ID. Authority remains responsible for vessel placement/ownership.
+
+Placed operators emit operator_selected, but have no production service binding.
+The presenter deliberately does not register in HarbourRegistry. Do not create
+fake legacy PortData/HarbourController instances merely to make these NPCs appear
+functional. Live berth assignment, trading and NPC conversations are a later
+explicit service adapter, using accepted commands rather than workshop actors.
+
+PortCatalog is a directory, not the owner of stock or economics. Custom map and
+proximity entries should survive visual unloading. Its present register_port()
+defaults zero berths to one and often preserves old fields when empty lists are
+passed. Add a precise custom summary update before advertising custom services;
+do not accidentally list an unfinished quay as an available freight terminal.
+
+Tree clearance is the prerequisite still missing
+
+ForestField.add_exclusions(), WorldForestStreamer.add_exclusions() and
+DistantForest.add_exclusions() are append-only. Near trees can be regenerated,
+but distant_forest.gd filters existing MultiMeshes and discards their original
+display batches. Removing a platform cannot currently restore those distant
+trees. Reconfiguring the whole forest for each edit is not a suitable fix.
+
+Keep immutable generated-port/settlement/bridge exclusions and add replaceable
+custom exclusion groups keyed by port ID. Use exact platform polygons, not the
+whole owned plot, and invalidate only the union of old and new affected bounds.
+Update both ForestField and the near streamer, including in-flight job snapshots.
+For distant batches, retain the original transforms for affected batches (or
+recover them from the immutable cache), then filter against the latest exclusion
+set. A modifier revision must prevent an old filter job from winning after undo.
+
+ForestField's coverage texture is a coarse whole-world map; add_exclusions does
+not rebake it. Do not clear an entire coarse texel for a four-metre foundation.
+Use exact root rejection first and inspect the remaining distant canopy tint
+before adding a local texture update. Preserve all unrelated base exclusions.
+
+Terrain and forest modifiers belong to known world data, not loaded presenters.
+Keep their lightweight footprint projections when a port goes out of sight;
+otherwise sailing away would restore hills/trees and rebuild them on approach.
+The terrain streamer already selects affected chunks. Pass the complete set of
+known custom earthworks to its setter, not only the latest port's projection.
+
+Acceptance for the first integration slice
+
+- Two actual saved ports reconstruct at their distinct world positions. Approach,
+  depart beyond the unload margin, return: IDs, stock and berth data are unchanged.
+- A valid newer record received while unloaded appears on return. Invalid or
+  mismatched-world data leaves the last good port intact.
+- Unloading creates no cargo transaction, reservation cancellation or vessel
+  deletion. No duplicate frozen vessel appears beside a live replica.
+- Freecam cannot unload the ground under the walking player. Initial arrival and
+  edited terrain wait for the current collision revision.
+- Adding/removing/undoing a platform hides/restores near and distant trees only
+  under its footprint. Explicit port deletion removes its modifiers; ordinary
+  distance unloading does not. Generated ports and bridge clearances survive.
+- Capture a real forested coastline before/after and measure near-port loading
+  cost. Then stop: production NPC services and MP publication are separate work.
+
+This audit made no runtime changes and did not rerun completed terrain tests.

@@ -1,0 +1,4 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://tests/custom_port_visitors_test.gd" id="1"]
+[node name="CustomPortVisitorsTest" type="Node"]
+script = ExtResource("1")

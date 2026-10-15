@@ -22,6 +22,7 @@ const SHIPPING_LANE_NETWORK_BUILDER := preload("res://scripts/traffic/shipping_l
 const SHIPPING_LANE_DEBUG_DRAW := preload("res://scripts/traffic/shipping_lane_debug_draw.gd")
 const WORLD_TRAFFIC_SERVICE := preload("res://scripts/traffic/world_traffic_service.gd")
 const WORLD_PORT_NAMES := preload("res://scripts/world/world_port_names.gd")
+const CUSTOM_PORT_WORLD_IMPORT := preload("res://scripts/port/building/custom_port_world_import.gd")
 
 ## Match terrain mid LOD (~4.8 km) so coasts are not empty until the last moment.
 const LOAD_RADIUS           : float = 4800.0
@@ -38,10 +39,18 @@ var _requested_generation_version := WORLD_GENERATION_VERSION
 var _requested_weather_generation_version := WEATHER_GENERATION_VERSION
 var _requested_layout_checksum := ""
 var _terrain_streamer: WorldTerrainStreamer
+var _player_ports:CustomPortStreamer
+var _personal_home:PlayerPortPlot
 var _forest_streamer: WorldForestStreamer
 var _shipping_lane_network: ShippingLaneNetwork
 var _shipping_lane_generation_usec := 0
 var _world_traffic_service: WorldTrafficService
+## Opt-in, explicit local presentation files. No directory scanning or save writes.
+## Tests may supply paths before adding this World; normal launches use user args.
+var custom_port_document_paths := PackedStringArray()
+var custom_port_import_report: Dictionary = {"ok":true,"code":"disabled","errors":[]}
+var _custom_port_import: Node3D
+var _custom_port_reserved_zones: Array = []
 
 @export var world_seed:   int = 42:
 	set(v): world_seed = v; if _ready_complete and is_inside_tree(): _rebuild()
@@ -61,6 +70,8 @@ func _ready() -> void:
 	WorldBootstrap.trace_entry("world_scene_ready")
 	if not Engine.is_editor_hint():
 		add_to_group("world")
+		if custom_port_document_paths.is_empty():
+			custom_port_document_paths=CUSTOM_PORT_WORLD_IMPORT.document_arguments(OS.get_cmdline_user_args())
 		var settings := get_node_or_null("/root/GameSettings")
 		if settings != null:
 			world_seed = int(settings.get("map_generation_seed"))
@@ -74,6 +85,9 @@ func _ready() -> void:
 
 
 func _rebuild() -> void:
+	_custom_port_import=null
+	_custom_port_reserved_zones=[]
+	custom_port_import_report={"ok":true,"code":"disabled","errors":[]}
 	PortDataCache.clear()
 	BuildingCache.clear()
 	LandDecorCache.clear()
@@ -194,6 +208,11 @@ func _rebuild() -> void:
 		# Register home before streaming so all initial work uses the harbour,
 		# never the temporary camera-less reference at the world's origin.
 		stage_started=Time.get_ticks_usec()
+		if not _setup_personal_ports():
+			GameMenu.hide_loading()
+			GameMenu.set_gameplay_hud_visible(false)
+			get_tree().change_scene_to_file.call_deferred("res://scenes/ui/main_menu.tscn")
+			return
 		_setup_ports(defs)
 		print("BOOT_COST setup_ports_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
 		_add_terrain_streamer(defs)
@@ -211,6 +230,10 @@ func _rebuild() -> void:
 		print("BOOT_COST seamarks_ms=",(Time.get_ticks_usec()-stage_started)/1000.0)
 		add_child(seamarks)
 		_add_forest_streamer(flatten_zones)
+		if _player_ports!=null:_player_ports.bind_environment(_terrain_streamer,_forest_streamer)
+		if not custom_port_document_paths.is_empty():
+			_custom_port_reserved_zones=flatten_zones.duplicate(true)
+		_begin_custom_port_import(bridges)
 		var wildlife := CoastalBirdWorld.new()
 		wildlife.name = "CoastalBirds"
 		wildlife.configure(_world_layout, flatten_zones)
@@ -250,6 +273,31 @@ func get_world_context() -> Dictionary:
 
 func get_world_layout() -> WorldLayout:
 	return _world_layout
+
+
+func _begin_custom_port_import(bridges: CoastalBridges) -> void:
+	if custom_port_document_paths.is_empty():return
+	var source := CUSTOM_PORT_WORLD_IMPORT.new()
+	source.name="LocalCustomPortImport"
+	add_child(source)
+	_custom_port_import=source
+	var remote := PlayerSession.persistence_mode==PlayerSession.PersistenceMode.REMOTE
+	custom_port_import_report={"ok":true,"code":"waiting_for_generated_geometry","errors":[]}
+	# Bridge planning is asynchronous. Do not accept a plot now only to discover
+	# that a generated bridge or approach road occupies it a few seconds later.
+	while not remote and is_instance_valid(bridges) and not bridges.planning_complete:
+		await get_tree().process_frame
+		if not is_inside_tree() or not is_instance_valid(source) or _custom_port_import!=source:return
+	if not is_inside_tree() or not is_instance_valid(source) or _custom_port_import!=source:return
+	# Check again after awaiting: entering multiplayer must never fall back to files.
+	remote=PlayerSession.persistence_mode==PlayerSession.PersistenceMode.REMOTE
+	custom_port_import_report=source.load_documents(custom_port_document_paths,get_world_context(),remote,
+		PortCatalog.get_port_ids(),_custom_port_reserved_zones,PortCatalog,_terrain_streamer,_forest_streamer)
+	if custom_port_import_report.ok:
+		print("CUSTOM PORT IMPORT ",custom_port_import_report.code," documents=",custom_port_document_paths.size())
+	else:
+		print("CUSTOM PORT IMPORT REJECTED ",JSON.stringify(custom_port_import_report))
+		GameMenu.notify("Custom harbour import rejected: "+str(custom_port_import_report.code).replace("_"," ")+".")
 
 
 func get_world_generation_debug_stats() -> Dictionary:
@@ -348,7 +396,7 @@ func _add_terrain_streamer(defs: Array[PortDefinition]) -> void:
 	_terrain_streamer.name = "WorldTerrainStreamer"
 	_terrain_streamer.add_to_group("world_terrain_streamer")
 	add_child(_terrain_streamer)
-	var home := get_node_or_null("HomePort") as PortPlot
+	var home := _home_plot()
 	if home != null: _terrain_streamer.begin_boot_priority(home.get_spawn_position())
 	_terrain_streamer.configure(_world_layout, defs)
 
@@ -371,6 +419,8 @@ func _on_bridge_structures_ready(structures: Array) -> void:
 				exclusions.append({"polygon":expanded,"forest_clear_only":true})
 	ForestField.add_exclusions(exclusions)
 	_forest_streamer.add_exclusions(exclusions)
+	if not custom_port_document_paths.is_empty():
+		_custom_port_reserved_zones.append_array(exclusions)
 
 
 func _add_forest_streamer(flatten_zones: Array) -> void:
@@ -378,7 +428,7 @@ func _add_forest_streamer(flatten_zones: Array) -> void:
 	_forest_streamer.name = "WorldForestStreamer"
 	_forest_streamer.add_to_group("world_forest_streamer")
 	add_child(_forest_streamer)
-	var home := get_node_or_null("HomePort") as PortPlot
+	var home := _home_plot()
 	if home != null: _forest_streamer.boot_focus = home.get_spawn_position()
 	_forest_streamer.configure(_world_layout, flatten_zones)
 
@@ -445,7 +495,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 			registry.register_freight_berths(data.port_id, data.freight_berths())
 
 		var is_home := data.port_id == home_port_id or (i == 0 and home_port_id == "port-home")
-		if is_home and get_node_or_null("HomePort") == null:
+		if is_home and _home_plot() == null:
 			# Captain home quay: always present so spawn/teleport have a berth.
 			var plot := PortPlot.new()
 			plot.name = "HomePort"
@@ -465,7 +515,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 			)
 
 	# Fallback if the saved home port id no longer exists in this seed.
-	if get_node_or_null("HomePort") == null and not defs.is_empty():
+	if _home_plot() == null and not defs.is_empty():
 		var fallback := PortExpander.expand(defs[0], world_seed, _world_layout)
 		var plot := PortPlot.new()
 		plot.name = "HomePort"
@@ -492,10 +542,10 @@ func _generate_definitions() -> Array[PortDefinition]:
 
 func _spawn_player() -> void:
 	GameMenu.set_loading_stage("Preparing your harbour…")
-	var home := get_node_or_null("HomePort") as PortPlot
+	var home := _home_plot()
 	# PortPlot builds its graph visualizer deferred. Do not create the player
 	# until both the port deck and streamed terrain collision exist.
-	if home != null and home.get_node_or_null("PortLayoutGraph") == null:
+	if home != null and not home is PlayerPortPlot and home.get_node_or_null("PortLayoutGraph") == null:
 		await home.rebuild_completed
 	WorldBootstrap.trace_entry("home_port_built")
 	GameMenu.set_loading_stage("Preparing nearby terrain…")
@@ -533,6 +583,9 @@ func _spawn_player() -> void:
 	var port_loader := get_node_or_null("ProximityLoader")
 	if port_loader != null: port_loader.set_process(true)
 	boot_finished.emit()
+	if HomePortService.welcome:
+		HomePortService.welcome=false
+		GameMenu.welcome_home.call_deferred()
 	WorldBootstrap.entry_started_usec = 0
 
 
@@ -615,3 +668,38 @@ func _own_subtree(node: Node) -> void:
 	node.owner = esc
 	for child in node.get_children():
 		_own_subtree(child)
+
+
+func _home_plot()->PortPlot:
+	if is_instance_valid(_personal_home):return _personal_home
+	return get_node_or_null("HomePort") as PortPlot
+
+func _setup_personal_ports()->bool:
+	_player_ports=CustomPortStreamer.new()
+	_player_ports.name="PlayerPorts"
+	_player_ports.live_services=true
+	add_child(_player_ports)
+	_player_ports.configure(CustomPortWorldImport.world_identity(get_world_context()))
+	_player_ports.retained_ids[PlayerSession.data.home_port_id]=true
+	for record in HomePortService.records:
+		var result:=_player_ports.upsert_record(record)
+		if not result.ok:
+			push_error("Cannot reconstruct player port: "+JSON.stringify(result))
+		else:_register_personal_port(record)
+	var home:=_player_ports.load_now(PlayerSession.data.home_port_id)
+	if home!=null:_personal_home=home.get_node("Services") as PlayerPortPlot
+	if PlayerSession.data.home_port_id.begins_with("home-") and _personal_home==null:
+		push_error("Your saved home could not be loaded. The captain and home record have been preserved.")
+		return false
+	WorldGateway.projection_changed.connect(_player_port_changed)
+	return true
+
+func _player_port_changed(kind:String,_id:String,projection:Dictionary)->void:
+	if kind=="custom_port" and _player_ports!=null:
+		var record:Dictionary=projection.get("state",{})
+		if _player_ports.upsert_record(record).ok:_register_personal_port(record)
+
+func _register_personal_port(record:Dictionary)->void:
+	var origin:=CustomPortCatalog.vector3(record.origin_m)
+	var spawn:=origin+CustomPortCatalog.vector3(record.get("spawn_local_m",[5,1,43]))
+	PortCatalog.register_port(str(record.id),str(record.name),origin,spawn,"",[],200,200)

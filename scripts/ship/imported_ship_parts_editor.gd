@@ -1328,15 +1328,24 @@ func deformed_vertices(mesh: MeshInstance3D, surface: int) -> PackedVector3Array
 
 
 func _deformed_faces(mesh: MeshInstance3D) -> PackedVector3Array:
+	if mesh==null or mesh.mesh==null:return PackedVector3Array()
 	var key := str(mesh.mesh.get_instance_id())
 	for i in range(mesh.get_blend_shape_count()):
 		key += ":%.6f" % mesh.get_blend_shape_value(i)
 	if mesh_faces.has(key):
 		return mesh_faces[key]
+	# Undeformed procedural meshes may have no index array, or contain lines
+	# rather than triangles. Let Mesh extract only their actual triangle faces.
+	if mesh.get_blend_shape_count()==0:
+		var source_faces:=mesh.mesh.get_faces()
+		mesh_faces[key]=source_faces
+		return source_faces
 	var faces := PackedVector3Array()
 	for surface in range(mesh.mesh.get_surface_count()):
+		if mesh.mesh is ArrayMesh and mesh.mesh.surface_get_primitive_type(surface)!=Mesh.PRIMITIVE_TRIANGLES:continue
 		var vertices := deformed_vertices(mesh, surface)
-		var indices: PackedInt32Array = mesh.mesh.surface_get_arrays(surface)[Mesh.ARRAY_INDEX]
+		var raw_indices: Variant=mesh.mesh.surface_get_arrays(surface)[Mesh.ARRAY_INDEX]
+		var indices:=raw_indices as PackedInt32Array if raw_indices!=null else PackedInt32Array()
 		if indices.is_empty():
 			faces.append_array(vertices)
 		else:

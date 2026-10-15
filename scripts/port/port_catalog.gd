@@ -5,6 +5,9 @@ extends Node
 
 ## port_id -> { id, display_name, position, spawn_pos, ... }
 var _ports: Dictionary = {}
+## Separate passive construction directory: never feed freight, proximity,
+## home selection or berth booking through imported display-only summaries.
+var _custom_ports: Dictionary = {}
 var revision := 0
 
 
@@ -100,7 +103,35 @@ func register_freight_berths(port_id: String, berths: Array[Dictionary]) -> void
 
 func clear() -> void:
 	_ports.clear()
+	_custom_ports.clear()
 	revision += 1
+
+
+func register_custom_summary(summary: Dictionary, source_owner: Object) -> bool:
+	var id := str(summary.get("id",""))
+	if not is_instance_valid(source_owner) or id.is_empty() or _ports.has(id) \
+			or str(summary.get("source",""))!="custom" or bool(summary.get("services_ready",true)):
+		return false
+	_custom_ports[id]={"summary":summary.duplicate(true),"owner":weakref(source_owner)}
+	revision+=1
+	return true
+
+
+func get_custom_port_summaries() -> Array[Dictionary]:
+	var summaries: Array[Dictionary] = []
+	var ids: Array = _custom_ports.keys()
+	ids.sort()
+	for id in ids:
+		var entry: Dictionary = _custom_ports[id]
+		if entry.owner.get_ref()!=null:summaries.append(entry.summary.duplicate(true))
+	return summaries
+
+
+func unregister_custom_summary(port_id: String, source_owner: Object) -> void:
+	var entry: Dictionary = _custom_ports.get(port_id,{})
+	if entry.is_empty() or entry.owner.get_ref()!=source_owner:return
+	_custom_ports.erase(port_id)
+	revision+=1
 
 
 func get_port_ids() -> Array[String]:

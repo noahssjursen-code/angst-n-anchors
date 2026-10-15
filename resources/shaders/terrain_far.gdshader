@@ -3,11 +3,12 @@ render_mode cull_back, diffuse_burley;
 #include "terrain_surfaces.gdshaderinc"
 void vertex() {
     world_pos=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;
-    world_normal=normalize(MODEL_NORMAL_MATRIX*NORMAL);
+    world_normal=earthwork_normals ? MODEL_NORMAL_MATRIX*CUSTOM0.xyz : normalize(MODEL_NORMAL_MATRIX*NORMAL);
     coast_w=clamp(COLOR.a,0.0,1.0);
 }
 void fragment() {
     vec3 n=normalize(world_normal);
+    if(earthwork_normals) NORMAL=normalize((VIEW_MATRIX*vec4(n,0.0)).xyz);
     vec3 w=terrain_weights(n);
     vec3 macro=texture(macro_map,world_pos.xz*.0016).rgb;
     vec2 forest_uv=world_pos.xz/(forest_world_half_extent_m*2.0)+vec2(.5);

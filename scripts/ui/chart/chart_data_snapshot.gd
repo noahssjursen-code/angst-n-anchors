@@ -61,6 +61,10 @@ static func from_live_tree(tree: SceneTree) -> ChartDataSnapshot:
 		for id_raw in registry.call("get_port_ids"):
 			var info := (registry.call("get_port_info", str(id_raw)) as Dictionary).duplicate(true)
 			out.ports.append(info)
+		for summary: Dictionary in registry.call("get_custom_port_summaries"):
+			var info := summary.duplicate(true)
+			info.position=CustomPortCatalog.vector3(info.position_m)
+			out.ports.append(info)
 	out._index_ports()
 	## Gameplay chart path — keep field APIs aligned with the live world.
 	if out.layout != null:
@@ -111,7 +115,8 @@ static func for_preview(
 
 
 func is_valid() -> bool:
-	return layout != null and not ports.is_empty()
+	# A property chart can have geography before any harbour is constructed.
+	return layout != null
 
 
 func matches_live_tree(tree: SceneTree) -> bool:

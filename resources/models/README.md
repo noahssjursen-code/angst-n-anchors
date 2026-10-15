@@ -78,10 +78,10 @@ render captures under Pictures/machinescreenshots. Teleporting the ferry between
 terminals is a journey fixture; this does not verify autonomous approaches or
 production-world passenger restoration. The 75-mark fare is test data.
 
-`_source/coastal_express/build_seated_passenger.py` bakes the existing in-house
-mariner's seated pose into `characters/passengers/` shared meshes. No player rig,
-animation or locomotion is changed. Four clothing/skin variants use the approved
-character material library. Near/far meshes contain 6992/1794 triangles per person
+`tools/build_crew_passengers_blender.py` bakes the new unclothed crew base's
+seated pose into `crew_base/passengers/` shared meshes. Player locomotion is
+unchanged. Four skin tints share the same base; clothing is intentionally absent.
+Near/far meshes contain 6860/1769 triangles per person
 and are instanced without per-passenger controllers or skeletons. Near detail is
 used below 80 m; cabin occupants are omitted beyond 450 m. The manifest and ship
 mass remain active independently. See that asset directory for provenance/cost.

@@ -14,6 +14,9 @@ uniform sampler2D macro_map : filter_linear_mipmap, repeat_enable;
 uniform sampler2D forest_map : filter_linear_mipmap, repeat_disable;
 uniform float forest_world_half_extent_m = 20000.0;
 uniform float rain_wetness = 0.0;
+// Split earthwork faces retain the original unnormalized normal interpolation.
+// Ordinary terrain keeps its established packed-normal path.
+uniform bool earthwork_normals = false;
 varying vec3 world_pos;
 varying vec3 world_normal;
 varying float coast_w;

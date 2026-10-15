@@ -12,6 +12,9 @@ extends NpcBase
 const LAYER_WORLD := 1
 
 @export var interact_range: float = 4.0
+## Harbour services now live in the tablet. Keep the established service
+## controllers, without constructing a character, collider or input listener.
+@export var tablet_only := true
 
 signal interaction_requested
 
@@ -21,6 +24,10 @@ var _body:         StaticBody3D
 
 
 func _ready() -> void:
+	if tablet_only:
+		add_to_group("port_tablet_service")
+		set_process_unhandled_input(false)
+		return
 	super._ready()
 	_build_collider()
 	if not Engine.is_editor_hint(): add_to_group("port_service_npc")
@@ -78,6 +85,7 @@ func _can_interact() -> bool:
 
 
 func _nearest_player() -> CharacterBody3D:
+	if tablet_only:return _nearest_player_in(600.0)
 	return _nearest_player_in(interact_range)
 
 

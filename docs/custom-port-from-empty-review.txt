@@ -1,0 +1,51 @@
+PLAYER PORT FROM-EMPTY USABILITY REVIEW - 15 OCTOBER 2026
+
+This review exercised the actual workshop library and mouse placement path,
+starting with zero placed assets. Camera positions were scripted for repeatable
+review; no harbour geometry or inventory was injected into the document.
+
+Sequence: 20 eight-metre foundations form a 32 x 40 m deck; twelve 8 x 4 m quay
+sections connect it toward shore; two mooring bollards derive a berth; eight
+modular wall/window/door sections and four roofs form an 8 x 8 m room. A fish
+landing plant, tyres, ladder and operator are placed. Every asset retains the
+same sea-relative deck plane. The finished harbour switches to walking after
+the terrain/collision preparation completes.
+
+Concrete defect found and corrected
+  The first visible "Mooring bollard" had a 2 x 2 m footprint but snapped only
+  0.75 m in from the quay. Its base extended beyond the deck, so placement was
+  rejected at every ordinary edge. Existing examples used the smaller authored
+  tee bollard, hiding this problem. Bollard snapping now respects the actual
+  base depth plus 5 cm clearance and also keeps the base width inside an edge's
+  endpoints. The authored tee bollard retains its existing 0.75 m inset. Saved
+  placements and full authority support validation are unchanged.
+
+  The fish-plant library description now says "Hose reach" and "refrigerated
+  store", rather than promising the empty yard attached to a container crane.
+
+Checks
+  tests/custom_port_bollard_snap_test.tscn: 66 focused headless checks passed.
+    Both bollards on all four cardinal edges and corners, read-only previews,
+    and full authority placement. No broad suites were rerun unchanged.
+  tests/custom_port_from_empty_review.tscn: 108 native checks passed, clean exit.
+    Run with -- --shipyard-playtest --empty-custom-port --capture.
+    All construction uses the real library signal and LMB input; no direct
+    authority insertion is used to create the port.
+
+Native screenshots were opened and visually reviewed. The quay is coherent,
+the room corners and roof align, the access strip meets shore, the equipment
+has walking clearance, and no permanent yellow yard grid is present.
+
+Archived evidence
+  C:/Users/noahs/Pictures/machinescreenshots/
+    custom-port-1792032911-7888-from-empty-complete-fishing-pier.png
+    custom-port-1792032912-7888-from-empty-first-walk.png
+
+Logs under this chat's outputs folder
+  custom-port-from-empty-review-bollard-failure.log - initial reproduced defect
+  custom-port-bollard-snap.log - focused corrected behaviour
+  custom-port-from-empty-review-final.log - final native sequence
+
+The review is isolated under outputs/port-from-empty-review-profile. Captain
+saves, production server state and generated ports are untouched. This proves
+construction/walking usability, not multiplayer land purchase or fish trading.

@@ -22,16 +22,11 @@ static func describe(npc: NpcInteractable) -> Dictionary:
 		result.title = "Harbourmaster"
 		result.line = "Which vessel do you need?"
 		result["port_id"] = npc.port_id
+		var fish := HomeFishSale.snapshot(npc.port_id)
+		if not fish.is_empty():
+			result["fish_reception"] = fish
+			result.actions.append({"id":"sell_fish", "label":fish.label, "reason":fish.reason})
 		var selected:=LocalPlayerView.get_active_vessel_record()
-		if VesselEquipment.has_mount(selected):
-			for id in ["fishing_rod","harpe"]:
-				var equipped:bool=str(selected.get("equipped_fishing_item","fishing_rod"))==id
-				result.actions.append({"id":"equip:"+id,"label":("Equipped: " if equipped else "Equip ")+str(VesselEquipment.item(id).name),"reason":"Already equipped" if equipped else ("Buy this for your ship first." if id=="harpe" and VesselEquipment.count(selected,id)==0 else "")})
-		for stock:Dictionary in VesselEquipment.catalog():
-			var reason:="" if not selected.is_empty() else "Select a vessel first."
-			if PlayerSession.is_remote_voyage():reason="Equipment purchases are not available on this server."
-			elif int(stock.price_nok)>LocalPlayerView.get_marks():reason="Insufficient funds."
-			result.actions.append({"id":"equipment:"+str(stock.id),"label":"Buy %s · %s (%d aboard)"%[stock.name,PlayerData.format_money(stock.price_nok),VesselEquipment.count(selected,stock.id)],"reason":reason})
 
 		var ship := LocalPlayerView.get_active_ship() as BoatBody
 		if ship != null:
@@ -98,6 +93,7 @@ static func describe(npc: NpcInteractable) -> Dictionary:
 
 static func friendly_berth(berth: QuayBerthSlot) -> String:
 	if berth == null: return "assigned quay"
+	if berth.has_meta("display_name"):return str(berth.get_meta("display_name"))
 	return "%s · %s" % [berth.family.replace("_", " ").capitalize(), berth.station_id.get_file()]
 
 
@@ -130,10 +126,6 @@ static func purchase(npc: NpcInteractable, payload: Dictionary) -> Dictionary:
 static func request(npc: NpcInteractable, action: String, payload: Dictionary = {}) -> Dictionary:
 	if not is_instance_valid(npc) or npc._nearest_player() == null:
 		return CompanyContracts.result_error("out_of_range", "Return to the operator to place this order.")
-	if action.begins_with("equip:") and npc is HarbourMasterNpc:
-		return PlayerSession.equip_ship_fishing_item({"vessel_id":str(LocalPlayerView.get_active_vessel_record().get("uid","")),"item_id":action.trim_prefix("equip:")})
-	if action.begins_with("equipment:") and npc is HarbourMasterNpc:
-		return PlayerSession.purchase_ship_equipment({"request_id":str(payload.get("request_id",PlayerData.new_uuid())),"vessel_id":str(LocalPlayerView.get_active_vessel_record().get("uid","")),"item_id":action.trim_prefix("equipment:"),"quantity":1})
 	if action == "buy" and npc is ShipwrightNpc:
 		return PlayerSession.purchase_yard_vessel(payload)
 	if action in ["store","refuel"] and npc is HarbourMasterNpc:
@@ -153,7 +145,7 @@ static func request(npc: NpcInteractable, action: String, payload: Dictionary = 
 		for item in describe(npc).items:
 			if str(item.id) == str(payload.get("id","")):
 				if not str(item.reason).is_empty(): return CompanyContracts.result_error("cannot_deploy",str(item.reason))
-				npc._deploy_fleet_vessel(item.record)
+				npc._deploy_fleet_vessel(item.record,str(payload.get("berth_id","")))
 				if npc._pending_berth_claims.is_empty():
 					var deployed := LocalPlayerView.get_active_ship() as BoatBody
 					if deployed != null and deployed.get_moored_berth() != null:
@@ -167,7 +159,7 @@ static func request(npc: NpcInteractable, action: String, payload: Dictionary = 
 			if str(offer.id) == str(payload.get("id","")):
 				if FreightService.accept_offer_for_ship(offer,ship,npc.port_id):
 					LocalPlayerView.save_player_state()
-					return CompanyContracts.result_ok({"message":"Booked. See your quay operator to load."})
+					return CompanyContracts.result_ok({"message":"Booked. Open Harbour services to load cargo."})
 		return CompanyContracts.result_error("offer_changed","That job no longer fits or is no longer available. Refresh the list.")
 	if action in ["load","unload","stop"] and npc is CraneOperatorNpc:
 		var snapshot := describe(npc)

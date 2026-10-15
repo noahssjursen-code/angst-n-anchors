@@ -1,0 +1,30 @@
+Grain bulk presentation
+=======================
+
+OreMoundBuilder now preserves grain as a third explicit bulk commodity. The
+existing heap geometry is shared with coal and iron ore; its new cereal finish
+is authored procedurally in resources/shaders/ore_pile.gdshader. No downloaded
+textures or new model dependency are involved. Grain has warm dry colour,
+high roughness, no metallic flakes, small settled variation and millimetre-scale
+surface relief. Derivative filtering averages detail at distance.
+
+The same material is used by custom-port stock bays, installed BulkHoldComponent
+fill, the animated grab fill, temporary transfer mounds and falling cargo pieces.
+The existing textured coal_aggregate/crushed_aggregate profiles and their
+procedural fallback variants remain unchanged. Grain works with either material
+library setting. No quantities, prices, hold capacity or physical rules changed.
+
+Reproducible review:
+  tests/custom_port_grain_visual_test.tscn -- --shipyard-playtest
+Add --capture in a rendered run for archived native views of all three stock
+bays, a close grain surface, and actual grain loading/unloading with the existing
+bulk crane and Coastal Bulk hold. Screenshots go to Pictures/machinescreenshots.
+
+The isolated fixture starts with finite 80-tonne stocks of each commodity,
+loads 20 tonnes of grain, and unloads it again. It verifies material identity
+through permanent and temporary visuals, the exact unchanged authority snapshot
+during animation, restored stock balance, unaffected coal/ore, and cleanup.
+Reviewed 15 October 2026: 28 headless checks and 34 native capture checks passed
+without logged errors. This is presentation validation, not a new economy or
+live multiplayer integration. Existing heap outlines and transfer particle
+geometry are reused; they are not individual simulated cereal kernels.

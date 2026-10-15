@@ -1,8 +1,10 @@
 # Blender character contract
 
-The visual target is Noah's angular maritime characters: square head, restrained
-face, practical clothes and patterned knit. Do not replace this with rounded
-realistic anatomy. Spend geometry on bevels, silhouettes, hands and deformation.
+15 October visual replacement: Noah requested a new character rather than the
+old square-headed mannequin. The in-house mariner now has a shaped jaw and
+cranial silhouette, eyelids/eyes/ears, swept crop, fitted tonal-knit sweater,
+reinforced pocketed trousers and compact deck boots. It remains stylised, with
+practical maritime clothing and the established 1.80 m bind dimensions.
 
 `mariner.glb` is the shared body, skeleton and modular wardrobe. Editable source:
 `../_source/characters/mariner.blend`. Rebuild using Blender in background with
@@ -10,8 +12,11 @@ realistic anatomy. Spend geometry on bevels, silhouettes, hands and deformation.
 Source coordinates: metres, Z up, +Y forward; Godot: Y up, -Z forward.
 Noah rejected the downloaded character/clothing replacements on 7 October.
 Continue from this original in-house mariner. Do not reintroduce those assets.
-`tools/mariner_refinement.py` improves the original hands, cap, sweater and
-trouser topology and weights; it does not replace the character with a new body.
+`tools/mariner_refinement.py` maintains the articulated hand and continuous
+trouser topology. `tools/mariner_redesign.py` authors the replacement head, face,
+hair, sweater and boots and the revised workwear details before skinning.
+The tested hand geometry, anatomical bind and grip contact points are retained;
+controller, locomotion and equipment code are not changed by this visual pass.
 
 - All parts share the same 50-bone bind pose. Do not attach a second skeleton to
   each garment. Hands and their rest bones are oriented together in the bind pose:
@@ -130,3 +135,9 @@ Hand-specific verification:
   a full crank turn, fixed arm lengths, skin/handle clearance, maximum-morph
   palm anchors and pose release on stow. `--hands-review` captures full context.
 All review images are saved to the user's machinescreenshots archive.
+
+Visual replacement review: `tests/character_redesign_review.tscn` captures the
+actual imported model in Godot: full body, face, hand, back, maximum-morph crew,
+walk, run and seated. Use `--shipyard-playtest`; all captures are archived in
+C:/Users/noahs/Pictures/machinescreenshots. Character studio remains the
+interactive wardrobe/body review scene. The tonal wool image is mariner_wool.png.

@@ -20,6 +20,10 @@ func _ready() -> void:
 	var layout:=FlatLayout.new()
 	for yaw in [0.0,.7,PI,-1.4]:
 		var zones:=graph.flatten_zone_records(position,yaw)
+		# The graph also carries intentional foundation terrain grading. Only
+		# forest-only masks promise not to change the rendered ground height.
+		var forest_only := zones.filter(func(zone: Dictionary): return bool(zone.get("forest_clear_only", false)))
+		check(not forest_only.is_empty(), "Graph provides explicit forest-only masks")
 		var basis:=Basis(Vector3.UP,yaw)
 		for route in plan.routes:
 			var a:=Vector2(route.a[0],route.a[1])
@@ -38,7 +42,7 @@ func _ready() -> void:
 			for z in range(-50,501,25):
 				var p3:=position+basis*Vector3(x,0,z)
 				var p:=Vector2(p3.x,p3.z)
-				check(is_equal_approx(WorldTerrainStreamer.sample_render_terrain_height(layout,p,zones),WorldTerrainStreamer.sample_render_terrain_height(layout,p,[])),"Forest mask must not change terrain height")
+				check(is_equal_approx(WorldTerrainStreamer.sample_render_terrain_height(layout,p,forest_only),WorldTerrainStreamer.sample_render_terrain_height(layout,p,[])),"Forest mask must not change terrain height")
 	check(serialized==var_to_bytes(graph.to_dict()),"Vegetation mask must not mutate saved port graph")
 	# Legacy house plots still keep clearance without deleting the whole town.
 	graph.initial_attributes.land_plan={"terrain_grid":{"points":[{"local":[0,230],"radius_m":4}]}}

@@ -13,7 +13,7 @@ var _name_field: LineEdit
 var _status: Label
 var _confirm: Button
 var _selected_color := BRAND_COLORS[0]
-var _selected_starter := "general_cargo"
+var _selected_starter := "fishing"
 var _color_buttons: Array[Button] = []
 var _starter_buttons: Dictionary = {}
 var _world_size_row: HBoxContainer
@@ -37,16 +37,16 @@ func _ready() -> void:
 	_build_world_size_choice()
 
 
-func open_for_captain(captain_name: String, walkup_purchase := false) -> void:
+func open_for_captain(captain_name: String, _walkup_purchase := false) -> void:
 	if not is_node_ready():
 		await ready
 	_name_field.text = "%s Maritime" % captain_name.strip_edges()
 	_selected_color = BRAND_COLORS[0]
-	_selected_starter = "general_cargo"
+	_selected_starter = "fishing"
 	_world_size.select(0)
 	_status.text = ""
-	_intro.text = ("Opening capital: %s. Buy your first vessel at the shipwright. Choose the work you want nearby when selecting your home port." % PlayerData.format_money(CompanyContracts.WALKUP_STARTING_MARKS)) if walkup_purchase else "Your company owns its vessels, money and stored goods. The starter hull decides the first work, not the career."
-	_work_heading.text = "Preferred first work" if walkup_purchase else "Choose your first vessel"
+	_intro.text = "Your fishing boat, personal rod and a finished coastal home are included. Choose your plot next; expand your port and fleet as you earn."
+	_work_heading.text = "Your first home"
 	_refresh_choices()
 	visible = true
 	_name_field.grab_focus()
@@ -88,37 +88,15 @@ func _build() -> void:
 		swatches.add_child(swatch)
 		_color_buttons.append(swatch)
 
-	_work_heading = Ui.field_label("Choose your first vessel")
+	_work_heading = Ui.field_label("Your first home")
 	modal.body.add_child(_work_heading)
-	var cards := Ui.grid(2, 12, 12)
-	cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	modal.body.add_child(cards)
-	for option in CompanyContracts.starter_options():
-		var starter_id := str(option.get("id", ""))
-		var card := Button.new()
-		card.theme_type_variation = "SelectCard"
-		card.custom_minimum_size = Vector2(0, 148)
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		card.toggle_mode = true
-		card.focus_mode = Control.FOCUS_NONE
-		card.text = "%s\n\n%s\n\n%s" % [
-			str(option.get("career", "")).to_upper(),
-			str(option.get("label", "Vessel")),
-			str(option.get("role", "")),
-		]
-		card.pressed.connect(func() -> void:
-			_selected_starter = starter_id
-			_refresh_choices())
-		cards.add_child(card)
-		_starter_buttons[starter_id] = card
-
+	modal.body.add_child(Ui.paragraph("A sheltered quay, a red fishing shed and your own stretch of coast.\n\nStart fishing straight away. Building and other lines of work can wait."))
 	_status = Ui.caption("", "caution")
 	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	modal.footer.add_child(_status)
 	modal.footer.get_parent().visible = true
 	modal.add_action("Back", "ghost", func() -> void: cancelled.emit())
-	_confirm = modal.add_action("Choose home port", "primary", _submit)
+	_confirm = modal.add_action("Choose coastal plot", "primary", _submit)
 	_refresh_choices()
 
 

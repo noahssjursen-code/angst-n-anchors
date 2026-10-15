@@ -1857,31 +1857,12 @@ func _stamp_general_cargo_quay_yard(
 		zone_index: int,
 		role: String = "",
 ) -> void:
-	var yard_w := clampf(lane_w * 0.88, 8.0, 28.0)
-	var yard_len := clampf(zone_len * 0.88, 12.0, 80.0)
-	## Snap length to whole container footprints so slots pack cleanly.
-	var fp := ContainerUnit.DEFAULT_FOOTPRINT
-	var cell := 1.0
-	yard_w = maxf(float(fp.x) * cell, floor(yard_w / (float(fp.x) * cell)) * float(fp.x) * cell)
-	yard_len = maxf(float(fp.y) * cell, floor(yard_len / (float(fp.y) * cell)) * float(fp.y) * cell)
-
-	var yard_pad := CargoSlotPadComponent.new()
+	var yard_factory := preload("res://scripts/port/port_cargo_yard.gd")
+	var yard_pad := yard_factory.container_pad(yard_factory.size_for_lane(lane_w,zone_len))
 	yard_pad.name = "GeneralCargoYard_%d" % zone_index
-	yard_pad.is_quay_yard_pad = true
-	yard_pad.show_pad_visual = false
-	yard_pad.affects_boat_cargo_mass = false
-	yard_pad.deck_width_m = yard_w
-	yard_pad.deck_length_m = yard_len
-	yard_pad.cell_size_m = cell
-	yard_pad.container_footprint = fp
 	## Sit on the pier crown — same reference as bulk mounds / quay decks.
 	yard_pad.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, zone_mid_z)
 	lane.add_child(yard_pad)
-
-	var drop := Node3D.new()
-	drop.name = "YardDrop"
-	drop.add_to_group("container_yard_drop")
-	yard_pad.add_child(drop)
 
 	if slot != null and _harbour != null:
 		## One long berth may contain several independent crane bays. Preserve
