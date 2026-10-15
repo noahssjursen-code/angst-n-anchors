@@ -1,0 +1,51 @@
+CUSTOM PORT COLLECTION PREFLIGHT
+15 October 2026
+
+CustomPortCollection.validate(snapshots) is a pure check of a complete proposed
+set of port documents. First validate each document through CustomPortState or
+CustomPortRepository with the expected world and authoritative asset catalog.
+Then run this check BEFORE installing any member of the set into a streamer.
+
+API: scripts/port/state/custom_port_collection.gd
+  validate(snapshots: Array) -> {ok, code, errors}
+  code: valid_collection | invalid_collection
+  errors: dictionaries containing code, readable message and affected IDs
+
+It rejects duplicate port IDs, even when the repeated documents are identical.
+Plot IDs must be unique across different port records. Reusing an ID for the
+same world bounds yields duplicate_plot_id; changing its bounds yields
+plot_bounds_conflict. Positive-area overlap between different ports yields
+plot_overlap regardless of whether the companies are the same or different.
+Exact shared edges and corners remain legal. An empty collection is valid.
+
+rect_m is port-local [x,z,width,depth]. The helper adds origin_m's X and Z before
+comparing world areas, so equal local rectangles at different ports need not
+overlap, and different local rectangles can still claim the same world land.
+It uses scalar double coordinates rather than float32 Vector2 rectangles, and
+does not round away a thin positive overlap. An X-axis sweep skips disjoint
+ranges. Per-document overlap rules remain CustomPortState's responsibility.
+
+Pair errors include port_id/other_port_id, plot_id/other_plot_id,
+record_index/other_record_index and rect_world_m/other_rect_world_m. The source
+array and its documents are never modified or sorted. Returned error bounds are
+detached arrays. A rejected collection contains no partial accepted record set.
+Basic malformed inputs and a mixed-world set also reject defensively; this does
+not replace the preceding complete document/world validation.
+
+The saved-document travel importer uses this as its final whole-batch
+preflight, after individual file validation and before installing any port.
+This helper does not load files, install scenes, change any saved
+record, buy land or authorize a company. It only knows the proposed collection:
+it cannot prove a plot was purchased, check unknown ports, resolve global claims
+or reserve existing generated-port/bridge/settlement land. A server must check
+against its complete authoritative property directory in its own transaction.
+
+Focused verification:
+  Godot --headless --path <game> res://tests/custom_port_collection_test.tscn
+        -- --shipyard-playtest
+
+Result: 212 checks passed across 27 cases. Normal fixtures first pass full
+CustomPortState validation. Coverage includes duplicate records/plot IDs,
+same/different-company overlaps, translated origins, containment, negative
+coordinates, exact edge/corner contact, and a 0.0001 m overlap and gap at 80 km.
+Every case checks unchanged input bytes and detached result/error data.

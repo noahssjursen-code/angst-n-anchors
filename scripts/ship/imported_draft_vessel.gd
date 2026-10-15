@@ -381,11 +381,10 @@ func _add_interactions(part: Node3D, state: ShipPartState) -> void:
 				nearest=distance;fishing.authored_gantry=candidate
 		if fishing.authored_gantry!=null:fishing.authored_gantry.set_meta("trawl_rig_owner",part)
 		part.add_child(fishing)
-	elif style == "hook_line" and not has_node("RodFishingStation"):
-		var rod := RodFishingStation.new()
-		rod.name = "RodFishingStation"
-		rod.authored_station = part
-		add_child(rod)
+	elif style == "hook_line":
+		# The fitting is a holder. Portable tackle belongs to the player.
+		var stored:=part.find_child("FishingRod",true,false) as Node3D
+		if stored!=null:stored.hide()
 	elif style == "catch_tank":
 		var hold := CatchHoldComponent.new()
 		hold.name = "CatchHold"
@@ -440,6 +439,8 @@ func _ensure_walk_hull_collider() -> void:
 	pass # No rectangular proxy beyond the pointed deck edge.
 
 func _ensure_walk_deck() -> void:
+	if not is_inside_tree() or is_queued_for_deletion() or get_parent()==null:
+		return
 	if is_instance_valid(_walk_deck):
 		return
 	_walk_deck = AnimatableBody3D.new()

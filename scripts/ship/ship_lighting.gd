@@ -60,6 +60,8 @@ func get_preset_name() -> String:
 
 
 func _gather_lights() -> void:
+	if not is_inside_tree() or is_queued_for_deletion():
+		return
 	_nav_lights.clear()
 	_work_lights.clear()
 	_window_lights.clear()

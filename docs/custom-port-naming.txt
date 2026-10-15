@@ -1,0 +1,35 @@
+HARBOUR NAMES - 15 OCTOBER 2026
+
+Port records -> Harbour contains a short owner-only name form. Enter or Save
+harbour name submits rename_port through the same authority command mechanism
+as construction. It never edits the document or scene name directly. Unicode
+names are supported, surrounding spaces trimmed, maximum length 80 characters.
+Empty names, control characters, extra fields and foreign/stale actors reject.
+
+The port ID, world location, plots, berth IDs, equipment, cargo and permissions
+are unchanged. A single revision/event/receipt persists the name; duplicate
+commands and repeated events are harmless. Event replay explicitly handles
+the scalar name field, while existing array changes retain their validation.
+Old documents without a name remain valid.
+
+Inspector title, workshop heading, actual chart and saved JSON use the new name.
+The name form defaults read-only. The isolated workshop explicitly supplies its
+owner role; this is not authentication for a future multiplayer adapter.
+Native inspection caught an inherited opaque dark focus style hiding the text;
+both name fields in this paper panel now use a transparent focus outline.
+
+tests/custom_port_naming_test.tscn
+  Headless: 29 checks passed for command rejection/atomicity, ownership,
+  immutable data, event-only reconstruction, retries, exact repository save/load
+  and public chart naming.
+  Native D3D12, -- --shipyard-playtest --native-name --capture:
+  11 checks passed in the actual fishing workshop, using Enter in the field,
+  live heading and chart, visible action/title, read-only role and Save/Load.
+
+Native screenshot opened and inspected:
+C:/Users/noahs/Pictures/machinescreenshots/custom-port-1792033077-33836-harbour-name-owner-settings.png
+
+Tests use their own profile and unique save paths. An early repeated native run
+correctly hit the repository's equal-revision conflict because the test reused
+a previous run's path; the fixture now chooses its own file. No production save
+protection was weakened.

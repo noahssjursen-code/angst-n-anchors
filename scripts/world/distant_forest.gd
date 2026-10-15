@@ -38,37 +38,147 @@ var meshes: Array[ArrayMesh] = []
 ## its reusable cache need not be cancelled or regenerated for these cuts.
 var late_exclusions: Array = []
 var exclusion_jobs: Array[Dictionary] = []
+## Original compact placements are retained only for batches touched by editable
+## ports. The worker/cache never see custom cuts, so removing one can restore
+## trees even if the original batch arrived while the port was already built.
+var retained_batches: Dictionary = {}
+var rendered_batches: Dictionary = {}
+var custom_port_exclusions: Dictionary = {}
+var custom_port_bounds: Dictionary = {}
+var custom_zone_bounds: Dictionary = {}
+var exclusion_revisions: Dictionary = {}
 
 func add_exclusions(added: Array) -> void:
-	late_exclusions.append_array(added)
-	for child in get_children():
-		if not child is MultiMeshInstance3D: continue
-		var box: AABB = child.multimesh.get_aabb()
-		var bounds: Rect2 = child.get_meta("forest_bounds",Rect2(Vector2(box.position.x,box.position.z),Vector2(box.size.x,box.size.z)))
-		var local_zones: Array = []
-		for zone in added:
-			if bounds.intersects(WorldTerrainStreamer._zone_influence_bounds(zone), true):
-				local_zones.append(zone)
-		if not local_zones.is_empty():
-			exclusion_jobs.append({"node":child,"zones":local_zones,"index":0,"kept":[]})
+	late_exclusions.append_array(added.duplicate(true))
+	var bounds_list := _zone_bounds(added)
+	for key in rendered_batches:
+		if _intersects_any(rendered_batches[key].bounds, bounds_list):
+			_queue_exclusion_batch(key)
+
+
+func set_custom_port_exclusions(owner_key: String, added: Array) -> bool:
+	if owner_key.is_empty() or custom_port_exclusions.get(owner_key, []) == added:
+		return false
+	var changed_bounds: Array = custom_zone_bounds.get(owner_key, []).duplicate()
+	var new_bounds := _zone_bounds(added)
+	changed_bounds.append_array(new_bounds)
+	var coarse_bounds: Array = []
+	if custom_port_bounds.has(owner_key): coarse_bounds.append(custom_port_bounds[owner_key])
+	if added.is_empty():
+		custom_port_exclusions.erase(owner_key)
+		custom_port_bounds.erase(owner_key)
+		custom_zone_bounds.erase(owner_key)
+	else:
+		custom_port_exclusions[owner_key] = added.duplicate(true)
+		custom_zone_bounds[owner_key] = new_bounds
+		var bounds := _combined_bounds(new_bounds)
+		custom_port_bounds[owner_key] = bounds
+		coarse_bounds.append(bounds)
+	for key in rendered_batches:
+		var bounds: Rect2 = rendered_batches[key].bounds
+		if _intersects_any(bounds, coarse_bounds) and _intersects_any(bounds, changed_bounds):
+			_queue_exclusion_batch(key)
+	return true
+
+
+func _queue_exclusion_batch(key: Vector2i) -> void:
+	var record: Dictionary = rendered_batches[key]
+	var originals: Array = retained_batches.get(key, [])
+	if originals.is_empty(): originals = _read_rendered_batch(record)
+	if not _custom_zones_for_bounds(record.bounds).is_empty():
+		retained_batches[key] = originals
+	var revision := int(exclusion_revisions.get(key, 0)) + 1
+	exclusion_revisions[key] = revision
+	var local_zones := _exclusions_for_bounds(record.bounds)
+	var job := {"key": key, "revision": revision, "sources": originals,
+		"zones": local_zones, "zone_index": ForestField.exclusion_index(local_zones), "species": 0, "index": 0,
+		"kept": [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]}
+	for i in exclusion_jobs.size():
+		if exclusion_jobs[i].key == key:
+			exclusion_jobs[i] = job
+			return
+	exclusion_jobs.append(job)
 
 func _process_exclusions() -> void:
 	if exclusion_jobs.is_empty(): return
 	var job := exclusion_jobs[0]
-	var node: MultiMeshInstance3D = job.node
-	var mm := node.multimesh
-	var end := mini(int(job.index)+256,mm.instance_count)
-	for i in range(int(job.index),end):
-		var xf := mm.get_instance_transform(i)
-		if not ForestField.inside_flatten_zones(Vector2(xf.origin.x,xf.origin.z),job.zones):
-			job.kept.append(xf)
-	job.index=end
-	if end < mm.instance_count: return
-	trees -= mm.instance_count-job.kept.size()
-	mm.instance_count=job.kept.size()
-	for i in job.kept.size(): mm.set_instance_transform(i,job.kept[i])
+	if int(job.revision) != int(exclusion_revisions.get(job.key, -1)):
+		exclusion_jobs.pop_front()
+		return
+	var remaining := 256
+	while int(job.species) < 4 and remaining > 0:
+		var species: int = job.species
+		var source: PackedFloat32Array = job.sources[species]
+		var kept: PackedFloat32Array = job.kept[species]
+		var end := mini(int(job.index) + remaining * 4, source.size())
+		for i in range(int(job.index), end, 4):
+			if not ForestField.inside_exclusion_index(Vector2(source[i], source[i+2]), job.zone_index):
+				kept.append_array(source.slice(i, i+4))
+		remaining -= (end - int(job.index)) / 4
+		job.kept[species] = kept
+		job.index = end
+		if end >= source.size():
+			job.species += 1
+			job.index = 0
+	if int(job.species) < 4: return
+	_apply_rendered_batch(job.key, job.kept, rendered_batches[job.key].bounds)
+	if _custom_zones_for_bounds(rendered_batches[job.key].bounds).is_empty():
+		retained_batches.erase(job.key)
 	exclusion_jobs.pop_front()
-func pending() -> int: return 1 if worker != null else uploads.size()
+
+
+func _read_rendered_batch(record: Dictionary) -> Array:
+	var groups: Array = []
+	for node in record.nodes:
+		var data := PackedFloat32Array()
+		if is_instance_valid(node):
+			var mm: MultiMesh = node.multimesh
+			for i in mm.instance_count:
+				var xf := mm.get_instance_transform(i)
+				data.append_array(PackedFloat32Array([xf.origin.x, xf.origin.y, xf.origin.z, xf.basis.y.length()]))
+		groups.append(data)
+	return groups
+
+
+func _custom_zones_for_bounds(bounds: Rect2) -> Array:
+	var local: Array = []
+	for owner in custom_port_exclusions:
+		if not bounds.intersects(custom_port_bounds[owner], true): continue
+		var owner_zones: Array = custom_port_exclusions[owner]
+		var owner_bounds: Array = custom_zone_bounds[owner]
+		for i in owner_zones.size():
+			if bounds.intersects(owner_bounds[i], true): local.append(owner_zones[i])
+	return local
+
+
+func _exclusions_for_bounds(bounds: Rect2) -> Array:
+	var local := _custom_zones_for_bounds(bounds)
+	for zone in late_exclusions:
+		if bounds.intersects(WorldTerrainStreamer._zone_influence_bounds(zone), true): local.append(zone)
+	return local
+
+
+static func _zone_bounds(source: Array) -> Array:
+	var result: Array = []
+	for zone in source: result.append(WorldTerrainStreamer._zone_influence_bounds(zone))
+	return result
+
+
+static func _combined_bounds(source: Array) -> Rect2:
+	if source.is_empty(): return Rect2()
+	var result: Rect2 = source[0]
+	for i in range(1, source.size()): result = result.merge(source[i])
+	return result
+
+
+static func _intersects_any(bounds: Rect2, others: Array) -> bool:
+	for other in others:
+		if bounds.intersects(other, true): return true
+	return false
+
+
+func pending() -> int:
+	return (1 if worker != null else 0) + uploads.size() + exclusion_jobs.size()
 func _exit_tree() -> void:
 	cancel_lock.lock();cancelled=true;cancel_lock.unlock()
 	if worker != null: worker.wait_to_finish();worker=null
@@ -122,7 +232,9 @@ func configure(source: Object, focus: Vector3 = Vector3.ZERO) -> void:
 				for dx in range(-1,2):
 					density=maxf(density,coverage.get_pixel(clampi(x+dx,0,coverage.get_width()-1),clampi(y+dz,0,coverage.get_width()-1)).r)
 			if density>.08: jobs.append(Vector2i(x,y))
-	zones=ForestField._flatten_zones.duplicate(true)
+	# Custom cuts are applied only on upload/filter. Never bake them into the
+	# worker output or shared cache, otherwise removal cannot restore the trees.
+	zones=ForestField.base_exclusions()
 	cache_path=CACHE.default_path()
 	cache_key=CACHE.identity(layout.layout_checksum,layout.seed,layout.world_size_m,coverage.get_data(),zones,STEP,WorldTerrainStreamer.TERRAIN_SINK_M)
 	worker=Thread.new();worker.start(generate)
@@ -175,7 +287,7 @@ func _process(_delta:float) -> void:
 	while not uploads.is_empty() and Time.get_ticks_usec()-start<2000:
 		upload_batch(uploads.pop_front())
 	peak_ms=maxf(peak_ms,(Time.get_ticks_usec()-start)/1000.0)
-	if uploads.is_empty() and worker==null: ready_ms=Time.get_ticks_msec()-started_ms
+	if uploads.is_empty() and worker==null and exclusion_jobs.is_empty(): ready_ms=Time.get_ticks_msec()-started_ms
 func build_cell(cell:Vector2i) -> void:
 	var key := Vector2i(cell.x/4,cell.y/4)
 	if not batches.has(key): batches[key]=[PackedFloat32Array(),PackedFloat32Array(),PackedFloat32Array(),PackedFloat32Array()]
@@ -216,33 +328,50 @@ func build_cell(cell:Vector2i) -> void:
 			# Placement has no rotation: keep four floats instead of Variant transforms.
 			groups[species].append_array(PackedFloat32Array([p.x,height,p.y,scale]))
 func upload_batch(key:Vector2i) -> void:
+	if not display_batches.has(key): return
 	var groups: Array = display_batches[key].duplicate()
 	var bounds := Rect2(Vector2(key)*cell_m*4-Vector2.ONE*layout.half_extent_m,Vector2.ONE*cell_m*4)
-	var local_zones: Array = []
-	for zone in late_exclusions:
-		if bounds.intersects(WorldTerrainStreamer._zone_influence_bounds(zone),true): local_zones.append(zone)
+	if not _custom_zones_for_bounds(bounds).is_empty():
+		retained_batches[key] = groups.duplicate()
+	var local_zones := _exclusions_for_bounds(bounds)
+	var local_index := ForestField.exclusion_index(local_zones)
 	for species in 4:
 		if not local_zones.is_empty():
-			groups[species] = filter_placements(groups[species],local_zones)
-		if groups[species].is_empty(): continue
-		var mm:=MultiMesh.new();mm.transform_format=MultiMesh.TRANSFORM_3D
-		mm.mesh=meshes[species];mm.instance_count=groups[species].size()/4
+			groups[species] = filter_placements(groups[species],local_zones,local_index)
+	_apply_rendered_batch(key, groups, bounds)
+	display_batches.erase(key)
+
+
+func _apply_rendered_batch(key: Vector2i, groups: Array, bounds: Rect2) -> void:
+	var record: Dictionary = rendered_batches.get(key, {"bounds": bounds, "nodes": [null, null, null, null]})
+	for species in 4:
+		var node: MultiMeshInstance3D = record.nodes[species]
+		if not is_instance_valid(node):
+			if groups[species].is_empty(): continue
+			node = MultiMeshInstance3D.new()
+			node.multimesh = MultiMesh.new()
+			node.multimesh.transform_format = MultiMesh.TRANSFORM_3D
+			node.multimesh.mesh = meshes[species]
+			node.set_meta("forest_bounds", bounds)
+			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(node)
+			record.nodes[species] = node
+		var mm: MultiMesh = node.multimesh
+		trees -= mm.instance_count
+		mm.instance_count = groups[species].size() / 4
 		var data: PackedFloat32Array = groups[species]
 		for i in mm.instance_count:
 			var base:=i*4
 			var scale:=data[base+3]
 			mm.set_instance_transform(i,Transform3D(Basis.IDENTITY.scaled(Vector3(scale*1.8,scale,scale*1.8)),Vector3(data[base],data[base+1],data[base+2])))
-		var node:=MultiMeshInstance3D.new();node.multimesh=mm
-		node.set_meta("forest_bounds",bounds)
-		node.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(node)
-		trees+=mm.instance_count
+		trees += mm.instance_count
+	rendered_batches[key] = record
 
-	display_batches.erase(key)
-
-static func filter_placements(data: PackedFloat32Array, exclusions: Array) -> PackedFloat32Array:
+static func filter_placements(data: PackedFloat32Array, exclusions: Array, prepared_index: Dictionary = {}) -> PackedFloat32Array:
+	if data.is_empty() or exclusions.is_empty(): return data
+	var index := prepared_index if not prepared_index.is_empty() else ForestField.exclusion_index(exclusions)
 	var kept := PackedFloat32Array()
 	for i in range(0,data.size(),4):
-		if not ForestField.inside_flatten_zones(Vector2(data[i],data[i+2]),exclusions):
+		if not ForestField.inside_exclusion_index(Vector2(data[i],data[i+2]),index):
 			kept.append_array(data.slice(i,i+4))
 	return kept

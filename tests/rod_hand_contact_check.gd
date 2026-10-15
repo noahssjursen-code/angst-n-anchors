@@ -16,7 +16,7 @@ func run(scene:Node3D)->void:
 	var controller:PlayerCamera=player.get_node("PlayerCamera")
 	player.set_process(false);player.set_physics_process(false)
 	station.working=true;station._carry(true)
-	var contacts:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/characters/hand_contacts.json"))
+	var contacts:Dictionary=JSON.parse_string(FileAccess.get_file_as_string(CharacterVisual.HAND_CONTACTS_PATH))
 	var worst:=0.0
 	for third in [false,true]:
 		if controller.is_third_person()!=third:controller._toggle_mode()
@@ -24,7 +24,7 @@ func run(scene:Node3D)->void:
 			for crank in [0.0,PI*.5,PI,PI*1.5]:
 				scene.camera.rotation.x=angle;station._crank.rotation.x=crank
 				for frame in 5:await scene.get_tree().process_frame
-				assert(poses.size()==50)
+				assert(poses.size()==skeleton.get_bone_count())
 				for side in ["L","R"]:
 					var contact:Vector3=Vector3(contacts[side].palm_contact[0],contacts[side].palm_contact[1],contacts[side].palm_contact[2])
 					for index in hands.mesh.get_blend_shape_count():
@@ -74,9 +74,16 @@ func run(scene:Node3D)->void:
 		var socket:Node3D=station._hand_pose.right_grip if side=="L" else station._hand_pose.left_grip
 		var target:=socket.global_position+(station._rod_root.global_basis.y*.012 if side=="R" else Vector3.ZERO)
 		assert(actual.distance_to(target)<.012,"Maximum body morph must keep palm contact")
-	station.working=false;station._carry(false)
+	# Portable equipment is re-equipped while its hotbar slot remains selected.
+	# Stow through the inventory action, as the player does, rather than toggling
+	# the old boat-station flag underneath PersonalFishingEquipment.
+	var released_pose:SkeletonModifier3D=station._hand_pose
+	var inventory:Dictionary=PersonalInventory.snapshot().duplicate(true)
+	inventory.selected_slot=1
+	PersonalInventory._apply(inventory)
 	for frame in 5:await scene.get_tree().process_frame
-	assert(not is_instance_valid(station._hand_pose),"Stowing releases equipment pose")
+	assert(not is_instance_valid(released_pose),"Stowing releases equipment pose")
+	assert(not is_instance_valid(player.get_node("PersonalFishingEquipment").station),"Empty hotbar slot stows portable equipment")
 	print("HAND CONTACT PASS: first/third person, three pitch angles, full crank rotation, fixed arm lengths, stow; worst contact error %.2f mm"%(worst*1000))
 	skeleton.skeleton_updated.disconnect(record.bind(skeleton))
 	scene.get_tree().quit()

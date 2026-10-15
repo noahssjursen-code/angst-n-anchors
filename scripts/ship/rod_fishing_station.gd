@@ -1,6 +1,7 @@
 class_name RodFishingStation
 extends Node3D
 
+var personal_player: CharacterBody3D
 var equipment_id:="fishing_rod"
 var _stored_rod:Node3D
 var _harpe_model:Node3D
@@ -55,10 +56,10 @@ func _ready()->void:
 	while node!=null:
 		if node is BoatBody: _boat=node;break
 		node=node.get_parent()
-	if _boat==null and remote_player==null:return
+	if _boat==null and remote_player==null and personal_player==null:return
 	assert(authored_station!=null,"Rod gameplay requires installed authored equipment")
 	_interaction = Area3D.new()
-	_interaction.collision_layer = 16
+	_interaction.collision_layer = 0 if personal_player!=null else 16
 	_interaction.collision_mask = 0
 	authored_station.add_child(_interaction)
 	_interaction.position = Vector3(0, 1.0, 0)
@@ -86,19 +87,21 @@ func _ready()->void:
 	_splash.mesh=ring;var foam:=StandardMaterial3D.new();foam.albedo_color=Color(.85,.94,.93,.7);foam.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
 	_splash.material_override=foam;_splash.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF;add_child(_splash);_splash.hide()
 	_stored_rod=_rod_root
-	if remote_player==null:
+	if remote_player==null and personal_player==null:
 		PlayerSession.vessels_synced.connect(_refresh_equipment)
 		call_deferred("_refresh_equipment")
 
 
 func _deck_player() -> CharacterBody3D:
+	if personal_player!=null:
+		return personal_player if not personal_player.is_vehicle_occupied() and not LocalPlayerView.is_helming() else null
 	var player := get_tree().get_first_node_in_group("player") as CharacterBody3D
 	if player == null or player.is_vehicle_occupied() or LocalPlayerView.is_helming(): return null
 	if LocalPlayerView.get_active_ship() != _boat: return null
 	return player
 
 func can_interact() -> bool:
-	if remote_player!=null:return false
+	if remote_player!=null or personal_player!=null:return false
 	if not _authority_available() or GameMenu.is_modal_open(): return false
 	var player := _deck_player()
 	if player == null or player.global_position.distance_to(authored_station.global_position) > 2.4: return false
@@ -111,7 +114,7 @@ func can_interact() -> bool:
 	return collider == _interaction or (collider != null and authored_station.is_ancestor_of(collider))
 
 func _unhandled_input(event: InputEvent) -> void:
-	if remote_player!=null:return
+	if remote_player!=null or personal_player!=null:return
 	if not event.is_action_pressed("interact") or GameMenu.is_modal_open(): return
 	if working:
 		for hold in CatchHoldComponent.get_all_for_ship(_boat):
@@ -131,6 +134,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _carry(value: bool) -> void:
+	if value and is_instance_valid(_carried):return
 	if value:
 		var player:Node3D = remote_player if remote_player!=null else _deck_player()
 		if player == null: return
@@ -189,8 +193,10 @@ func _drop() -> void:
 	session.drop(WaveSurface.WATER_LEVEL-FishingField.habitat.bottom(_cast_at),_free_space())
 
 func _physics_process(delta:float)->void:
-	if _boat==null or FishingField.habitat==null or not _authority_available():return
-	if LocalPlayerView.get_active_ship()!=_boat and not (inspect_mode and ShipyardPlaytestMode.active()):return
+	if not is_instance_valid(_boat) or FishingField.habitat==null or not _authority_available():
+		if personal_player!=null and session.phase not in ["stowed","landed"]:session.recover("Stand on a vessel deck to fish.")
+		return
+	if personal_player==null and LocalPlayerView.get_active_ship()!=_boat and not (inspect_mode and ShipyardPlaytestMode.active()):return
 	var controls:=((working and _deck_player()!=null) or (inspect_mode and ShipyardPlaytestMode.active())) and not LocalPlayerView.is_helming() and not GameMenu.is_modal_open()
 	if working and _deck_player()==null:
 		working=false;session.recover();_carry(false)
@@ -214,7 +220,7 @@ func _physics_process(delta:float)->void:
 	_last_phase=session.phase
 
 func _process(delta: float) -> void:
-	if (_boat==null and remote_player==null) or not is_instance_valid(_tip):return
+	if (_boat==null and remote_player==null and personal_player==null) or not is_instance_valid(_tip):return
 	if not working and session.phase=="stowed" and not _line.visible:return
 	_update_visual(delta,working and not GameMenu.is_modal_open())
 
@@ -224,7 +230,7 @@ func _hook_at() -> Vector2:
 
 func _store_catch(data: Dictionary) -> void:
 	var record:=data.duplicate(true)
-	record.merge({"lot_id":PlayerData.new_uuid(),"caught_game_hours":WorldClock.get_game_hours_elapsed(),"caught_position":_cast_at,"vessel_id":str(_boat.get_meta("vessel_uid","")),"owner_id":str(_boat.get_meta("owner_player_id",""))},true)
+	record.merge({"lot_id":PlayerData.new_uuid(),"caught_game_hours":WorldClock.get_game_hours_elapsed(),"caught_position":_cast_at,"vessel_id":str(_boat.get_meta("vessel_uid","")),"owner_id":str(LocalPlayerView.get_network_player_id())},true)
 	var lot:=CatchLot.create(record)
 	if WorldGateway.is_remote():
 		var service := WorldGateway.fishing_catches
@@ -252,7 +258,7 @@ func _store_catch(data: Dictionary) -> void:
 func _authority_available() -> bool:
 	if remote_player!=null:return false
 	if not WorldGateway.is_remote(): return true
-	return WorldGateway.is_ready() and WorldGateway.fishing_catches != null and FishingCatchReplication.owns_ship(_boat)
+	return WorldGateway.is_ready() and WorldGateway.fishing_catches != null and (personal_player!=null or FishingCatchReplication.owns_ship(_boat))
 
 func _on_catch_finished(lot_id: String, _ok: bool, message: String) -> void:
 	if not _pending_catches.has(lot_id): return
@@ -290,7 +296,11 @@ func _update_visual(delta: float, controls: bool) -> void:
 			# Orbiting the camera must never drag equipment away from the person.
 			var body:=player.get_node("BodyMesh") as Node3D
 			anchor.basis=Basis(Vector3.UP,body.global_rotation.y)
-		_carried.global_transform=anchor*Transform3D(Basis.IDENTITY,(Vector3(.07,.23,-.65) if equipment_id=="harpe" else Vector3(.14,.08,-.40)))
+		else:
+			var body:=player.get_node("BodyMesh") as NpcBase
+			if body!=null and body.visual!=null:
+				anchor.origin+=body.visual.presentation_offset_world()
+		_carried.global_transform=anchor*Transform3D(Basis.IDENTITY,(Vector3(.07,.08,-.45) if equipment_id=="harpe" else Vector3(.14,.08,-.40)))
 		var angle:=.20
 		if session.phase=="charging":angle=.20+session.charge*.85
 		elif session.phase=="casting":angle=-.16
@@ -396,6 +406,7 @@ func set_equipment(id:String)->void:
 
 func equipment_prompt()->String:
 	var label:="harpe" if equipment_id=="harpe" else "rod"
+	if personal_player!=null:return "1–6  Select equipment · Hold RMB to lower · Hold LMB to retrieve"
 	return "F  Return %s to mount"%label if working else "F  Pick up %s"%label
 
 

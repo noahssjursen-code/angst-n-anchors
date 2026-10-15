@@ -1,8 +1,8 @@
 shader_type spatial;
 render_mode diffuse_burley;
 
-// 0 = iron ore (hematite), 1 = coal
-uniform int pile_kind : hint_range(0, 1) = 0;
+// 0 = iron ore (hematite), 1 = coal, 2 = dry cereal grain
+uniform int pile_kind : hint_range(0, 2) = 0;
 
 uniform vec3 iron_base : source_color = vec3(0.58, 0.26, 0.14);
 uniform vec3 iron_rust : source_color = vec3(0.74, 0.36, 0.17);
@@ -11,6 +11,10 @@ uniform vec3 iron_dark : source_color = vec3(0.30, 0.12, 0.07);
 uniform vec3 coal_base : source_color = vec3(0.07, 0.07, 0.09);
 uniform vec3 coal_fleck : source_color = vec3(0.20, 0.20, 0.22);
 uniform vec3 coal_highlight : source_color = vec3(0.34, 0.35, 0.38);
+
+uniform vec3 cereal_base : source_color = vec3(0.60, 0.43, 0.22);
+uniform vec3 cereal_light : source_color = vec3(0.79, 0.65, 0.40);
+uniform vec3 cereal_crease : source_color = vec3(0.43, 0.29, 0.12);
 
 uniform float grain_scale : hint_range(4.0, 80.0) = 32.0;
 uniform float chunk_scale : hint_range(1.0, 24.0) = 8.0;
@@ -70,7 +74,7 @@ void fragment() {
 		ALBEDO = col;
 		ROUGHNESS = clamp(0.94 - chunk * 0.14 + fine * 0.04, 0.78, 0.98);
 		METALLIC = 0.04 + glint * 0.22;
-	} else {
+	} else if (pile_kind == 1) {
 		vec3 col = mix(coal_base, coal_fleck, chunk * 0.70 + macro * 0.18);
 		col = mix(col, coal_highlight, fine * 0.22);
 		float flake = smoothstep(0.84, 0.96, fine + chunk * 0.25) * 0.32;
@@ -78,5 +82,30 @@ void fragment() {
 		ALBEDO = col;
 		ROUGHNESS = mix(0.88, 0.98, fine * 0.65);
 		METALLIC = flake * 0.42;
+	} else {
+		// Millimetre-scale kernel variation, not rock-sized chunks. The existing
+		// derivative filter averages unresolved detail when seen from a quay.
+		float kernels = sample_grain(material_pos * vec3(1.0, 1.7, 1.8), 160.0);
+		float chaff = sample_grain(material_pos + vec3(6.8, 1.9, 3.1), 38.0);
+		float settled = sample_grain(material_pos + vec3(2.9, 4.1, 7.3), 12.0);
+		float broad = sample_grain(material_pos + vec3(8.1, 3.2, 6.9), 1.2);
+		vec3 col = mix(cereal_base, cereal_light, 0.25 + kernels * 0.58);
+		col = mix(col, cereal_crease, smoothstep(0.68, 0.91, chaff) * 0.16);
+		ALBEDO = col * (0.79 + settled * 0.30 + broad * 0.12);
+		ROUGHNESS = 0.87 + kernels * 0.10;
+		METALLIC = 0.0;
+		SPECULAR = 0.22;
+		// A few millimetres of surface relief keep nearby grain from reading as
+		// painted plaster; filtered kernels still disappear cleanly at range.
+		float relief = kernels * 0.002 + chaff * 0.001 + settled * 0.003;
+		vec3 dx = dFdx(VERTEX);
+		vec3 dy = dFdy(VERTEX);
+		vec3 r1 = cross(dy, NORMAL);
+		vec3 r2 = cross(NORMAL, dx);
+		float determinant = dot(dx, r1);
+		if (abs(determinant) > 0.00000001) {
+			vec3 gradient = dFdx(relief) * r1 + dFdy(relief) * r2;
+			NORMAL = normalize(abs(determinant) * NORMAL - sign(determinant) * gradient);
+		}
 	}
 }

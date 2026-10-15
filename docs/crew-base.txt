@@ -1,0 +1,48 @@
+CREW BASE — 15 October 2026
+
+Open scenes/showcases/crew_base_showcase.tscn and run F6. This isolated scene
+uses the actual player scene and the same NpcBase used by the game.
+O switches between inspection and walking. Right-drag orbits, wheel zooms,
+1–4 change NPC motion, V changes camera when walking, and F12 archives a picture.
+
+The new runtime asset is resources/models/crew_base/crew_base.glb.
+Editable Blender source: resources/models/_source/crew_base/crew_base.blend.
+Rebuild and CC0 MakeHuman asset provenance: that source folder's README.txt.
+
+This is an unclothed, bald adult base with a new anatomical mesh, a 50-bone
+rig, articulated hands and idle/walk/run/seated clips. Clothing, hair and body
+shape customization are deliberately absent. Skin tint remains available.
+Old saved wardrobe and shape values survive round trips but do not select
+the retired mesh. The character studio no longer offers unsupported controls.
+
+CharacterVisual is the shared adapter for the local player, remote players
+and NPCs. Passenger cabins use two simplified static seated versions of the
+same base, with shared instancing rather than a skeleton for each passenger.
+Player movement, camera control and leg-IK code were preserved byte for byte.
+The local first-person visual is set back 14 cm so steep downward views do not
+look inside the open neck. Third-person and other actors retain authored placement.
+Held fishing equipment follows that visual offset. A weighted distal forearm
+and shared pronation helper spread hand rotation through the wrist for rods
+and carried traps. The harpe is supported from below within normal arm reach.
+
+Native verification in Godot 4.6.1:
+- Actual player walks 3.60 m/s, runs 5.40 m/s and stops; balance IK remains active.
+- Required bones, imported skin weights, independent actor tints and motion clips.
+- Appearance JSON compatibility and remote player's distance-driven walk API.
+- First/third-person visibility and equipment hand attachment contracts.
+- First-person downward captures at 52, 60 and 86 degrees show exterior anatomy.
+- Rod grip checks cover first/third person, aim changes, a complete crank turn,
+  fixed arm lengths, actual weighted skin clearance and deselecting the hotbar.
+- Harpe palm anchors checked in both camera modes at three aim pitches.
+- Existing Blender character tests retain joint lengths, loop continuity,
+  opposing arm/leg swing and foot travel checks against the replacement asset.
+- Passenger manifest changes 5 -> 0 -> 8 update both detail levels and seat sockets.
+This is not a two-client multiplayer playtest.
+
+Run tests/crew_base_integration_test.tscn with --shipyard-playtest for the
+native integration checks. --capture on the showcase archives actual rendered
+views under C:/Users/noahs/Pictures/machinescreenshots and then exits.
+
+Retired character binaries remain on disk because automatic execution policy
+rejected their deletion. resources/models/characters/.gdignore excludes that
+directory from Godot import/export. Runtime model paths use only crew_base.

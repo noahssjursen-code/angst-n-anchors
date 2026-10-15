@@ -1,0 +1,133 @@
+REVERSIBLE CUSTOM-PORT FOREST CLEARANCE
+15 October 2026
+
+Public integration seam
+
+After WorldForestStreamer.configure(), call:
+    forest.set_custom_port_exclusions(port_key, zones)
+
+The method returns true only for a changed owner layer. Pass [] to remove that
+port's layer. Zones are exact world-XZ polygon records with forest_clear_only:true;
+derive them from validated platform footprints, not the whole owned plot.
+The method updates ForestField, near patches and DistantForest together.
+
+Forest renderer teardown and reconfiguration release only that renderer's
+custom layers. ForestField tracks a runtime source ID so an old renderer's late
+exit cannot remove an identical or updated layer taken over by its replacement.
+Generated and bridge exclusions are unaffected. Owner keys should still be
+unique per port/world; source IDs protect replacement order, not game ownership.
+
+Keep these layers while port presentation unloads at a distance. A geometry
+edit replaces its layer; actual port deletion removes it. Unloading a scene is
+not deletion of construction data. Different port keys may overlap safely.
+
+Existing generated-port, settlement and bridge exclusions are preserved as the
+base layer. Existing add_exclusions calls remain append-only for infrastructure.
+Do not call ForestField.initialize or reconfigure the entire forest per edit.
+
+Implementation
+
+ForestField keeps base and custom exclusions separately. Sampling uses their
+union; the reusable base coverage texture and canopy cache do not include custom
+cuts. This avoids turning a four-metre tile into an entire coarse empty texel.
+No whole-world texture bake occurs when a port changes. Small remaining terrain
+canopy tint is presentation only; exact tree roots determine clearing.
+
+Near streaming invalidates only chunks intersecting the old or new footprint.
+It also resets affected partial placement jobs and remembered empty chunks.
+Unaffected nodes/jobs survive. Regeneration follows the existing deterministic
+candidate order, so removing a cut restores the original roots and species.
+
+Distant workers always generate the immutable base forest. Custom cuts are
+applied when batches arrive and when existing batches are edited. Original compact
+placements are retained only for affected batches, then released once no custom
+layer intersects that batch. Permanent late infrastructure exclusions apply on
+every rebuild, including after custom removal.
+
+Filters process at most 256 roots per call. Replacing an edit replaces queued
+work for the same batch and advances its revision; partial obsolete filters
+cannot overwrite the latest result. Worker uploads use the current layers,
+including when a port was built before the worker produced the batch. No worker
+touches scene nodes or mutable custom-zone state, and base cache files stay intact.
+
+Validation
+
+tests/custom_port_forest_test.tscn: native Forward+ run passed 1,369 checks:
+add/replace/remove; overlapping owners; original and late bridge exclusions;
+unchanged coverage pixels; unaffected near nodes/jobs; empty-chunk restoration;
+first upload under an existing cut; worker publication after edits; partial
+filter replacement/undo; exact restored transforms and bounded retained data.
+
+Run this test with native rendering, --shipyard-playtest and an isolated APPDATA.
+Godot's headless dummy renderer cannot read back the MultiMesh transforms used
+by these presentation checks. It returns zero transforms rather than real data.
+
+tests/custom_port_forest_review.tscn uses generated seed 424242, a 10 km world,
+real terrain and production tree meshes at world XZ (3200, 1152). Its 140 x 170 m
+footprint contained 534 near trees: before 534, cleared 0, restored 534. All three
+matching-camera captures were inspected; surrounding forest remains unchanged.
+Captures are archived in:
+C:/Users/noahs/Pictures/machinescreenshots/custom-port-forest-1792021201-64/
+    01-before.png
+    02-cleared.png
+    03-restored.png
+
+Existing loading_priority_test passed after its artificial untracked MultiMesh
+fixture was replaced with the production upload_batch path. Bridge-clearance
+assertions are retained. Existing forest_port_clearance_test also passed after
+its terrain-invariance assertion was limited to forest_clear_only records.
+The previous assertion included the graph's deliberate foundation grading
+(height, cut_only and 240 m falloff), so it contradicted existing behavior.
+No generated terrain implementation was changed by this forest work.
+
+No production world boot wiring or new network authority was added in this slice.
+
+Full harbour performance follow-up
+
+The default example contains 568 separate platform polygons, rather than one
+large rectangle. A native benchmark projects those exact footprints with
+CustomPortEarthworks.forest_exclusions at the real generated review site.
+It also removes an interior 4 m tile and checks the actual diagonal end tiles.
+
+Linear scanning was a real problem: every nearby sample traversed hundreds of
+small polygons. ForestField now indexes custom polygons into 16 m candidate
+buckets. Near placement jobs and distant filter/upload jobs own the same kind of
+index. Final acceptance still uses the original exact polygon predicate. Legacy
+rectangle/falloff masks and very large polygons use an exact fallback list.
+Pure forest-only masks are also omitted from terrain-height modifier loops;
+any mask carrying carve/reclaim remains in those loops. This changes no heights.
+
+Native measured costs on this machine (before -> after):
+  1,024 warmed ForestField samples:       171.471 -> 17.720 ms
+  Complete affected near-chunk rebuild:  554.261 -> 38.267 ms
+  Worst 256-root distant filter slice:    35.607 -> 0.700 ms
+  Whole 374-root distant batch:           53.718 -> 1.260 ms
+
+The near-chunk figure measures its whole synchronous benchmark. Normal streaming
+still slices placement into 16 candidates under the existing frame budget.
+The unmodified forest's same chunk costs about 38 ms, so the custom-port overhead
+no longer multiplies regeneration cost. No forest resolution was reduced.
+
+The public setter costs 2.995 ms initially, 4.070 ms for the one-tile change and
+1.282 ms to remove the port. An identical 568-polygon update costs 0.138 ms and
+queues no work. Cargo-only data retains the same geometry signature and footprint
+collection; it needs no environment rebuild.
+
+tests/custom_port_forest_performance_test.tscn verifies zero mismatches against
+the original linear predicate for 1,046 points with both the complete port and
+the removed-tile hole. Another 3,930 comparisons cover rotated rectangles,
+legacy falloff, large-polygon fallback and negative grid boundaries. All 18
+fixture checks pass, including an actual cargo-only revision preserving the
+geometry signature, zones and loaded forest without queuing work. Tree counts
+and density sums are unchanged. The 1,369 native regression checks also passed
+after this optimization. Full measurements:
+C:/Users/noahs/Documents/Codex/2026-10-11/referenced-chatgpt-conversation-this-is-an/outputs/custom-port-forest-performance-baseline.json
+C:/Users/noahs/Documents/Codex/2026-10-11/referenced-chatgpt-conversation-this-is-an/outputs/custom-port-forest-performance-indexed.json
+C:/Users/noahs/Documents/Codex/2026-10-11/referenced-chatgpt-conversation-this-is-an/outputs/custom-port-forest-performance-indexed-final.json
+
+Lifecycle follow-up: the native forest regression suite now passes 1,384 checks.
+Added coverage includes forest-first destruction, preserving other owners and
+base infrastructure, same-key renderer takeover, deleting a real custom-port
+record while its forest is gone, rebinding a replacement, and projection-first
+teardown. None leaves an old clearance or resurrects a removed record. The
+performance suite was not rerun for this ownership-only cleanup.

@@ -27,14 +27,14 @@ func _ready() -> void:
 	_helm.offset_top=-28 - MarineHelmConsole.HEIGHT
 	_helm.offset_bottom=-28
 	add_child(_helm)
-	_prompt=_banner(Vector2(-230,-104),Vector2(230,-62),Control.PRESET_CENTER_BOTTOM)
+	_prompt=_banner(Vector2(-230,-177),Vector2(230,-135),Control.PRESET_CENTER_BOTTOM)
 	_prompt.add_theme_font_size_override("font_size",18)
 	_prompt.add_theme_stylebox_override("normal",VoyageStyle.box(Color("1a2124"),8))
 	_prompt.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.visible=false
-	_shortcuts=VoyageStyle.label("[J] Tablet     [M] Chart",18,VoyageStyle.LIGHT)
+	_shortcuts=VoyageStyle.label("[TAB] Inventory   [J] Tablet   [M] Chart",18,VoyageStyle.LIGHT)
 	_shortcuts.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	_shortcuts.offset_left=-300
+	_shortcuts.offset_left=-420
 	_shortcuts.offset_right=-28
 	_shortcuts.offset_top=-48
 	_shortcuts.offset_bottom=-22
@@ -82,7 +82,7 @@ func present(state: Dictionary) -> void:
 	var shortcut_lift := 0.0
 	if bool(state.helming) and not sonar_hidden:
 		shortcut_lift = HelmMinimap.MARGIN + SonarDisplay.layout_size(sonar_view).y + 8.0
-	_shortcuts.offset_left=-620 if bool(state.helming) else -300
+	_shortcuts.offset_left=-700 if bool(state.helming) else -440
 	_shortcuts.offset_right=-344 if bool(state.helming) else -28
 	_shortcuts.offset_bottom = -22 - shortcut_lift
 	_shortcuts.offset_top = -48 - shortcut_lift
@@ -96,9 +96,9 @@ func present(state: Dictionary) -> void:
 		_prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 		_prompt.offset_left=-230
 		_prompt.offset_right=230
-		_prompt.offset_top=-104
-		_prompt.offset_bottom=-62
-	_prompt.visible=not modal and not _prompt.text.is_empty()
+		_prompt.offset_top=-135
+		_prompt.offset_bottom=-93
+	_prompt.visible=not modal and not _prompt.text.is_empty() and not (_fishing.visible and not _helm.visible)
 	if not _helm.visible: return
 	_helm.present(state)
 
@@ -131,4 +131,4 @@ func notify(text: String) -> void:
 
 func present_interaction(text: String) -> void:
 	_prompt.text=text
-	_prompt.visible=not modal and not text.is_empty()
+	_prompt.visible=not modal and not text.is_empty() and not (_fishing.visible and not _helm.visible)

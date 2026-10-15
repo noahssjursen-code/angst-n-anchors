@@ -28,6 +28,7 @@ func _ready() -> void:
 	_build_visual()
 	_build_inspection.call_deferred()
 	_sync_payload_mass()
+	if not Engine.is_editor_hint(): LocalCatchStore.restore.call_deferred(self)
 
 
 func configure(id_in: String, capacity_kg_in: float) -> void:
@@ -103,6 +104,7 @@ static func first_for_ship(boat: Node) -> CatchHoldComponent:
 func _on_state_changed(_state: CatchHoldState) -> void:
 	_sync_payload_mass()
 	_update_fill_visual()
+	if not Engine.is_editor_hint(): LocalCatchStore.changed(self)
 
 
 func _sync_payload_mass() -> void:
@@ -248,10 +250,10 @@ func _build_inspection() -> void:
 func can_inspect() -> bool:
 	if Engine.is_editor_hint() or not is_instance_valid(_inspect_area) or not _inspect_area.is_inside_tree() or GameMenu.is_modal_open() or LocalPlayerView.is_helming():return false
 	if LocalPlayerView.get_active_ship()!=_boat:return false
-	if WorldGateway.is_remote() and not FishingCatchReplication.owns_ship(_boat): return false
 	var player:=get_tree().get_first_node_in_group("player") as CharacterBody3D
 	if player==null or player.is_vehicle_occupied():return false
-	var rod:=_boat.get_node_or_null("RodFishingStation") as RodFishingStation
+	var gear:=player.get_node_or_null("PersonalFishingEquipment")
+	var rod:RodFishingStation=gear.station if gear!=null and is_instance_valid(gear.station) else null
 	if rod!=null and rod.working and rod.session.phase not in ["stowed", "landed"]:return false
 	var camera:=player.get_node("Camera3D") as Camera3D
 	if camera.global_position.distance_to(_inspect_area.global_position)>3.5:return false

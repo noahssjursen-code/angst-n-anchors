@@ -1,0 +1,23 @@
+CUSTOM PORT INSPECTOR HOST LAYOUT
+
+The inspector measures wrapping content only while visible. Godot does not
+sort hidden containers; their old child widths can be a single pixel, yielding
+an artificial 1656px minimum for a panel configured at 620px. Applying that
+hidden minimum made Dock/Leave actions disappear below the actual workshop.
+
+Show, tab changes and viewport resize now schedule a visible layout pass.
+After the normal container passes, the configured panel size is restored and
+its bounds are kept within the viewport with a 16px margin. Long body content
+remains scrollable; the action rows remain outside that scroll. No fields or
+actions are removed to fit the panel. Workshop anchors are unchanged.
+
+Reproducible native test:
+  res://tests/custom_port_inspector_viewport_test.tscn
+  -- --shipyard-playtest --empty-custom-port --capture
+
+26 checks passed in the actual generated-island workshop. The test constructs
+a quay, invites/docks an actual Nordlys, verifies the default 620px panel,
+hidden refresh/reopen, a real 800x600 logical viewport, Berths/Cargo/Storage
+action bounds, and restored normal size. Both native captures were archived
+and inspected. Existing inspector authority/action regression: 64 checks pass.
+The original visitor workshop test also asserts panel and Dock/Leave bounds.

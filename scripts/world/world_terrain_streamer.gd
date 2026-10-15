@@ -9,6 +9,7 @@ const WorldReferenceScript := preload("res://scripts/world/world_reference.gd")
 const TERRAIN_SHADER := preload("res://resources/shaders/terrain.gdshader")
 const TERRAIN_FAR_SHADER := preload("res://resources/shaders/terrain_far.gdshader")
 const TERRAIN_SURFACE_MAPS := preload("res://scripts/world/terrain_surface_maps.gd")
+const EARTHWORKS := preload("res://scripts/world/world_terrain_earthworks.gd")
 
 const CHUNK_SIZE_M := 1000.0
 ## The macro field is 78.125 m; compact skerry outlines add detail independently
@@ -70,11 +71,15 @@ var _last_collision_xz := Vector2(INF, INF)
 var _build_task_id := -1
 var _build_task_state: Dictionary = {}
 var _build_task_job: Dictionary = {}
+var _custom_earthworks: Array[Dictionary] = []
+var _terrain_modifier_revision := 0
+var _pending_custom_earthwork_chunks: Dictionary = {}
 
 
 func configure(layout: Object, port_definitions: Array = []) -> void:
 	_clear_chunks()
 	_layout = layout
+	_custom_earthworks = _compatible_earthworks(_custom_earthworks)
 	_near_material = null
 	_far_material = null
 	_flatten_zones = make_flatten_zones(
@@ -106,7 +111,70 @@ func set_port_definitions(port_definitions: Array) -> void:
 		_layout_seed(_layout),
 		_layout as WorldLayout,
 	)
+	_terrain_modifier_revision += 1
 	_rebuild_chunks_intersecting(previous_zones, _flatten_zones)
+
+
+## Immutable derived geometry from validated custom-port records. Stock/cargo
+## revisions do not rebuild terrain unless the foundation geometry changes.
+func set_custom_port_earthworks(projections: Array) -> void:
+	var incoming: Array[Dictionary] = []
+	for projection in projections:
+		if projection is Dictionary and not projection.get("footprints", []).is_empty(): incoming.append(projection.duplicate(true))
+	incoming.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a.id) < str(b.id))
+	incoming = _compatible_earthworks(incoming)
+	var before: Array = []
+	var after: Array = []
+	for projection in _custom_earthworks: before.append([projection.id,projection.geometry_signature])
+	for projection in incoming: after.append([projection.id,projection.geometry_signature])
+	if before == after: return
+	var previous := _earthwork_zone_bounds(_custom_earthworks)
+	_custom_earthworks = incoming
+	_terrain_modifier_revision += 1
+	var affected := _terrain_zone_bounds(previous)
+	var next_bounds := _terrain_zone_bounds(_earthwork_zone_bounds(_custom_earthworks))
+	if not affected.has_area(): affected = next_bounds
+	elif next_bounds.has_area(): affected = affected.merge(next_bounds)
+	for record: Dictionary in _chunks.values():
+		var coord: Vector2i = record.coord
+		if Rect2(chunk_origin(coord),Vector2.ONE*CHUNK_SIZE_M).intersects(affected,true): _pending_custom_earthwork_chunks[coord] = true
+	for job: Dictionary in _jobs:
+		var coord: Vector2i = job.coord
+		if Rect2(chunk_origin(coord),Vector2.ONE*CHUNK_SIZE_M).intersects(affected,true): _pending_custom_earthwork_chunks[coord] = true
+	if _build_task_id >= 0:
+		var coord: Vector2i = _build_task_job.coord
+		if Rect2(chunk_origin(coord),Vector2.ONE*CHUNK_SIZE_M).intersects(affected,true): _pending_custom_earthwork_chunks[coord] = true
+	_rebuild_chunks_intersecting(previous, _earthwork_zone_bounds(_custom_earthworks))
+
+
+## Loaded/requested terrain affected by the last construction edits has its
+## matching visual AND collision installed. Distant unloaded ports do not block.
+func is_custom_port_earthworks_ready() -> bool:
+	return _pending_custom_earthwork_chunks.is_empty()
+
+
+func _compatible_earthworks(projections: Array[Dictionary]) -> Array[Dictionary]:
+	if not _layout is WorldLayout: return projections
+	var result: Array[Dictionary] = []
+	for projection in projections:
+		var identity: Dictionary = projection.get("world", {})
+		if str(identity.get("checksum", "")) == str(_layout.layout_checksum) and int(identity.get("seed", -1)) == int(_layout.seed) and int(identity.get("generation_version", -1)) == WorldLayoutGenerator.GENERATION_VERSION: result.append(projection)
+		else: push_error("Custom port earthworks world identity mismatch: " + str(projection.get("id", "")))
+	return result
+
+
+static func _earthwork_zone_bounds(projections: Array) -> Array:
+	var result: Array = []
+	for projection in projections: result.append({"near_field_bounds":projection.bounds})
+	return result
+
+
+func _earthworks_for_chunk(coord: Vector2i) -> Array:
+	var result: Array = []
+	var bounds := Rect2(chunk_origin(coord), Vector2.ONE * CHUNK_SIZE_M)
+	for projection in _custom_earthworks:
+		if bounds.intersects(projection.bounds, true): result.append(projection)
+	return result
 
 
 func _ready() -> void:
@@ -315,6 +383,10 @@ func _refresh_requests(stream_position: Vector3) -> void:
 		var loaded := _chunks.get(key, {}) as Dictionary
 		if (loaded.is_empty() or int(loaded.get("lod", -1)) != int(request["lod"])) and not _queued.has(key):
 			_enqueue(request)
+	# A free camera may leave before an edited first-time chunk ever finishes.
+	# Abandoned requests must not keep walking readiness blocked elsewhere.
+	for coord in _pending_custom_earthwork_chunks.keys():
+		if not desired_keys.has(chunk_key(coord)): _pending_custom_earthwork_chunks.erase(coord)
 
 
 func _enqueue(request: Dictionary) -> void:
@@ -339,8 +411,9 @@ func _process_jobs(collision_position: Vector3) -> void:
 		var finished_coord := finished_job.get("coord", Vector2i.ZERO) as Vector2i
 		var finished_lod := int(finished_job.get("lod", 0))
 		var finished_key := chunk_key(finished_coord)
-		var still_wanted := int(_queued.get(finished_key, -1)) == finished_lod
-		_queued.erase(finished_key)
+		var current_modifiers := int(finished_job.get("modifier_revision", -1)) == _terrain_modifier_revision
+		var still_wanted := int(_queued.get(finished_key, -1)) == finished_lod and current_modifiers
+		if current_modifiers: _queued.erase(finished_key)
 		_last_build_ms = float(finished_state.get("duration_ms", 0.0))
 		_total_build_ms += _last_build_ms
 		_completed_builds += 1
@@ -385,14 +458,16 @@ func _start_background_build(job: Dictionary, collision_position: Vector3) -> vo
 	var step := float(lod_steps_m[clampi(lod, 0, lod_steps_m.size() - 1)])
 	var layout := _layout
 	var zones := zones_intersecting_chunk(_flatten_zones, coord)
+	var custom_cuts := _earthworks_for_chunk(coord).duplicate(true)
 	var task_state := {"data": null, "duration_ms": 0.0}
 	_build_task_state = task_state
 	_build_task_job = job.duplicate()
 	_build_task_job["collision_position"] = collision_position
+	_build_task_job["modifier_revision"] = _terrain_modifier_revision
 	_build_task_id = WorkerThreadPool.add_task(func() -> void:
 		var started := Time.get_ticks_usec()
 		task_state["data"] = build_chunk_mesh_data(
-			layout, coord, step, zones, SKIRT_DEPTH_M
+			layout, coord, step, zones, SKIRT_DEPTH_M, custom_cuts
 		)
 		task_state["duration_ms"] = float(Time.get_ticks_usec() - started) / 1000.0
 	, _boot_priority, "terrain_chunk_%d_%d_lod%d" % [coord.x, coord.y, lod])
@@ -404,7 +479,7 @@ func _build_chunk(coord: Vector2i, lod: int, collision_position: Vector3) -> voi
 	# Passing every port zone into every vertex sample made one terrain chunk scan
 	# the complete harbour catalogue several times per vertex.
 	var chunk_zones := zones_intersecting_chunk(_flatten_zones, coord)
-	var data := build_chunk_mesh_data(_layout, coord, step, chunk_zones, SKIRT_DEPTH_M)
+	var data := build_chunk_mesh_data(_layout, coord, step, chunk_zones, SKIRT_DEPTH_M, _earthworks_for_chunk(coord))
 	_install_chunk_data(coord, lod, collision_position, data)
 
 
@@ -429,7 +504,9 @@ func _install_chunk_data(
 			"memory_bytes": 0,
 			"collision": true,
 			"surface_data": {},
+			"modifier_revision": _terrain_modifier_revision,
 		}
+		_pending_custom_earthwork_chunks.erase(coord)
 		return
 	var root := Node3D.new()
 	root.name = "Terrain_%d_%d_L%d" % [coord.x, coord.y, lod]
@@ -439,12 +516,17 @@ func _install_chunk_data(
 	mesh_instance.name = "Visual"
 	mesh_instance.mesh = _array_mesh_from_data(data)
 	mesh_instance.material_override = _terrain_material(lod)
+	if data.has("earthwork_normals"):
+		var cut_material := mesh_instance.material_override.duplicate() as ShaderMaterial
+		cut_material.set_shader_parameter("earthwork_normals", true)
+		mesh_instance.material_override = cut_material
 	# Coarse ridges still occlude sunlight over coastal water. Geometry LOD
 	# reduces their cost; dropping their shadows makes mountains transparent.
 	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if mesh_instance.mesh.get_aabb().end.y < WaveSurface.WATER_LEVEL else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	root.add_child(mesh_instance)
 
 	var record := {
+		"modifier_revision": _terrain_modifier_revision,
 		"node": root,
 		"coord": coord,
 		"lod": lod,
@@ -464,6 +546,7 @@ func _install_chunk_data(
 			collision_radius_m,
 	):
 		_add_collision(key)
+	_pending_custom_earthwork_chunks.erase(coord)
 
 
 func _array_mesh_from_data(data: Dictionary) -> ArrayMesh:
@@ -473,9 +556,13 @@ func _array_mesh_from_data(data: Dictionary) -> ArrayMesh:
 	arrays[Mesh.ARRAY_NORMAL] = data["normals"]
 	arrays[Mesh.ARRAY_COLOR] = data["colors"]
 	arrays[Mesh.ARRAY_INDEX] = data["indices"]
+	var flags := 0
+	if data.has("earthwork_normals"):
+		arrays[Mesh.ARRAY_CUSTOM0] = data.earthwork_normals
+		flags = Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 	var mesh := ArrayMesh.new()
 	if not (data["indices"] as PackedInt32Array).is_empty():
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
 	return mesh
 
 
@@ -552,6 +639,7 @@ func _add_collision(key: Variant) -> void:
 			step,
 			zones_intersecting_chunk(_flatten_zones, coord),
 			SKIRT_DEPTH_M,
+			_earthworks_for_chunk(coord),
 		)
 		data = _collision_source_from_data(rebuilt)
 		record["surface_data"] = data
@@ -587,7 +675,7 @@ static func _collision_source_from_data(data: Dictionary) -> Dictionary:
 ## Boot/visual readiness: chunk is loaded and, if inside the collision ring,
 ## collision has been built or explicitly skipped (open water).
 func _chunk_collision_ready(record: Dictionary) -> bool:
-	return _has_collision_state(record)
+	return _has_collision_state(record) and not _pending_custom_earthwork_chunks.has(record.get("coord", Vector2i.ZERO))
 
 
 func _unload_chunk(key: Variant) -> void:
@@ -598,6 +686,7 @@ func _unload_chunk(key: Variant) -> void:
 	if is_instance_valid(node):
 		node.queue_free()
 	_chunks.erase(key)
+	_pending_custom_earthwork_chunks.erase(parse_chunk_key(key))
 
 
 func _clear_chunks() -> void:
@@ -612,6 +701,7 @@ func _clear_chunks() -> void:
 		_unload_chunk(key)
 	_jobs.clear()
 	_queued.clear()
+	_pending_custom_earthwork_chunks.clear()
 
 
 func _rebuild_chunks_intersecting(previous_zones: Array, current_zones: Array) -> void:
@@ -626,19 +716,28 @@ func _rebuild_chunks_intersecting(previous_zones: Array, current_zones: Array) -
 	if affected_bounds.size == Vector2.ZERO:
 		return
 	var retained: Array[Dictionary] = []
+	var rebuild: Dictionary = {}
 	_queued.clear()
 	for job in _jobs:
 		var job_rect := Rect2(chunk_origin(job["coord"]), Vector2(CHUNK_SIZE_M, CHUNK_SIZE_M))
 		if not job_rect.intersects(affected_bounds, true):
 			retained.append(job)
 			_queued[chunk_key(job["coord"])] = int(job["lod"])
+		else: rebuild[job.coord] = job
 	_jobs = retained
+	# A modifier can arrive while a previously unloaded chunk is being built.
+	# Queue its replacement as well; otherwise stale-result rejection loses the
+	# request until the camera moves far enough to trigger another refresh.
+	if _build_task_id >= 0:
+		var task_coord: Vector2i = _build_task_job.coord
+		rebuild[task_coord] = {"coord":task_coord,"lod":int(_build_task_job.lod),"distance":0.0}
 	for key in _chunks:
 		var record := _chunks[key] as Dictionary
 		var coord := record.get("coord", Vector2i.ZERO) as Vector2i
 		var chunk_rect := Rect2(chunk_origin(coord), Vector2(CHUNK_SIZE_M, CHUNK_SIZE_M))
 		if chunk_rect.intersects(affected_bounds, true):
-			_enqueue({"coord": coord, "lod": int(record["lod"]), "distance": 0.0})
+			rebuild[coord] = {"coord": coord, "lod": int(record["lod"]), "distance": 0.0}
+	for job: Dictionary in rebuild.values(): _enqueue(job)
 
 
 static func _terrain_zone_bounds(zones: Array) -> Rect2:
@@ -985,6 +1084,7 @@ static func build_chunk_mesh_data(
 		step_m: float,
 		flatten_zones: Array = [],
 		skirt_depth_m := SKIRT_DEPTH_M,
+		custom_earthworks: Array = [],
 ) -> Dictionary:
 	assert(step_m > 0.0 and is_equal_approx(fmod(CHUNK_SIZE_M, step_m), 0.0))
 	var cells := int(round(CHUNK_SIZE_M / step_m))
@@ -1040,7 +1140,6 @@ static func build_chunk_mesh_data(
 	_refine_port_terrain(layout, vertices, colors, indices, flatten_zones, step_m)
 	if layout is WorldLayout:
 		_preserve_rock_crests(layout, origin, vertices, colors, indices, flatten_zones, step_m)
-	var surface_vertex_count := vertices.size()
 	var normals := calculate_terrain_normals(
 		layout,
 		vertices,
@@ -1048,11 +1147,18 @@ static func build_chunk_mesh_data(
 		side,
 		flatten_zones,
 	)
+	var has_custom_normals := false
+	if not custom_earthworks.is_empty():
+		# Preserve pre-cut smooth terrain normals outside each authored footprint.
+		# The cutter interpolates them onto split vertices; caps/walls stay sharp.
+		var cut_stats := EARTHWORKS.apply(vertices, colors, indices, Rect2(origin, Vector2.ONE * CHUNK_SIZE_M), custom_earthworks, normals)
+		has_custom_normals = int(cut_stats.changed_triangles) > 0 or int(cut_stats.retaining_triangles) > 0
+	var surface_vertex_count := vertices.size()
 	if not indices.is_empty():
 		# Surface normals must be finished before skirts add vertical triangles;
 		# otherwise every chunk edge becomes a dark one-kilometre frame.
-		_append_skirts(vertices, colors, indices, clip_distances, side, skirt_depth_m, normals)
-	return {
+		_append_skirts(vertices, colors, indices, clip_distances, side, skirt_depth_m, normals, custom_earthworks)
+	var result := {
 		"vertices": vertices,
 		"normals": normals,
 		"colors": colors,
@@ -1063,6 +1169,11 @@ static func build_chunk_mesh_data(
 		"coord": coord,
 		"step_m": step_m,
 	}
+	# Mesh NORMAL is unit-packed by the renderer. Keep the raw interpolants in
+	# a float attribute only on edited chunks so splitting does not change the
+	# normal field (or surface textures) on the untouched part of a triangle.
+	if has_custom_normals: result.earthwork_normals = normals.to_byte_array().to_float32_array()
+	return result
 
 
 ## Resolve earthworks on the same 25 m lattice used by scenery placement.
@@ -1509,7 +1620,8 @@ static func _clip_collision_triangle_above_height(
 
 static func estimate_mesh_memory(data: Dictionary) -> int:
 	return (data["vertices"] as PackedVector3Array).size() * BYTES_PER_VERTEX_ESTIMATE \
-		+ (data["indices"] as PackedInt32Array).size() * BYTES_PER_INDEX_ESTIMATE
+		+ (data["indices"] as PackedInt32Array).size() * BYTES_PER_INDEX_ESTIMATE \
+		+ (data.get("earthwork_normals",PackedFloat32Array()) as PackedFloat32Array).size() * 4
 
 
 static func terrain_color(
@@ -1601,6 +1713,7 @@ static func _append_skirts(
 		side: int,
 		depth: float,
 		normals := PackedVector3Array(),
+		custom_earthworks: Array = [],
 ) -> void:
 	if depth <= 0.0:
 		return
@@ -1632,6 +1745,21 @@ static func _append_skirts(
 			var a := edge[i]
 			var b := edge[i + 1]
 			if signed_distances[a] >= 0.0 or signed_distances[b] >= 0.0:
+				continue
+			var spans: Array[Dictionary] = []
+			if not custom_earthworks.is_empty(): spans = EARTHWORKS.skirt_spans(vertices[a],vertices[b],custom_earthworks)
+			if not spans.is_empty():
+				for span: Dictionary in spans:
+					var first:=vertices.size()
+					vertices.append_array(PackedVector3Array([span.a,span.b,span.a-Vector3.UP*depth,span.b-Vector3.UP*depth]))
+					var color_a:=colors[a].lerp(colors[b],float(span.first))
+					var color_b:=colors[a].lerp(colors[b],float(span.last))
+					colors.append_array(PackedColorArray([color_a,color_b,color_a,color_b]))
+					if not normals.is_empty():
+						var normal_a:=Vector3.UP if span.lowered else normals[a].lerp(normals[b],float(span.first))
+						var normal_b:=Vector3.UP if span.lowered else normals[a].lerp(normals[b],float(span.last))
+						normals.append_array(PackedVector3Array([normal_a,normal_b,normal_a,normal_b]))
+					indices.append_array(PackedInt32Array([first,first+1,first+2,first+1,first+3,first+2]))
 				continue
 			var c := skirt_start + i
 			var d := c + 1

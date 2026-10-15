@@ -59,10 +59,13 @@ var _nodes: Dictionary = {} ## origin_idx → ContainerNode
 var _visual_root: Node3D
 var _container_root: Node3D
 var _deck_mass_kg: float = 0.0
+## Set before entering the tree for read-only construction projections.
+## New containers inherit this setting on every stock refresh.
+var service_discovery_enabled := true
 
 
 func _ready() -> void:
-	if not Engine.is_editor_hint():
+	if not Engine.is_editor_hint() and service_discovery_enabled:
 		add_to_group(PAD_GROUP)
 		if is_quay_yard_pad:
 			add_to_group(YARD_PAD_GROUP)
@@ -439,6 +442,7 @@ func _cell_center_local(origin: int, fp: Vector2i) -> Vector3:
 
 func _spawn_node(origin: int, unit: ContainerUnit) -> void:
 	var node := ContainerNode.new()
+	node.service_discovery_enabled=service_discovery_enabled
 	node.name = "Container_%s" % unit.id
 	if _container_root == null:
 		_container_root = Node3D.new()

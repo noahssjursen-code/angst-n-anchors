@@ -1,0 +1,26 @@
+Construction reach and berth guides
+
+Selecting or moving a crane shows its horizontal operating radius around the
+actual slew pivot, including the inner dead zone. The fish landing plant shows
+its hose reach around the real connection point. Package rotation and the
+port's world origin are applied once. These are temporary construction guides;
+the cargo yard stays plain asphalt.
+
+The berth outlines use the same mooring polygons derived by the authority from
+the quay and bollards. They show the maximum mooring envelope, not a promised
+fit for an individual vessel. Cargo operations still check the full ship hull,
+handling type, yard pairing, stock, reservations and access permissions.
+
+G hides these guides with the construction grid. Walking, map/cursor mode and
+ordinary non-equipment placement hide the active reach ring. Unchanged previews
+reuse the overlay mesh. Nothing is added to the saved port document.
+
+Native tests/custom_port_build_guides_test.tscn passed 18 checks for the fish
+plant and 18 for the complete cargo harbour (--cargo-guides). These use the
+actual workshop, compare the guide pivot to its authority-issued service,
+exercise rotation and UI toggles, and verify the document is unchanged.
+
+Reviewed captures in C:/Users/noahs/Pictures/machinescreenshots:
+custom-port-1792031454-32156-build-hose-reach-and-berth.png
+custom-port-1792031686-6412-build-crane-reach-and-berths.png
+The latter includes the final fixed-size reach label for readability.

@@ -1,0 +1,60 @@
+WORKSHOP SAILING SESSION
+
+The native custom-port workshop can retain an already docked vessel when it
+departs. This is an isolated local play session, not a production port-registry
+or multiplayer migration. The existing imported boat, physics, helm, camera,
+gangway and cargo components remain the live ship.
+
+Walk aboard and use F at the helm. B lets go. I starts/stops the engine; W/S
+changes the throttle, A/D steers, T selects the existing thrusters and V changes
+the helm camera. Key 1 is STOP at the helm; it equips the build tool only on foot.
+F or Escape leaves the helm. Building first asks the real station to place the
+player safely on deck; a blocked exit cannot leave a hidden occupied helm.
+
+Return alongside and press B. The session checks speed (maximum 1.2 m/s),
+parallel heading (25 degrees in either direction), and proximity to the berth
+centre before submitting CustomPortState.dock. The existing data checks still
+own length, beam, draft, surveyed depth and exclusive berth occupancy. Accepted
+docking secures the body, projects both mooring lines, and deploys the authored
+boarding gate/gangway. Refused orders leave pose, cargo and occupancy unchanged.
+Reservations and an ongoing port transfer must be finished before departure.
+
+The Port records panel remains a data simulator: its Dock action brings a
+selected record alongside directly. It is how an undocked example/test visitor
+first appears. Only a vessel already brought alongside can depart physically;
+an undocked document record does not automatically spawn an offshore vessel.
+
+Map, inspector, file picker and freecam own input while open. Their inputs do
+not also change the engine or mooring orders. The current engine order remains
+latched, as in the normal boat controls, while its controls are suspended.
+
+CustomPortVesselSession emits accepted snapshots/results to the workshop; all
+occupancy and cargo changes still pass through the same CustomPortState.apply
+command seam. It does not register a fake generated port or mutate the captain's
+live fleet. BoatController has only an optional mooring-order callback and an
+input-suspension flag, both inert by default. CustomPortPresenter retains
+departed bodies only through its explicit workshop opt-in. Streamed world ports
+continue to leave ship lifetime to production replication.
+
+Save files retain the port, vessel manifests, reservations and berth occupancy.
+A free-sailing transform, velocity, engine state or fuel level is session-only.
+Loading/replacing a document ends the old session and reconstructs its docked
+records; an afloat record can be brought alongside again through Port records.
+The same body and cargo instances survive ordinary undock/redock and duplicate
+snapshot refreshes. A document replacement removes the old bodies and control
+callbacks, preventing duplicate vessels or contents.
+
+Focused acceptance scene: tests/custom_port_sailing_test.tscn with
+-- --shipyard-playtest. The test uses real F/B/I/W input and measures movement
+under actual propulsion. Its return approach is explicitly positioned setup,
+not a claim that autonomous route-following has been added. Native captures are
+archived in C:/Users/noahs/Pictures/machinescreenshots.
+
+Native acceptance on 15 October 2026 passed 59 checks with a clean exit. Real
+propulsion moved Nordlys 10.005 m before an offshore mooring request was refused;
+the test then positioned its return approach and accepted the lines. The same
+ship kept its 458.5 kg catch through departure/return; unloading the whole
+38.5 kg halibut left 420 kg. An identical Save -> Load restored one new vessel
+and the exact saved manifest, with the old body/hold/gangway removed. Tests also
+covered occupied/incompatible berths, modal input, cursor-paused helm exit, and
+the default presenter's unchanged departure/despawn lifecycle.

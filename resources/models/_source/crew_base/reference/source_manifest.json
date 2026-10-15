@@ -1,0 +1,106 @@
+{
+  "license": "CC0-1.0",
+  "upstream_revisions": {
+    "mpfb2": "3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf",
+    "makehuman": "a8bc2d54ff0ac92e78ff71431b1023eda42bf482"
+  },
+  "notice": "Graphical assets only; no upstream program code is included. See LICENSE.ASSETS.md and LICENSE.md. Body group excludes helper and joint meshes.",
+  "sources": [
+    {
+      "file": "base.obj",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/3dobjs/base.obj",
+      "bytes": 1749303,
+      "sha256": "8e761e6624b8f54536409135d1636da63b32486a90d4897f84e121d144f6fb4c"
+    },
+    {
+      "file": "LICENSE.ASSETS.md",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/LICENSE.ASSETS.md",
+      "bytes": 6962,
+      "sha256": "f6089cba01cb570a24712b41ab8a586ccd3cc5ef53dc266ca50b95c288956d2c"
+    },
+    {
+      "file": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/LICENSE.md",
+      "bytes": 3188,
+      "sha256": "5cefb60680cb9efd4550a2e65d719021cfbec9dad3658481d11d48ae863ce04d"
+    },
+    {
+      "file": "basemesh_vertex_groups.json",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/mesh_metadata/basemesh_vertex_groups.json",
+      "bytes": 81984,
+      "sha256": "8cb1417bc55ae5ec8aa99f90734e81ed5fbb556511ff6a2c00e0534b70911444"
+    },
+    {
+      "file": "caucasian-male-young.target.gz",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/targets/macrodetails/caucasian-male-young.target.gz",
+      "bytes": 127922,
+      "sha256": "ffe69537e53148edff2776204ba48cf3bf1f3cbc72966592c8a562ab80b07333"
+    },
+    {
+      "file": "caucasian-male-old.target.gz",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/targets/macrodetails/caucasian-male-old.target.gz",
+      "bytes": 112944,
+      "sha256": "123cb7758c86aa2aa71d80ea0c8f5f4b3e96f394180edc1682e34720c4949df6"
+    },
+    {
+      "file": "universal-male-young-averagemuscle-averageweight.target.gz",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/targets/macrodetails/universal-male-young-averagemuscle-averageweight.target.gz",
+      "bytes": 76,
+      "sha256": "e814651195c53971503d9823d6841216718a561951ef064f81d132297f4fa494"
+    },
+    {
+      "file": "universal-male-young-maxmuscle-averageweight.target.gz",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/targets/macrodetails/universal-male-young-maxmuscle-averageweight.target.gz",
+      "bytes": 45597,
+      "sha256": "833caafc302bd9306de494f32ee1bc51d3a2e6641183329b031ac06ef0f4277e"
+    },
+    {
+      "file": "universal-male-young-averagemuscle-maxweight.target.gz",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/targets/macrodetails/universal-male-young-averagemuscle-maxweight.target.gz",
+      "bytes": 45230,
+      "sha256": "13b79074ecf00a0d028495a51865ae9e86c06b5801b6a614257b455ffbec7d10"
+    },
+    {
+      "file": "universal-male-young-averagemuscle-minweight.target.gz",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/targets/macrodetails/universal-male-young-averagemuscle-minweight.target.gz",
+      "bytes": 42696,
+      "sha256": "e4a993057e265088e082ee2aeccc860505e759b27251dc63a78314e1f8c78a16"
+    },
+    {
+      "file": "eyes-high-poly.obj",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/makehuman/a8bc2d54ff0ac92e78ff71431b1023eda42bf482/makehuman/data/eyes/high-poly/high-poly.obj",
+      "bytes": 100882,
+      "sha256": "da2493215b708a344c33dc72f2a9a5b8fa985dcc5a70ad3b208995cf871da8e1"
+    },
+    {
+      "file": "eyes-high-poly.mhclo",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/makehuman/a8bc2d54ff0ac92e78ff71431b1023eda42bf482/makehuman/data/eyes/high-poly/high-poly.mhclo",
+      "bytes": 72490,
+      "sha256": "b183cfe37120ab726f9b3f2ea6cd3a64c44ce7b4bd91a77c841cf70c04f83a0d"
+    },
+    {
+      "file": "rig.default_no_toes.json",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/rigs/standard/rig.default_no_toes.json",
+      "bytes": 106048,
+      "sha256": "6b178e6924b9af2a76db29eb507b2f77ecff53f93c5477b043d0d7f33e93ef69"
+    },
+    {
+      "file": "weights.default.json",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/mpfb2/3af0cd5a2ffba072e93a34e5f6f494fdc4813ddf/src/mpfb/data/rigs/standard/weights.default.json",
+      "bytes": 5034981,
+      "sha256": "154b866774a8c2b055a8e86419f22a87b76c60440fdcb70bcb78345f00924e89"
+    },
+    {
+      "file": "brown_eye.png",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/makehuman/a8bc2d54ff0ac92e78ff71431b1023eda42bf482/makehuman/data/eyes/materials/brown_eye.png",
+      "bytes": 610817,
+      "sha256": "4659691c7295ad6206c78b003e5fd0e5f91dcd53032fa914a229bb48cabe424b"
+    },
+    {
+      "file": "brown.mhmat",
+      "url": "https://raw.githubusercontent.com/makehumancommunity/makehuman/a8bc2d54ff0ac92e78ff71431b1023eda42bf482/makehuman/data/eyes/materials/brown.mhmat",
+      "bytes": 1247,
+      "sha256": "4abad93ce50541c08127721e77bce035640c9f16bed16cd0f5524b1cd5908465"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+CUSTOM PORT HOME / WALK CLEARANCE - 15 OCTOBER 2026
+
+Reproduced defect
+  Home previously returned the first foundation's centroid without considering
+  construction above it. A legal wall crossing the centre of an 8m foundation
+  put the player at (4, 0.15, 4), inside the wall collider. Native H reproduced
+  this and the capsule still intersected the wall immediately after Walk.
+
+Correction
+  CustomPortHomePlacement is a pure-data candidate search. It checks a padded
+  footprint enclosing the actual walking capsule against the exact union of
+  foundation polygons, including triangle/chamfer cutouts and deck holes.
+  It searches near each tile's centre before moving to another tile.
+
+  Authored collider bounds below the player's head are obstacles. Roofs at 3m
+  do not block an ordinary player. Composite machinery uses its occupied areas,
+  including the separate pump and tank rectangles, rather than the complete
+  20 x 16m plant envelope. Saved doorways are conservatively avoided by Home
+  because their moving colliders are local to an authored hinge frame.
+
+  Once the scene exists, candidate positions also query the actual player's
+  capsule against current live colliders. The existing-player safety check uses
+  these real colliders, not conservative data envelopes: an open door and a
+  clear fish-pump aisle remain valid standing positions. Walking after building
+  equipment around the player now relocates them when their capsule is blocked.
+
+  The original dry-land fallback is retained, with live clearance checking.
+  It cannot use old unexcavated terrain heights underneath a constructed deck.
+  No safe deck/land candidate means no teleport. Ship-mounted players retain
+  their existing vessel path. No home coordinate or physical pose is persisted.
+
+Verification
+  tests/custom_port_home_placement_test.tscn: 23 focused data checks passed.
+  tests/custom_port_home_clearance_review.tscn: 10 native checks passed.
+  Native run arguments: -- --shipyard-playtest --empty-custom-port --capture
+  Isolated APPDATA: this chat's outputs/port-home-clearance-profile.
+
+  Native H now chooses (4, 0.15, 3), clear of the same wall before and after
+  Walk. Real fish-plant aisle and open-door standing positions are accepted;
+  a position inside an actual tank cylinder is rejected and Walk relocates it.
+
+Screenshots opened and visually checked; before shows feet/hands in the wall,
+after shows the body clearly in front of it. Archived at:
+  C:/Users/noahs/Pictures/machinescreenshots/
+    custom-port-1792033611-34012-home-clearance-wall-diagnostic.png (before)
+    custom-port-1792034123-10296-home-clearance-wall-diagnostic.png (after)
+
+Logs in this chat's outputs:
+  custom-port-home-clearance-before.log
+  custom-port-home-placement.log
+  custom-port-home-clearance-final.log

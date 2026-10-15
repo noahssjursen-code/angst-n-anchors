@@ -1,7 +1,7 @@
 class_name OreMoundBuilder
 extends RefCounted
 
-## Procedural bulk stockpiles — lumpy heap mesh + triplanar grain shader (iron ore / coal).
+## Procedural bulk stockpiles — shared heap geometry with commodity-specific finishes.
 
 const ORE_PILE_SHADER := preload("res://resources/shaders/ore_pile.gdshader")
 
@@ -9,7 +9,7 @@ static var _material_cache: Dictionary = {}
 
 
 static func resolve_commodity(commodity_id: String) -> String:
-	return "coal" if commodity_id == "coal" else "iron_ore"
+	return commodity_id if commodity_id in ["coal", "grain"] else "iron_ore"
 
 
 ## Root node with one main pile and two satellite lobes. Sits on parent Y=0.
@@ -17,6 +17,7 @@ static func build_mound(commodity_id: String, size: Vector3, seed: int = 0) -> N
 	var resolved := resolve_commodity(commodity_id)
 	var root := Node3D.new()
 	root.name = "OreMound_%s" % resolved
+	root.set_meta("bulk_commodity_id", resolved)
 
 	var main := _build_pile_mesh(size, resolved, seed)
 	main.name = "Main"
@@ -114,7 +115,9 @@ static func _add_mound_triangle(st: SurfaceTool, a: Vector3, b: Vector3, c: Vect
 
 static func _material_for(commodity_id: String) -> ShaderMaterial:
 	var key := resolve_commodity(commodity_id)
-	if SurfaceMaterialLibrary.enabled:
+	# Cereal kernels are not crushed stone. Keep their procedural finish in both
+	# material modes; the existing textured coal and ore profiles remain intact.
+	if SurfaceMaterialLibrary.enabled and key != "grain":
 		var profile := "coal_aggregate" if key == "coal" else "crushed_aggregate"
 		var pigment := CommodityCatalog.commodity_color(key)
 		# Catalogue swatches are bright UI identifiers, not raw surface reflectance.
@@ -124,7 +127,9 @@ static func _material_for(commodity_id: String) -> ShaderMaterial:
 		return (_material_cache[key] as ShaderMaterial).duplicate()
 	var mat := ShaderMaterial.new()
 	mat.shader = ORE_PILE_SHADER
-	mat.set_shader_parameter("pile_kind", 1 if key == "coal" else 0)
+	mat.resource_name = "Bulk_" + key
+	mat.set_meta("bulk_commodity_id", key)
+	mat.set_shader_parameter("pile_kind", 2 if key == "grain" else (1 if key == "coal" else 0))
 	if key == "iron_ore":
 		var catalog := CommodityCatalog.commodity_color("iron_ore")
 		mat.set_shader_parameter("iron_base", Vector3(catalog.r, catalog.g, catalog.b))
@@ -138,7 +143,7 @@ static func _material_for(commodity_id: String) -> ShaderMaterial:
 			catalog.g * 0.42,
 			catalog.b * 0.40,
 		))
-	else:
+	elif key == "coal":
 		var catalog := CommodityCatalog.commodity_color("coal")
 		mat.set_shader_parameter("coal_base", Vector3(
 			catalog.r * 0.55,

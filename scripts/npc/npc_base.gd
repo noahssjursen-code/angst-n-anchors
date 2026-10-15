@@ -18,8 +18,7 @@ extends Node3D
 	set(value):
 		trousers_color = value
 		_sync_legacy_colors()
-## Body-only showcases opt out explicitly; gameplay and creator characters use
-## the same fitted wardrobe path by default.
+## Kept for saved scenes and API compatibility. The current base has no clothing.
 @export var wardrobe_enabled := true
 
 var appearance: CharacterAppearance = CharacterAppearance.default_appearance()

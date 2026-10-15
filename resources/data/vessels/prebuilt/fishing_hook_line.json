@@ -1125,6 +1125,70 @@
           2.5
         ],
         "yaw_degrees": 0
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -1.5,
+          2.92,
+          7
+        ],
+        "yaw_degrees": -90,
+        "colors": {
+          "wall": [
+            0.76,
+            0.78,
+            0.7
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          -0.5,
+          2.92,
+          7
+        ],
+        "yaw_degrees": -90,
+        "colors": {
+          "wall": [
+            0.76,
+            0.78,
+            0.7
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_0",
+        "position": [
+          0.5,
+          2.92,
+          7
+        ],
+        "yaw_degrees": -90,
+        "colors": {
+          "wall": [
+            0.76,
+            0.78,
+            0.7
+          ]
+        }
+      },
+      {
+        "asset_id": "halfwall_straight_100cm_miter_10000_0_10000_10000",
+        "position": [
+          1.5,
+          2.92,
+          7
+        ],
+        "yaw_degrees": -90,
+        "colors": {
+          "wall": [
+            0.76,
+            0.78,
+            0.7
+          ]
+        }
       }
     ],
     "rising_bow": true,

@@ -1,0 +1,46 @@
+CUSTOM PORTS ON THE MARINE CHART
+
+CustomPortChartProjection.project(snapshot, catalog, derived_berths = []) produces
+a passive JSON-safe public summary from an already validated construction record.
+It includes identity, display name, company reference, world identity, world-space
+origin, exact platform polygons, exposed edges and the constructed berth count.
+That count describes construction, not current booking availability or services.
+Store contents, vessels, reservations, accounts and command receipts are excluded.
+
+CustomPortChartProjection.chart_snapshot(layout, summaries) adapts those summaries
+to an isolated ChartDataSnapshot. It never writes PortCatalog or registers NPCs,
+trade routes, production services, home-port choices or teleport destinations.
+
+The existing ChartHarbourPlan explicitly handles source=custom before resolving
+any generated-port data. It cannot call PortExpander for these records. Each real
+foundation footprint is filled separately, preserving triangles, chamfers, yaw,
+concave outlines and inner holes. Only exposed edges are drawn, so a tiled floor
+does not become an unreadable grid. Clicking built deck selects its port; empty
+holes do not acquire a solid bounding-box hit area. The existing origin marker
+still has its ordinary small click target.
+
+Selection shows the port name, constructed berth count, Company ref and range.
+Unknown company IDs are not presented as resolved company names. No generated
+imports/exports, population, ship class or live berth occupancy are inferred.
+Custom records are explicitly blocked from the existing home-port confirmation.
+
+WORKSHOP / TRAVEL
+
+The workshop refreshes its chart from the current construction record. In the
+travel review, M or the Chart button opens the current document collection and
+focuses the selected port. Escape/Close returns to the prior fly/cursor state.
+Charts read the latest retained record even when that port's models are unloaded.
+Imported saved documents remain read-only. This is presentation only; actual MP
+directory/event integration is deliberately not added by the chart adapter.
+
+VERIFICATION
+
+tests/custom_port_chart_test.tscn covers translation, rotation, exact triangle/
+chamfer area, an inner hole, privacy, independent copies, legacy-cache replacement,
+no generated fallback, construction selection, honest card text and the direct
+home-confirm guard. tests/chart_harbour_cache_test.tscn protects the generated path.
+tests/custom_port_chart_visual_test.tscn renders the production MapOverlay against
+the real island geography and archives native captures of Nordvik's clipped quay
+and shore link, plus angled blocks around an open water hole. Run with the usual
+isolated APPDATA and --shipyard-playtest. Captures are saved in
+C:/Users/noahs/Pictures/machinescreenshots.

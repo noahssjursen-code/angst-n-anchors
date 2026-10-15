@@ -54,8 +54,16 @@ func _ready()->void:
 		var appearance:=CharacterAppearance.default_appearance()
 		appearance.build=1;appearance.belly=1;appearance.frame=1;appearance.age=80
 		player.get_node("BodyMesh").visual.apply_appearance(appearance)
-	station=boat.get_node("RodFishingStation")
-	player.global_position=station.authored_station.global_position+Vector3(-1.1,.1,0)
+	var fixture:Dictionary=PlayerInventoryState.change(PlayerInventoryState.empty(),"inventory.purchase",{"item_id":"fishing_rod"},"showcase-rod").inventory
+	fixture.selected_slot=0
+	PersonalInventory._apply(fixture)
+	station=player.get_node("PersonalFishingEquipment").station
+	var holder:Node3D
+	for part in boat.part_roots:
+		if str(part.get_meta("asset_id",""))=="hook_line_station":holder=part;break
+	assert(holder!=null)
+	player.global_position=holder.global_position+Vector3(-1.1,.1,0)
+	station._boat=boat
 	camera=player.get_node("Camera3D");camera.current=true
 	GameMenu.set_gameplay_hud_visible(true);GameMenu.hide_loading()
 	Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
@@ -449,11 +457,14 @@ func _harpe_review(water:Node3D)->void:
 
 
 func _prepare_harpe()->void:
-	PlayerSession.begin_new_captain("Harpe Review",CharacterAppearance.default_appearance(),"test-port","harpe-review",717,"Review Fishing",Color.WHITE,"")
+	# Isolated personal-equipment fixture, never a boat purchase or live save.
 	var record:=CompanyService.build_starter_vessel_record("fishing")
 	record.uid="harpe-review-boat";record.brick_layout=boat.draft.duplicate(true)
 	PlayerSession.data.upsert_owned_vessel(record);PlayerSession.data.set_active_vessel(record)
 	boat.set_meta("vessel_uid",record.uid)
-	assert(PlayerSession.purchase_ship_equipment({"request_id":"review-harpe","vessel_id":record.uid,"item_id":"harpe"}).ok)
-	assert(PlayerSession.equip_ship_fishing_item({"vessel_id":record.uid,"item_id":"harpe"}).ok)
+	var fixture:Dictionary=PlayerInventoryState.change(PlayerInventoryState.empty(),"inventory.purchase",{"item_id":"harpe"},"showcase-harpe").inventory
+	fixture.selected_slot=0
+	PersonalInventory._apply(fixture)
+	station=player.get_node("PersonalFishingEquipment").station
+	station._boat=boat
 	assert(station.equipment_id=="harpe" and not station._stored_rod.visible)

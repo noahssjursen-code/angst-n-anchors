@@ -33,6 +33,7 @@ LodService="*res://scripts/core/lod_service.gd"
 DebugHud="*res://scripts/ui/debug_hud.gd"
 Telemetry="*res://scripts/state/telemetry.gd"
 LocalPlayerView="*res://scripts/state/local_player_view.gd"
+PersonalInventory="*res://scripts/player/player_inventory_service.gd"
 
 [display]
 

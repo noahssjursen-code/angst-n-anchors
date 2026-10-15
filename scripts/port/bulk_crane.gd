@@ -129,6 +129,10 @@ func reload_model() -> void:
 
 
 func _bind_rig() -> void:
+	# A streamed port may unload between _ready and this deferred callback.
+	# Its detached geometry must not rebuild or query global rig transforms.
+	if not is_inside_tree() or is_queued_for_deletion():
+		return
 	if _assembler == null or not is_instance_valid(_assembler):
 		return
 	if _assembler.has_method("rebuild"):
@@ -155,6 +159,8 @@ func _bind_rig() -> void:
 
 
 func _bind_shells() -> void:
+	if not is_inside_tree() or is_queued_for_deletion():
+		return
 	_shell_left = null
 	_shell_right = null
 	if _bucket == null or not is_instance_valid(_bucket):
@@ -172,6 +178,8 @@ func _bind_shells() -> void:
 
 
 func _bind_shells_retry() -> void:
+	if not is_inside_tree() or is_queued_for_deletion():
+		return
 	if _bucket == null or not is_instance_valid(_bucket):
 		return
 	if _bucket.has_method("get_part"):

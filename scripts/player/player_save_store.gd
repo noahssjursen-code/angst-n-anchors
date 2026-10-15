@@ -13,7 +13,8 @@ extends RefCounted
 ## PlayerData.from_dict tolerates missing keys, so v1 saves auto-upgrade
 ## on first load + save (in-flight contract counts will be left as-is for
 ## the migration tick, but any subsequent save snapshots properly).
-const SAVE_VERSION: int = 6
+## v7 adds personal inventory: six hotbar slots, 24 bag slots and clothing references.
+const SAVE_VERSION: int = 7
 const SAVE_DIR: String = "user://save"
 const SAVE_PATH: String = SAVE_DIR + "/player.json"
 const SAVE_TEMP_PATH: String = SAVE_DIR + "/player.json.tmp"
@@ -110,7 +111,7 @@ static func _write_envelope(envelope: Dictionary) -> bool:
 	if err != OK and err != ERR_ALREADY_EXISTS:
 		push_warning("PlayerSaveStore: could not create %s (err %d)" % [save_dir, err])
 		return false
-	var json := JSON.stringify(envelope, "\t")
+	var json := JSON.stringify(envelope, "\t", true, true)
 	# Write and validate a complete temporary file before touching player.json.
 	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:

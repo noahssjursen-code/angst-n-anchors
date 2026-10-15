@@ -6,6 +6,8 @@ extends Node3D
 
 signal state_changed(state: String)
 signal transfer_completed(report: Dictionary)
+## Separate from the production completion signal, which may trigger settlement.
+signal projection_completed(report: Dictionary)
 
 const STATE_IDLE := "idle"
 const STATE_CONNECTING := "connecting hose"
@@ -31,6 +33,10 @@ var _hose_mesh: MeshInstance3D
 var _receiver_fill: MeshInstance3D
 var _connection_marker: Node3D
 var _connection_direction: Node3D
+var _projection := false
+var _projection_hold: CatchHoldComponent
+var _projection_loading := false
+var _projection_reach_m := 24.0
 
 
 func _ready() -> void:
@@ -39,6 +45,7 @@ func _ready() -> void:
 
 
 func start_unload(ship: BoatBody) -> bool:
+	if _projection: stop()
 	if ship == null or not is_instance_valid(ship):
 		return false
 	var total := _ship_catch_mass(ship)
@@ -65,11 +72,91 @@ func bind_receiver(receiver: ShoreRswTankBank) -> void:
 
 
 func stop() -> void:
+	if _projection and is_instance_valid(_receiver_fill): _receiver_fill.hide()
+	_projection = false
+	_projection_hold = null
 	_ship = null
 	_elapsed = 0.0
 	_set_state(STATE_IDLE)
 	set_process(false)
 	_set_hose_visible(false)
+
+
+## Animate an ALREADY committed transfer. This path never reads or writes the
+## inventory, calls a production job, or emits transfer_completed/payment hooks.
+## The caller advances step_projection(), so replay has one clock and owner.
+func start_projection(ship: BoatBody, hold: CatchHoldComponent, mass_kg: float, loading: bool, reach_m := 24.0) -> bool:
+	if not is_inside_tree() or not is_instance_valid(ship) or not ship.is_inside_tree() or not is_instance_valid(hold): return false
+	if not ship.is_ancestor_of(hold) or not is_finite(mass_kg) or mass_kg <= 0 or not is_finite(reach_m) or reach_m <= 0: return false
+	if not can_project_to(hold, reach_m): return false
+	stop()
+	_projection = true
+	_projection_hold = hold
+	_projection_loading = loading
+	_projection_reach_m = reach_m
+	_ship = ship
+	_initial_mass_kg = mass_kg
+	_landed_mass_kg = 0
+	_landed_value_marks = 0
+	_landed_lots = 0
+	_elapsed = 0
+	_set_state(STATE_CONNECTING)
+	set_process(false)
+	_update_hose(0)
+	_update_receiver_fill()
+	return true
+
+
+func can_project_to(hold: CatchHoldComponent, reach_m := 24.0) -> bool:
+	if not is_instance_valid(_connection_marker) or not _connection_marker.is_inside_tree() or not is_instance_valid(hold) or not hold.is_inside_tree(): return false
+	var target := hold.get_hose_drop_world()
+	return target.is_finite() and _connection_marker.global_position.distance_to(target) <= reach_m + .001
+
+
+func is_projecting() -> bool:
+	return _projection
+
+
+func projection_progress() -> float:
+	return clampf(_landed_mass_kg / maxf(_initial_mass_kg, .001), 0, 1)
+
+
+func projection_label() -> String:
+	if _state == STATE_PUMPING: return "Pumping catch aboard" if _projection_loading else "Pumping catch ashore"
+	return _state.capitalize()
+
+
+func step_projection(delta: float) -> void:
+	if not _projection: return
+	if not is_finite(delta) or delta <= 0: return
+	if not is_instance_valid(_ship) or not _ship.is_inside_tree() or not can_project_to(_projection_hold, _projection_reach_m):
+		stop()
+		return
+	_elapsed += delta
+	match _state:
+		STATE_CONNECTING:
+			var ratio := clampf(_elapsed / maxf(connect_seconds, .01), 0, 1)
+			_update_hose(ratio)
+			if ratio >= 1:
+				_elapsed = 0
+				_set_state(STATE_PUMPING)
+		STATE_PUMPING:
+			_update_hose(1)
+			_landed_mass_kg = minf(_initial_mass_kg, _landed_mass_kg + maxf(pump_rate_kg_s, .001) * delta)
+			_update_receiver_fill()
+			if _landed_mass_kg >= _initial_mass_kg:
+				_elapsed = 0
+				_set_state(STATE_FLUSHING)
+		STATE_FLUSHING:
+			_update_hose(1)
+			if _elapsed >= flush_seconds:
+				_set_state(STATE_COMPLETE)
+				_set_hose_visible(false)
+				_receiver_fill.hide()
+				_projection = false
+				_projection_hold = null
+				_ship = null
+				projection_completed.emit({"mass_kg": _initial_mass_kg, "loading": _projection_loading})
 
 
 func state_label() -> String:
@@ -110,6 +197,9 @@ func get_status_lines() -> PackedStringArray:
 
 
 func _process(delta: float) -> void:
+	if _projection:
+		step_projection(delta)
+		return
 	if _ship == null or not is_instance_valid(_ship):
 		stop()
 		return
@@ -211,6 +301,7 @@ func _ship_catch_mass(ship: BoatBody) -> float:
 
 
 func _ship_connection_world() -> Vector3:
+	if _projection and is_instance_valid(_projection_hold): return _projection_hold.get_hose_drop_world()
 	if _ship == null or not is_instance_valid(_ship):
 		return _connection_marker.global_position
 	var holds := _ship.get_catch_holds()

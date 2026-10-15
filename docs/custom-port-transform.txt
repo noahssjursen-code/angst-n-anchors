@@ -1,0 +1,92 @@
+Existing port placement transforms
+=================================
+
+Moving or rotating an existing piece is a single authority command. It does
+not remove/recreate the asset, regenerate a store, or restore old inventory.
+The same placement ID, asset ID, attached store IDs, lots and custom metadata
+remain in place. Accepted events update placements only; ordinary receipt,
+revision, retry and subscriber replay rules still apply.
+
+Authority API
+-------------
+CustomPortState.preview_transform(payload, actor_company_id) validates a copy
+and changes no authority. Apply uses kind "transform_asset" with payload:
+
+  placement_id: existing ID
+  expected_placement: exact placement last seen by the caller
+  position_m: [local_x, 0, local_z]
+  yaw_degrees: valid construction rotation
+
+An optional support_depth_m is permitted only for a platform. The host can
+sample the new terrain position and update the below-deck extrusion along
+with the pose. It must be positive, finite and <=4096 m. null removes an
+optional override when undoing back to a tile that used its default depth.
+The common sea-relative deck plane never changes.
+
+The command requires the port owner and the exact expected placement. It
+rejects extra fields and attribute/identity replacement. Complete existing
+placement, plot, support, inventory and berth validation runs before commit.
+Moving a platform cannot leave equipment unsupported. An occupied berth's
+mooring geometry cannot shift beneath a secured vessel. Reserved stores and
+cranes currently serving those reservations cannot be moved; a cancelled
+reservation releases that constraint. Idle machinery may move while a vessel
+remains safely secured, provided ordinary final validation succeeds.
+
+Editor API and undo
+-------------------
+CustomPortEditor.preview_transform(id, local_cursor, yaw) returns the usual
+proposal plus expected_placement and placement_id. It leaves the original
+visible and authoritative while the host draws the proposed ghost. Replacement
+validation excludes self-overlap but includes any old-location support loss.
+Same-cell proposals reuse the current-revision cache.
+
+Ordinary walls and decoration use a neighbourhood-only preview check, including
+the previous and proposed locations and excluding the original self-overlap.
+Their geometry cannot alter the platform union, mooring anchors or handling
+services, so this remains valid while ships are docked or cargo is reserved.
+Platforms, bollards, cranes, mooring/berth assets and every store's placement
+always use the complete authority preview. Final commands always run complete
+validation. This avoids revalidating 674 pieces for each new hovered drain or
+trim position; the timing probe also compares against cold authority previews.
+
+The editor uses existing size/edge snapping and rotation steps. Calling at the
+existing centre (within 1 mm) preserves that exact pivot, including older
+valid off-grid placements. The host passes the displayed ghost centre on R
+so rotating does not move the grab point. Edge fittings retain edge snapping.
+Fish landing equipment uses a 4 m position grid and 90-degree rotation, rather
+than forcing a 20x16 m centre lattice. Foundation tiles still snap by full size.
+
+editor.transform(proposal) submits the accepted preview. Only support_depth_m
+may be changed in the proposed attributes by the host before committing.
+The inverse is an edit_assets transform at the CURRENT revision, with another
+exact expected-placement guard. Ctrl+Z changes pose/depth only: fish or cargo
+received after the original move remain in their current stores. Group undo
+is atomic, and a failed undo retains its history so it can be retried when a
+newly occupied berth or reservation is released.
+
+Presentation coordination
+-------------------------
+The authority does not invent a persistent busy state for a committed-event
+animation. The workshop host blocks construction, removal, movement and undo
+while its local transfer presenter is busy. A future production adapter must
+apply the real service authority's operating restrictions as appropriate.
+No live company, fleet, server transport or payment service is changed here.
+
+Reproducible checks
+-------------------
+Run tests/custom_port_transform_test.tscn with --shipyard-playtest. It covers
+stocked plant moves, exact IDs and metadata, plot/support/overlap rejection,
+occupied moorings, reservations, stale expected records, JSON/event replay,
+undo after actual new cargo receipts, sampled platform support depth,
+negative coordinates, off-grid pivot rotation and atomic group undo.
+The existing custom_port_data_test and custom_port_editor_test remain relevant.
+tests/custom_port_transform_performance_probe.tscn measures ten distinct trim
+previews on the actual 674-placement Nordvik document without committing edits.
+
+Verified 15 October 2026: transform suite 167 checks, editor suite 133 checks,
+data suite 423 checks, fish-landing headless suite 60 checks; all clean.
+Ten distinct full-harbour trim previews averaged 62.88 ms before the bounded
+preview change and 0.98 ms afterward. Every timed result also matched a fresh
+full authority preview. These are local diagnostic timings, not a fixed budget
+guarantee on other hardware. The workshop's separate native test also confirmed
+a stocked fish plant moves, undoes and reloads with its same 458.5 kg inventory.

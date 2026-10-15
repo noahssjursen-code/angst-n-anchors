@@ -14,6 +14,16 @@ const CHECK_INTERVAL := 1.0
 const UNLOAD_HYSTERESIS_M := 800.0
 const WorldReference := preload("res://scripts/world/world_reference.gd")
 
+signal entry_loaded(entry: Dictionary, instance: Node3D)
+signal entry_unloaded(entry: Dictionary)
+
+## Separate consumers keep their own telemetry and may supply a review camera.
+var telemetry_key: StringName = &"world.ports"
+var reference_position_provider: Callable
+## Optional residency safety for a consumer's loaded content. Applies only to
+## camera-distance unloading, never explicit unregister/authority deletion.
+var retain_loaded: Callable
+
 var _entries: Array = []
 var _timer:   float = 0.0
 var _pending_operations: Array[Dictionary] = []
@@ -22,24 +32,61 @@ var _pending_operations: Array[Dictionary] = []
 func _ready() -> void:
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null and telemetry.has_method("register_provider"):
-		telemetry.register_provider(&"world.ports", self, &"get_debug_stats", &"world")
+		telemetry.register_provider(telemetry_key, self, &"get_debug_stats", &"world")
 
 
 func _exit_tree() -> void:
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null and telemetry.has_method("unregister_provider"):
-		telemetry.unregister_provider(&"world.ports", self)
+		telemetry.unregister_provider(telemetry_key, self)
 
 
-func register(world_position: Vector3, factory: Callable, load_radius: float, debug_name: String = "") -> void:
-	_entries.append({
+func register(world_position: Vector3, factory: Callable, load_radius: float, debug_name: String = "") -> Dictionary:
+	var entry := {
 		"position":   world_position,
 		"factory":    factory,
 		"radius":     load_radius,
 		"instance":   null,
 		"debug_name": debug_name,
 		"pending_action": "",
-	})
+	}
+	_entries.append(entry)
+	_timer = 0.0
+	return entry
+
+
+## Cancel both a pending factory and its installed presentation. A player's
+## active ship remains protected, just as it is during distance unloading.
+func unregister(entry: Dictionary) -> bool:
+	var entry_index := _entry_index(entry)
+	if entry_index < 0: return true
+	if _contains_player_boat(entry): return false
+	for index in range(_pending_operations.size()-1,-1,-1):
+		if is_same(_pending_operations[index].entry,entry):
+			_pending_operations.remove_at(index)
+	entry.pending_action = ""
+	_entries.remove_at(entry_index)
+	_unload(entry)
+	return true
+
+
+func update_entry(entry: Dictionary, world_position: Vector3, load_radius: float) -> void:
+	if _entry_index(entry) < 0: return
+	entry.position = world_position
+	entry.radius = load_radius
+	_timer = 0.0
+
+
+func can_unregister(entry: Dictionary) -> bool:
+	return _entry_index(entry) < 0 or not _contains_player_boat(entry)
+
+
+func _entry_index(entry: Dictionary) -> int:
+	# Registrations are handles, not value records. Two factories may have the
+	# exact same position and settings while still owning separate instances.
+	for index in _entries.size():
+		if is_same(_entries[index],entry): return index
+	return -1
 
 
 func _process(delta: float) -> void:
@@ -87,7 +134,7 @@ func _process_one_operation() -> void:
 	if action == "load" and distance <= radius:
 		_load(entry)
 	elif action == "unload" and distance > radius + UNLOAD_HYSTERESIS_M:
-		_unload(entry)
+		_unload(entry,true)
 
 
 func _load(entry: Dictionary) -> void:
@@ -117,6 +164,7 @@ func _load(entry: Dictionary) -> void:
 	get_parent().add_child(node)
 	node.global_position = entry["position"]
 	entry["instance"] = node
+	entry_loaded.emit(entry,node)
 	if t != null and not waits_for_rebuild:
 		t.end_load_event(handle)
 
@@ -132,21 +180,28 @@ func _on_port_rebuilt(duration_ms: float, t: Node, handle: int, debug_name: Stri
 	})
 
 
-func _unload(entry: Dictionary) -> void:
+func _unload(entry: Dictionary, distance_unload := false) -> void:
 	if entry["instance"] == null or not is_instance_valid(entry["instance"]):
 		entry["instance"] = null
 		return
 	# Never unload a port that contains the player's active ship.
-	var instance := entry["instance"] as Node
-	if instance != null:
-		for boat in get_tree().get_nodes_in_group("player_boat"):
-			if boat is Node and instance.is_ancestor_of(boat as Node):
-				return
+	if _contains_player_boat(entry): return
+	if distance_unload and retain_loaded.is_valid() and bool(retain_loaded.call(entry)): return
 	entry["instance"].queue_free()
 	entry["instance"] = null
+	entry_unloaded.emit(entry)
+
+
+func _contains_player_boat(entry: Dictionary) -> bool:
+	var instance: Variant = entry.get("instance")
+	if not is_instance_valid(instance): return false
+	for boat in get_tree().get_nodes_in_group("player_boat"):
+		if boat is Node and instance.is_ancestor_of(boat): return true
+	return false
 
 
 func _reference_position() -> Vector3:
+	if reference_position_provider.is_valid(): return reference_position_provider.call()
 	return WorldReference.stream_position(get_viewport())
 
 

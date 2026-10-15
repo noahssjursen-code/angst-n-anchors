@@ -1,0 +1,104 @@
+Custom port terrain projection — 15 October 2026
+
+The fixed construction deck is world Y=0.5: sea level (-1.5) + 2 metres.
+Foundations cut obstructing terrain down to 0.12 metres beneath that deck.
+They do not raise deeper seabed. Only their exact catalog footprints are cut;
+triangle/chamfer corners and unbuilt holes preserve the original surface.
+No wide grading margin or neighbouring unowned land is changed.
+
+Construction update: the workshop rejects NEW or MOVED foundations whose whole
+top is below the original terrain. It clips the exact tile polygon against the
+near-terrain triangle lattice, preserving partially exposed shoreline tiles and
+triangle/chamfer cutouts. Preview and commit use the same check; drag strokes
+skip rejected tiles. Existing saved ports still reconstruct without data loss.
+Earthworks remain necessary where a valid shoreline tile intersects the bank.
+The builder receives a trusted original-ground sampler; the JSON document does
+not store terrain meshes or camera-dependent physics hits.
+
+Integration
+-----------
+1. Validate the complete port document through CustomPortState.
+2. CustomPortEarthworks.project(snapshot, catalog, state.construction_edges())
+   returns the derived world-space footprints, exposed union edges and stable
+   geometry_signature. Stock, receipts, revision and support-depth changes
+   reuse the same geometry; no terrain vertices enter the authoritative save.
+3. WorldTerrainStreamer.set_custom_port_earthworks([projection, ...]) accepts
+   the full active collection. Call before configure at initial load, and
+   after committed construction edits. An empty collection restores the
+   original deterministic terrain. World identity includes seed, generation
+   version and checksum.
+4. Coalesce a painted construction stroke before publishing its projection.
+   The streamer coalesces affected chunk requests and rejects stale workers.
+5. Keep freecam responsive while rebuilding. Wait for
+   is_custom_port_earthworks_ready() before enabling walking at a changed port.
+   Initial world loading also uses is_ready_around(position, radius).
+   Readiness covers current visuals and collision; abandoned distant requests
+   do not block it. No scene nodes are mutated from worker threads.
+
+Geometry and rendering
+----------------------
+WorldTerrainEarthworks clips existing terrain triangles against convex
+foundation polygons using a 25-metre spatial index. Outside fragments retain
+the original barycentric heights and smooth normals. Retaining faces occur
+only on exposed union edges, including holes, with collision from the same
+surface triangles. Adjacent tiles and adjacent port projections do not create
+internal walls. Terrain triangles are never globally densified for this.
+
+Chunk-boundary skirts are split at footprint intersections and lowered only
+inside the excavation, preventing the old skirt from running through a deck.
+Skirts remain excluded from physical collision as before.
+
+Edited chunks carry a float custom normal attribute: the mesh renderer packs
+the ordinary NORMAL into unit-length form, which otherwise changes the smooth
+normal field when a triangle is split. Only edited chunk materials enable the
+earthwork_normals flag. Default terrain uses its existing normal/material path.
+No textures, biome rules, lighting, LOD density or legacy port grading changed.
+
+Evidence
+--------
+tests/custom_port_earthworks_test.tscn: 54 checks pass. These cover small tiles
+within coarse triangles, exact outside heights, adjacent unions, holes,
+triangle/chamfer shapes, submerged terrain, height transitions, chunk seams
+and skirts, collision equivalence, exact undo restoration, retained normals,
+world identity/signature reuse, in-flight edits, coalescing, stale completion,
+readiness after collision installation and leaving unfinished distant chunks.
+
+Two real seed-73119 coast sites were verified against actual generated mesh:
+  (2712,-264): terrain centre 11.959m -> cut surface 0.380m.
+  (76,1668): terrain centre 24.505m -> cut surface 0.380m.
+Outside points immediately beyond each foundation remained unchanged.
+
+tests/custom_port_earthworks_review.tscn: 9 native checks pass with the game's
+actual player/collider. The player walks twenty metres across cleared deck,
+stops at the retaining wall, and real physics rays verify untouched outside
+terrain, the unbuilt hole, and original hill restoration after removal.
+
+Original WorldTerrainStreamer, world_terrain_background and
+port_terrain_clearance suites also pass. Their legacy SceneTree scripts were
+run through temporary Node entry wrappers after project autoload startup;
+their test bodies and repository files were unchanged.
+
+Measured on this workstation (not universal frame-time promises):
+  568 foundation footprints: cold derived projection about 21ms.
+  Actual example coast: clipping about 5.5ms, one affected terrain triangle.
+  Full example on a wholly steep plane: about 114ms, 38 affected triangles
+    and 74 retaining triangles. This work runs in the terrain worker.
+  Actual small steep-site full chunk builds: about 49ms and 77ms including
+    original terrain generation, normals and the cut.
+
+Archived native captures:
+C:/Users/noahs/Pictures/machinescreenshots/custom-port-earthworks-1792019836-9848-overview.png
+C:/Users/noahs/Pictures/machinescreenshots/custom-port-earthworks-1792019836-9848-deck-and-retaining-walls.png
+C:/Users/noahs/Pictures/machinescreenshots/custom-port-earthworks-1792019836-9848-untouched-hole.png
+C:/Users/noahs/Pictures/machinescreenshots/custom-port-earthworks-1792019836-9848-undo-restored-coast.png
+
+The isolated steep example can be exported from the native review with
+--port-export=<absolute-json-path> --port-export-only and loaded by the actual
+workshop. It is validated against the real world/catalog before export.
+
+Scope
+-----
+This is the custom-port projection hook and isolated workshop integration.
+Authority/server deployment and resource costs for earthworks remain separate
+systems. It excavates exact footprints; it does not invent a road or slope
+between a low deck and a tall inland hill. Such access still needs construction.

@@ -10,6 +10,74 @@ Detailed architecture reference. See also:
 
 ## Product Boundary: Company Simulation
 
+### Coastal property map foundation (14 October 2026)
+
+`CoastalPlotIndex` divides the immutable `WorldLayout.coastline_contours`
+(including skerries) into world-aligned 200 × 200 m squares. It is geography,
+not ownership. Each JSON-safe record carries a versioned, world-scoped ID,
+grid coordinate, bounds, shoreline length and anchor. Neighbours follow actual
+coast crossings, allowing later expansion along the shore. Narrow channels or
+multiple disconnected shores within one square are flagged for boundary review.
+Existing harbour reservations, terrain suitability, sale prices and purchases
+still require authority rules before plots can be sold.
+
+The full marine chart shows translucent green plots, click inspection and
+adjacent-coast highlights. G toggles the layer. Home-port selection and the helm
+minimap keep their navigation roles; property inspection is only on the full map.
+The later tablet Property app can consume `MapOverlay.plot_selected` and the same
+plot IDs rather than creating another geographical grid.
+
+`ChartRasterCache` stores disposable client PNGs by world identity and rendering
+version. `ChartBaseRaster` provides a coarse cold overview, background full-detail
+bakes, mipmapped textures, fixed zoom bands and disk/RAM reuse. Obsolete detail
+jobs are cancelled safely at row boundaries; cached geography never contains
+company balances, ownership or port construction. `ChartSurface` retains static
+geography separately from contacts/hover. `ChartPlotLayer` builds one world mesh
+and line buffer, then uses canvas transforms and clipping for pan/zoom.
+Harbour outlines appear only below a 9 km chart span; unchanged plans survive
+port-directory revisions. Closing/reopening the chart preserves its camera.
+
+Inspect scene: `scenes/showcases/coastal_property_showcase.tscn`.
+Focused checks: `coastal_plot_index_test`, `coastal_property_map_test`,
+`chart_geography_cache_test` and `chart_harbour_cache_test` under `tests/`.
+Review captures use `--capture-coastal-plots` and are archived in the standing
+machine-screenshot folder. This pass adds no property shop or port building loop.
+
+The follow-on isolated `plot_building_showcase.tscn` provides that first interactive
+building experiment: a real 1.1 km island, 18 scoped shoreline squares, the production
+player, chart selection and home teleport, and a pinned slot-1 build tool. It streams
+nearby terrain without creating gameplay ports, NPCs or multiplayer sessions. Its
+left library uses material-backed placeholder foundations, quays, piers and buildings.
+Building uses a detached `plot_build_camera.gd` freecam; the character stays parked
+and Esc returns to walking. Slot 1 equips the tool. WASD flies, Q/E lowers/raises the
+camera in world space, Shift speeds up and Ctrl slows down. The crosshair aims, LMB
+places (hold to paint slabs), RMB removes the visible piece, wheel cycles pieces and
+R rotates. Ctrl+Z undoes placement or removal; one held-click paint stroke is one
+undo action. History is local to each plot document and is not serialized. Undo
+restores the original identity, support depth and rotation of removed pieces.
+Camera altitude never changes construction height.
+Tab releases the pointer to the left library; choosing a piece resumes aiming. The
+camera stops while the library or map is open. The grid's visible radius grows with
+camera altitude; the full owned-plot outline stays visible. Placement and the visible
+grid step by the selected footprint (4 × 4 m foundations, 8 × 4 m quays, swapped
+when rotated). Continuing an edge-connected surface preserves that surface's origin.
+
+`PlotBuildLayout` version 3 stores 2 m horizontal cells, quarter turns and support
+depths. Every plot shares ONE construction plane at 2 m above `WaveSurface.WATER_LEVEL`.
+There are no selectable vertical layers or per-piece elevation fields. Foundations
+and quays have their tops on this plane and extend down into the ground/seabed beneath
+their entire footprint. Pier decks meet the same plane with supports down to the bed.
+Buildings start on top of that plane. Saved support depth recreates the underwater
+structure without changing deck elevation. Picking intersects the fixed plane within
+400 m; terrain only determines the bottom of supports. Aiming near a slab edge snaps a
+flush neighbour. Foundations may sit below buildings, but overlapping foundations or
+overlapping buildings are rejected, as is enclosing the player. Removal uses the
+visible piece's ID. The prototype
+keeps each selected plot's document in RAM, with JSON reconstruction checks; it does
+not grant persistent land ownership or issue remote construction commands.
+`--verify-plot-building` exercises the complete flow and real GUI clicks;
+`--capture-plot-building` also archives the spawn, map and freecam build views.
+
 The first company slice is implemented as JSON-safe contracts plus an in-process authority service.
 It currently owns company identity, money ledger, starter-vessel grant, inventory lots, warehouse
 leases, and idempotent command results. Its architecture supports two authority hosts without
@@ -434,3 +502,35 @@ func _rebuild() -> void:
 5. If it has a HUD panel, it belongs in the system folder (not `ui/`), but `ui/` autoloads may reference it.
 
 If you can't tell which folder a new file belongs in, the system list needs a new entry.
+
+
+### Home-port fish sales
+
+The small starter Fiskemottak provides `services.fish_reception`; existing starter
+saves with their `sign_fish` placement remain compatible. It uses no shore tank,
+pump job, stock capacity or manual carrying step. With both mooring lines secured,
+the tablet's Harbour services page offers **Sell catch** with a species-based NOK
+quote. Generated industrial ports retain their existing pump service until their
+port-system migration.
+
+`LocalPlayerView.sell_home_catch` sends `fishing.catch.sell` through `WorldGateway`.
+The command identifies the vessel, home port, selected catch lot IDs and a stable
+operation ID. It contains no authoritative client price. Both backends validate
+ownership and mooring before settling. The Go authority shares catch removal,
+landed-lot tombstones and fish-landing receipts with the existing pump flow; the
+PostgreSQL commit credits money and persists those projections in one transaction.
+Observers receive updated vessel holds and a public port receipt. Repeated commands
+and retries after restart return the receipt without another credit.
+
+Single-player `PlayerData.local_fishing` stores holds by vessel UID/hold ID and sale
+receipts. `LocalCatchStore` restores those holds on vessel assembly and records
+changes. A home sale writes the emptied holds, company ledger credit and receipt in
+one verified player save before changing the live crate. This field is excluded
+from multiplayer captain documents, where the server owns fish custody.
+
+Run `tests/home_fish_sale_review.tscn` for the native onboarding/deploy/tablet sale
+review (isolated test captain, archived screenshots, save failure and restart checks).
+The MP repository's `tests/home_ports_integration.ps1` covers two accounts, ownership,
+mooring, server pricing, observer holds, payment and durable retries against disposable
+PostgreSQL. The integration seeds accepted fish in its isolated database; the authority
+fishing tests separately cover catch acceptance and landing validation.

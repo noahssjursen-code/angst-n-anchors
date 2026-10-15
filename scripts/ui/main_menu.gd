@@ -374,7 +374,26 @@ func _on_company_confirmed(company_name: String, brand_color: Color, starter_ves
 	if _pending_appearance != null:
 		_pending_appearance.company_primary_color = brand_color
 		_pending_appearance.company_secondary_color = _company_accent_for(brand_color)
-	_show_home_port_picker()
+	_create_home_captain()
+
+
+func _create_home_captain()->void:
+	WorldBootstrap.apply_seed(_pending_seed)
+	if _multiplayer_flow:
+		_mp_sail_requested=true
+		if not _captains.captain_created.is_connected(_new_home_captain_ready):
+			_captains.captain_created.connect(_new_home_captain_ready,CONNECT_ONE_SHOT)
+		_captains.create_remote_onboarded(_pending_name,_pending_appearance,HomePortService.PENDING,_pending_seed,_pending_company_name,_pending_brand_color,"fishing")
+		_show_page(Page.MULTIPLAYER)
+		_mp_status.text="Preparing your captain…"
+	else:
+		var entry=_captains.create_local(_pending_name,_pending_appearance,HomePortService.PENDING,_pending_seed,_pending_company_name,_pending_brand_color,"fishing")
+		if entry==null:return
+		WorldBootstrap.enter_world(get_tree(),false)
+
+func _new_home_captain_ready(_entry:Dictionary)->void:
+	_creating_new=false
+	_captains.remote.fetch_world_options()
 
 
 static func _company_accent_for(primary: Color) -> Color:

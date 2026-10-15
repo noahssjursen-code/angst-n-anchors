@@ -6,6 +6,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mariner_geometry import *
 from mariner_refinement import refine
 refine(objects)
+from mariner_redesign import rebuild
+rebuild(globals())
+from mariner_head import rebuild_head
+rebuild_head(globals())
 
 # One rig, shared bind transforms. Weighted continuous body and modular clothing.
 arm_data=bpy.data.armatures.new('MarinerSkeleton'); rig=bpy.data.objects.new('MarinerRig',arm_data)

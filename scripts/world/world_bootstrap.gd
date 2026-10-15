@@ -49,7 +49,7 @@ static func apply_seed(
 		return
 	var gen_version := version
 	if gen_version <= 0:
-		gen_version = int(settings.get("map_generation_version"))
+		gen_version = WorldLayoutGenerator.GENERATION_VERSION
 	settings.call(
 		"set_world_generation_context",
 		seed_val,
@@ -154,6 +154,18 @@ static func enter_world(
 	var gateway := tree.root.get_node_or_null("WorldGateway")
 	if gateway != null and gateway.has_method("begin_session") and not authority_prepared:
 		gateway.call("begin_session", multiplayer)
+
+	if gateway != null and not gateway.is_ready():
+		var deadline:=Time.get_ticks_msec()+15000
+		while not gateway.is_ready() and Time.get_ticks_msec()<deadline:await tree.process_frame
+	var home_result:=await HomePortService.prepare()
+	if not home_result.get("ok",false) and PlayerSession.data.home_port_id.begins_with("home-"):
+		GameMenu.notify(str(home_result.get("message","Could not load your port. Please retry.")))
+		return
+	if PlayerSession.data.home_port_id==HomePortService.PENDING:
+		GameMenu.set_gameplay_hud_visible(false)
+		tree.change_scene_to_file("res://scenes/ui/new_home_setup.tscn")
+		return
 	var network := tree.root.get_node_or_null("NetworkManager")
 	if network != null:
 		if multiplayer and network.has_method("begin_multiplayer_session"):

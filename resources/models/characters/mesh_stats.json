@@ -3,10 +3,6 @@
     "vertices": 588,
     "triangles": 1172
   },
-  "Neck": {
-    "vertices": 196,
-    "triangles": 388
-  },
   "Body_Arms": {
     "vertices": 1456,
     "triangles": 2904
@@ -23,41 +19,13 @@
     "vertices": 8346,
     "triangles": 16644
   },
-  "Head": {
-    "vertices": 1116,
-    "triangles": 2228
-  },
-  "Face": {
-    "vertices": 2404,
-    "triangles": 4760
-  },
-  "Hair_Crop": {
-    "vertices": 448,
-    "triangles": 892
-  },
-  "FacialHair_Moustache": {
-    "vertices": 392,
-    "triangles": 776
-  },
-  "Top_Sweater": {
-    "vertices": 17273,
-    "triangles": 34542
-  },
-  "Top_Trim": {
-    "vertices": 196,
-    "triangles": 388
-  },
   "Trousers_Work": {
-    "vertices": 2755,
-    "triangles": 5440
+    "vertices": 2569,
+    "triangles": 4896
   },
   "Base_Shorts": {
     "vertices": 4117,
     "triangles": 8230
-  },
-  "Footwear_Boots": {
-    "vertices": 1624,
-    "triangles": 3224
   },
   "Headwear_Cap": {
     "vertices": 628,
@@ -71,10 +39,6 @@
     "vertices": 1668,
     "triangles": 3216
   },
-  "Outerwear_Vest": {
-    "vertices": 1964,
-    "triangles": 3896
-  },
   "Utility_Belt": {
     "vertices": 264,
     "triangles": 520
@@ -82,5 +46,41 @@
   "Accessory_Pipe": {
     "vertices": 232,
     "triangles": 432
+  },
+  "Top_Sweater": {
+    "vertices": 2694,
+    "triangles": 5152
+  },
+  "Top_Trim": {
+    "vertices": 240,
+    "triangles": 400
+  },
+  "Footwear_Boots": {
+    "vertices": 2912,
+    "triangles": 5304
+  },
+  "Outerwear_Vest": {
+    "vertices": 848,
+    "triangles": 1480
+  },
+  "Head": {
+    "vertices": 11370,
+    "triangles": 22480
+  },
+  "Neck": {
+    "vertices": 240,
+    "triangles": 384
+  },
+  "Face": {
+    "vertices": 4445,
+    "triangles": 8274
+  },
+  "Hair_Crop": {
+    "vertices": 3648,
+    "triangles": 7198
+  },
+  "FacialHair_Moustache": {
+    "vertices": 240,
+    "triangles": 368
   }
 }

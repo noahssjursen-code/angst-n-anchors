@@ -1,0 +1,48 @@
+CUSTOM PORT OPERATOR CONTEXT
+
+CustomPortOperatorContext.resolve(snapshot, operator_placement_id,
+    preferred_vessel_id = "", catalog = {})
+
+This is passive navigation over an already validated custom-port document.
+An explicit catalog can be supplied; otherwise CustomPortCatalog is used.
+The result contains ok, code, tab, store_id and vessel_id. An unavailable
+operator or explicit store also returns a short message.
+
+An operator with attributes.service="berths" opens docking records, as the
+example harbour office requests. Nearby cargo cannot silently change its role.
+For cargo/general operators, attributes.store_id binds that exact business. If the store
+has been removed, resolution fails rather than opening an unrelated business.
+Without an explicit binding, the nearest store placement in the same document
+is selected; equal distances use stable IDs. If no stores exist, Berths opens.
+
+A vessel is eligible only while docked at a derived berth and physically served
+by a crane or pump linked to this store. At least one handling mode must be
+supported by the machine, vessel and store. Declared container types must also
+intersect. A valid preferred vessel wins; otherwise the closest served vessel
+to the store is selected. No compatible vessel produces an empty vessel_id.
+This selection does not grant permission to move goods or act for another
+company; ordinary authority commands retain their ownership and access checks.
+
+CustomPortInspector.focus_cargo(store_id, vessel_id = "") -> bool
+  Selects the Cargo tab and exact existing identities without mutating state.
+  Empty vessel_id deliberately selects no vessel, instead of the first boat.
+  Unknown explicit identities return false and preserve the previous focus.
+  Refreshes and accepted cargo actions retain store/vessel/tab selection.
+  While operator focus is active, reservations shown belong to that store.
+
+CustomPortInspector.focus_berths()
+  Returns a generic records entry to Berths and restores ordinary unrestricted
+  reservation browsing. Existing configure/select_vessel APIs are unchanged.
+
+The host consumes context; the helper never opens UI or accesses live services.
+No stock, receipts, permissions, ownership, payment or berth state is written.
+
+Focused test:
+  res://tests/custom_port_operator_context_test.tscn -- --shipyard-playtest
+Add --capture after the isolation flag for an archived native Cargo-panel view.
+Headless: 30 checks. Native capture: 31 checks. Both clean.
+Existing inspector regression: 64 checks, clean.
+Coverage includes two real derived/equipped berths, bulk/fish compatibility,
+preferred and nearest vessels, missing explicit references, undocked vessels,
+pure-state safety, native selection, absent-vessel persistence, and complete
+reserve/load/unload focus retention. No network or production world is opened.

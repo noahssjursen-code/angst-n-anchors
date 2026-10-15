@@ -11,6 +11,8 @@ var current_page := "Overview"
 var selected_vessel := ""
 var snapshot: Dictionary = {}
 var notice := ""
+var _order_busy:=false
+var _market_selection:Dictionary={}
 var _body: VBoxContainer
 var _nav: VBoxContainer
 var _timer := 0.0
@@ -19,7 +21,7 @@ const INK := Color("213c3e")
 const MUTED := Color("75847b")
 const PAPER := Color("f7f8f4")
 const GREEN := Color("256650")
-const PAGES := ["Overview", "My fleet", "Contracts", "Finances", "Company & crew", "Online players", "Messages", "SeaMail"]
+const PAGES := ["Overview", "My fleet", "Shipyard", "Harbour services", "Contracts", "Finances", "Equipment shop", "Company storage", "Company & crew", "Online players", "Messages", "SeaMail"]
 
 func _ready() -> void:
 	theme = VoyageStyle.theme().duplicate()
@@ -65,6 +67,11 @@ func _ready() -> void:
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_theme_constant_override("separation", 18)
 	scroll.add_child(_body)
+	if not preview_mode:
+		PersonalInventory.finished.connect(func(result:Dictionary):
+			if result.get("action","") not in ["inventory.purchase",""]:return
+			notice="Delivered to your on-person inventory." if bool(result.get("ok",false)) else str(result.get("message","Purchase failed."))
+			if current_page=="Equipment shop" and is_visible_in_tree():refresh(true))
 	refresh(true)
 
 func _process(delta: float) -> void:
@@ -81,6 +88,11 @@ func refresh(force: bool = false) -> void:
 	var voyage: Dictionary = compared.get("voyage", {})
 	compared["voyage"] = {"objective": voyage.get("objective", ""), "ship": voyage.get("ship", false), "name": voyage.get("name", ""), "port": voyage.get("port", "")}
 	for vessel: Dictionary in compared.get("fleet", []): vessel.erase("fuel")
+	if not preview_mode and current_page in ["Harbour services","Contracts"]:
+		var services:Array=[]
+		for service in LocalPlayerView.get_tablet_port_services():
+			services.append(PortServiceDesk.describe(service))
+		compared["services"]=services
 	var fingerprint := JSON.stringify(compared)
 	if force or fingerprint != _fingerprint:
 		_fingerprint = fingerprint
@@ -110,7 +122,11 @@ func render() -> void:
 		"Overview": overview()
 		"My fleet": fleet()
 		"Contracts": contracts()
+		"Shipyard": shipyard()
+		"Harbour services": harbour_services()
 		"Finances": finances()
+		"Equipment shop": equipment_shop()
+		"Company storage": company_storage()
 		"Company & crew": company()
 		"Online players": unavailable("Online players", "The full server directory is not available yet.", "This list will include all connected captains, including those outside your vessel's rendering range.")
 		"Messages": unavailable("Messages", "Direct messaging is not connected yet.", "Player and company conversations need server delivery and stored message history.")
@@ -140,7 +156,7 @@ func overview() -> void:
 	var work := card(columns)
 	work.add_child(label("Accepted work", 22))
 	var jobs: Array = snapshot.get("jobs", [])
-	if jobs.is_empty(): work.add_child(label("No active contracts. Visit a cargo agent for compatible work.", 18, MUTED))
+	if jobs.is_empty(): work.add_child(label("No active contracts. Browse available work in Contracts.", 18, MUTED))
 	else:
 		for job: Dictionary in jobs: work.add_child(label(job_title(job), 18))
 	work.add_child(button("View contracts →", func(): open_page("Contracts")))
@@ -148,7 +164,7 @@ func overview() -> void:
 	owned.add_child(label("Your fleet", 22))
 	for vessel: Dictionary in snapshot.get("fleet", []):
 		owned.add_child(button(str(vessel.name) + " · " + str(vessel.status), func(): select_vessel(str(vessel.uid))))
-	if snapshot.get("fleet", []).is_empty(): owned.add_child(label("Visit the shipwright to purchase your first vessel.", 18, MUTED))
+	if snapshot.get("fleet", []).is_empty(): owned.add_child(button("Browse ships for sale →",func():open_page("Shipyard")))
 
 func select_vessel(uid: String) -> void:
 	current_page = "My fleet"
@@ -175,8 +191,12 @@ func fleet() -> void:
 				for cargo: Dictionary in vessel.get("cargo", []): pair(box, str(cargo.get("title", "Cargo")), str(cargo.get("detail", "")))
 				if vessel.get("cargo", []).is_empty(): box.add_child(label("No cargo aboard.", 18, MUTED))
 				if float(vessel.get("catch_mass_kg", 0)) > 0: pair(box, "Catch estimate", PlayerData.format_money(int(vessel.get("catch_value", 0))))
-			else: box.add_child(label("Deploy this vessel through the harbourmaster to inspect its live cargo and fuel.", 18, MUTED))
-	if snapshot.get("fleet", []).is_empty(): _body.add_child(label("Your fleet is empty. Visit the shipwright to inspect vessels for sale.", 20, MUTED))
+				box.add_child(button("Harbour services →",func():open_page("Harbour services")))
+			else:
+				var deploy:=button("Select berth & deploy",func():
+					if not preview_mode:GameMenu.open_berth_picker(str(vessel.uid)))
+				box.add_child(deploy)
+	if snapshot.get("fleet", []).is_empty(): _body.add_child(button("Browse ships for sale →",func():open_page("Shipyard")))
 
 func contracts() -> void:
 	heading("Contracts", "Your accepted work and delivery progress.")
@@ -190,7 +210,18 @@ func contracts() -> void:
 		cancel.disabled = not bool(status.get("allowed", false))
 		cancel.tooltip_text = str(status.get("reason", ""))
 		box.add_child(cancel)
-	if snapshot.get("jobs", []).is_empty(): _body.add_child(label("No active cargo jobs. Visit the cargo agent at your vessel's port for available work.", 20, MUTED))
+	if snapshot.get("jobs", []).is_empty(): _body.add_child(label("No active cargo jobs.", 20, MUTED))
+	if not preview_mode:
+		for service in LocalPlayerView.get_tablet_port_services():
+			if not service is CargoAgentNpc:continue
+			_body.add_child(label("Available at "+LocalPlayerView.get_port_display_name(service.port_id),24))
+			var offers:=LocalPlayerView.service_snapshot(service)
+			for offer in offers.items:
+				var box:=card(_body);box.add_child(label(str(offer.label),22));box.add_child(label(str(offer.detail)))
+				var action:=button("Accept contract",func():_service_order(service,"book",{"id":offer.id}))
+				action.disabled=not str(offer.reason).is_empty() or _order_busy;box.add_child(action)
+				if not str(offer.reason).is_empty():box.add_child(label(str(offer.reason),16,MUTED))
+			break
 	var passenger: Dictionary = snapshot.get("passenger", {})
 	if not passenger.is_empty():
 		var box := card(_body)
@@ -279,3 +310,106 @@ func pair(parent: Node, key: String, value: String) -> void:
 func show_feedback(text: String) -> void:
 	notice = text
 	render()
+
+func equipment_shop()->void:
+	heading("Equipment shop","Personal tackle · instant delivery to your inventory")
+	if not preview_mode and not LocalPlayerView.get_personal_inventory_ready():_body.add_child(label("Waiting for personal inventory service. Multiplayer requires the inventory server update.",18,MUTED))
+	for item:Dictionary in PlayerInventoryState.stock():
+		var box:=card(_body)
+		box.add_child(label(str(item.name),25))
+		box.add_child(label(str(item.description),18,MUTED))
+		var buy:=button("Buy · "+PlayerData.format_money(int(item.price_nok)),func():PersonalInventory.send("inventory.purchase",{"item_id":item.id}))
+		buy.disabled=preview_mode or not LocalPlayerView.get_personal_inventory_ready() or not PersonalInventory.pending.is_empty() or int(snapshot.get("balance",0))<int(item.price_nok)
+		box.add_child(buy)
+	_body.add_child(label("Open TAB to arrange your equipment. Use 1–6 aboard a vessel to equip it.",18,MUTED))
+
+func company_storage()->void:
+	heading("Company storage","Warehouse goods stay at their port. Personal equipment travels with you.")
+	var summary:Dictionary=LocalPlayerView.get_company_summary() if not preview_mode else snapshot.get("company",{})
+	var leases:Array=summary.get("warehouse_leases",[])
+	var lots:Array=summary.get("inventory_lots",[])
+	for lease:Dictionary in leases:
+		var box:=card(_body)
+		box.add_child(label(LocalPlayerView.get_port_display_name(str(lease.get("port_id",""))),24))
+		var found:=false
+		for lot:Dictionary in lots:
+			if str(lot.get("port_id",""))!=str(lease.get("port_id","")):continue
+			found=true
+			pair(box,str(lot.get("commodity_id","Goods")).capitalize(),str(lot.get("quantity",0)))
+		if not found:box.add_child(label("No goods stored here.",18,MUTED))
+	if leases.is_empty():_body.add_child(label("No warehouse storage registered.",18,MUTED))
+
+func _service_order(service:NpcInteractable,action:String,payload:Dictionary={}) -> void:
+	if preview_mode or _order_busy:return
+	_order_busy=true
+	var result: Dictionary
+	if action == "sell_fish" and service is HarbourMasterNpc:
+		result = await LocalPlayerView.sell_home_catch(service.port_id)
+	else:
+		result = PortServiceDesk.request(service,action,payload)
+	_order_busy=false
+	notice=str(result.get("data",{}).get("message","Order sent.")) if result.get("ok",false) else str(result.get("message","Order failed."))
+	refresh(true)
+
+func harbour_services()->void:
+	heading("Harbour services","Manage your vessel and cargo from the tablet.")
+	if preview_mode:return
+	var services:=LocalPlayerView.get_tablet_port_services()
+	if services.is_empty():_body.add_child(label("No harbour in range. Approach a port to use its facilities."));return
+	for service in services:
+		if service is PassengerAgentNpc:
+			var terminal:=service as PassengerAgentNpc
+			var terminal_box:=card(_body)
+			terminal_box.add_child(label("Passenger terminal · "+LocalPlayerView.get_port_display_name(terminal.port_id),22))
+			terminal_box.add_child(button("Passenger sailings",func():
+				GameMenu._set_screen(GameMenu.Screen.NONE)
+				PassengerTerminalPanel.open(terminal)))
+			continue
+		if not service is HarbourMasterNpc and not service is CraneOperatorNpc:continue
+		var data:=LocalPlayerView.service_snapshot(service)
+		var box:=card(_body)
+		box.add_child(label(LocalPlayerView.get_port_display_name(str(data.get("port_id",""))),22))
+		box.add_child(label("Vessel services" if service is HarbourMasterNpc else str(data.title),20))
+		if service is CraneOperatorNpc:box.add_child(label(str(data.get("line","")),17,MUTED))
+		if data.has("fish_reception"):box.add_child(label(str(data.fish_reception.line),20))
+		for action in data.get("actions",[]):
+			if not bool(action.get("visible",true)):continue
+			var b:=button(str(action.label),func():_service_order(service,str(action.id)))
+			b.disabled=not str(action.get("reason","")).is_empty() or _order_busy
+			box.add_child(b)
+			if b.disabled:box.add_child(label(str(action.get("reason","")),16,MUTED))
+
+func shipyard()->void:
+	heading("Shipyard","Purchase a vessel, then select its berth in My fleet.")
+	if preview_mode:return
+	var market:=LocalPlayerView.get_tablet_vessel_market()
+	if not _market_selection.is_empty():
+		_body.add_child(button("← All ships",func():_market_selection={};render()))
+		var item:=_market_selection
+		var box:=card(_body)
+		box.add_child(label(str(item.label),26));box.add_child(label(str(item.detail)))
+		var display:=SubViewportContainer.new();display.custom_minimum_size=Vector2(600,270);display.stretch=true;box.add_child(display)
+		var viewport:=SubViewport.new();viewport.size=Vector2i(800,320);viewport.own_world_3d=true;display.add_child(viewport)
+		var environment:=WorldEnvironment.new();environment.environment=Environment.new()
+		environment.environment.background_mode=Environment.BG_COLOR;environment.environment.background_color=Color("a5b8bc")
+		environment.environment.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR;environment.environment.ambient_light_color=Color.WHITE;environment.environment.ambient_light_energy=.7
+		viewport.add_child(environment)
+		var sun:=DirectionalLight3D.new();sun.rotation_degrees=Vector3(-35,-30,0);viewport.add_child(sun)
+		var preview:=ShipwrightPreview.new();viewport.add_child(preview);preview.show_entry(item,item.get("prebuilt_layout",{}));preview.set_spin_enabled(false)
+		var camera:=Camera3D.new();viewport.add_child(camera);camera.fov=36;camera.transform=ShipwrightPreview.camera_transform_for_length(float(item.get("loa_m",24)));camera.make_current()
+		pair(box,"Purchase price",PlayerData.format_money(int(item.price)))
+		var vessel_name:=LineEdit.new();vessel_name.placeholder_text="Name your vessel";vessel_name.text=str(item.label);box.add_child(vessel_name)
+		var request_id:=PlayerData.new_uuid()
+		var buy:=button("Buy vessel · "+PlayerData.format_money(int(item.price)),func():
+			if _order_busy:return
+			_order_busy=true;notice="Purchasing vessel…"
+			var result:Dictionary=await LocalPlayerView.buy_tablet_vessel({"stock_id":str(item.id),"vessel_name":vessel_name.text,"request_id":request_id,"expected_price_nok":int(item.price)})
+			_order_busy=false
+			notice="Vessel purchased. Open My fleet to choose a berth." if result.get("ok",false) else str(result.get("message","Purchase failed."))
+			refresh(true))
+		buy.disabled=_order_busy or int(item.price)>int(snapshot.get("balance",0));box.add_child(buy)
+		return
+	for item in market.get("items",[]):
+		var box:=card(_body);box.add_child(label(str(item.label),24));box.add_child(label(str(item.detail)))
+		pair(box,"Price",PlayerData.format_money(int(item.price)))
+		box.add_child(button("Inspect vessel",func():_market_selection=item;render()))

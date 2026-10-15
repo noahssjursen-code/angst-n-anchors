@@ -1,0 +1,224 @@
+CUSTOM PORTS: NORMAL-WORLD SOURCE AND AUTHORITY BOUNDARY
+Read-only code audit, 15 October 2026
+
+IMPLEMENTATION UPDATE, 15 October 2026
+The explicitly enabled local main-World import and separate passive directory
+described below are now implemented and verified. See
+docs/custom-port-local-world-import.txt for the actual API, controls, boundaries
+and acceptance results. The chosen source is repeated explicit
+--custom-port-document= paths, not the suggested auto manifest. The remainder of
+this document retains the original design audit; its server/company authority
+work is still future work. Historical statements below that call the local
+source/directory unfinished are superseded by this update.
+
+Recommendation
+
+The smallest safe next step is an explicitly enabled, local-only presentation
+import in the normal World scene. Load selected, world-matched saved ports into
+one CustomPortStreamer and show passive markers on the chart. Keep generated
+ports, captain ownership, money, contracts and live vessel services unchanged.
+This makes a saved harbour visitable. It does not make it an operating business.
+
+The source, normal-world hookup and passive directory API below are PROPOSED.
+They were not implemented by this audit. No tests were repeated, no production
+runtime files changed and no server or database was deployed.
+
+Later isolated workshop work implemented saved-document travel, cross-document
+plot overlap validation and exact public chart projection. See custom-port-chart.txt,
+custom-port-streaming.txt and custom-port-collection.txt for verified behaviour.
+The chart now draws actual platform outlines, including angled tiles and holes,
+and blocks the generated fallback. The normal World source, passive PortCatalog
+directory and multiplayer authority integration proposed here remain unfinished.
+
+What exists now
+
+- scripts/port/state/custom_port_repository.gd:
+  CustomPortRepository.load_state(path, expected_world, catalog) reads raw JSON
+  or the versioned save envelope, validates the document and returns state and
+  snapshot. Atomic saves, corruption recovery and revision conflicts exist.
+  This is a file codec, not proof of ownership, stock provenance or publication.
+- scripts/port/building/custom_port_streamer.gd:
+  configure(expected_world, catalog), bind_environment(terrain, forest),
+  upsert_record(snapshot), remove_record(id, revision), record(id), clear().
+  It validates revisions, geometry, fixed deck plane and prebuilt vessel
+  evidence. Model residency is distance-based; environmental footprints remain
+  while the record is known. simulate_vessels=false avoids duplicate live ships.
+  operator_selected is an unbound presentation signal, not a shop/crane service.
+- scripts/port/state/custom_port_state.gd provides deterministic commands and
+  finite cargo rules. Its apply(command, authority_context) is an isolated
+  authority simulator. It does not write the game's company or vessel records.
+- scripts/network/world_gateway.gd already provides query_projections,
+  projection_changed, world_event, retain_interest/release_interest and the
+  command channel. WorldRecordBinding binds a known kind/id/scope. These are
+  useful transport seams, but do not themselves create a custom-port directory.
+- scripts/network/local_world_backend.gd currently dispatches inventory, berth,
+  port-operation and interaction commands. It has no custom-port dispatcher or
+  durable port record loader. Its projection dictionary is in memory; its
+  start_session signature currently ignores _world_checksum.
+- scripts/network/remote_world_backend.gd uses POST /v2/commands and GET
+  /v2/state, /v2/projections and /v2/events. Generic transport support is not
+  evidence that the server accepts custom-port documents or mutations. There
+  is no custom-port live source in the inspected Godot backend code.
+
+Normal-world hookup and record source
+
+1. Add one scene-owned importer/source beside the existing generated-port
+   loader in scripts/world/world.gd. Require an explicit local-world option;
+   use PlayerSession.persistence_mode to refuse it in REMOTE mode, including
+   before WorldGateway has finished opening a session. Do not silently fall
+   back to local JSON during an MP connection failure. Do not enable in editor
+   previews or scan all workshop/test saves automatically.
+
+2. Derive the exact identity after World._rebuild() has generated and finalized
+   its actual layout. World.get_world_context() uses layout_checksum; the port
+   record uses checksum. Normalize deliberately to:
+     {seed: context.seed, generation_version: context.generation_version,
+      checksum: context.layout_checksum}
+   Do not pass the whole context dictionary: CustomPortState compares exact
+   world dictionaries. Do not use just the seed or the old requested checksum.
+   The normal world may recover a legacy picker size, and the workshop uses a
+   different world size. A workshop save from another layout must reject.
+   CustomPortWorldPolicy also requires deck Y = sea Y + 2 m = 0.5 m here.
+
+3. A minimal proposed local source is an explicit manifest under
+   user://custom_ports/worlds/<identity hash>/index.json. Give it a version,
+   exact world identity and a bounded list of {port_id, record_file} entries;
+   constrain record_file to that directory. Use repository validation on every
+   file before handing it to the streamer. Import/copy selected workshop files
+   deliberately; the launch helper's isolated APPDATA is not the live profile.
+   Start with one-shot loading, not a filesystem watcher or autosave bridge.
+   Never rewrite an imported record's world, owner or ID just to make it fit.
+
+4. Build one accepted record set before publication. Reject duplicate IDs
+   between files and collisions with generated PortCatalog IDs; never let
+   iteration order choose the winner. New custom IDs can use a stable custom
+   namespace, but existing references must not be silently renamed. Validate
+   cross-port plot overlap and collisions with reserved generated structures:
+   per-record plot validation does not enforce global land exclusivity. The
+   current schema accepts locally consistent plot rectangles; it is not proof
+   that those rectangles were sold by a world property registry. An explicit
+   reviewed import is adequate for this local preview, not for land ownership.
+
+5. world.gd initializes ForestField, registers generated ports in _setup_ports,
+   configures _terrain_streamer, then _forest_streamer before deferred player
+   spawn. Bind/import after those environment instances and identity exist.
+   Keep normal generated HomePort spawning. If a future arrival is placed on
+   the imported quay, wait for is_custom_port_earthworks_ready() and its loaded
+   presenter/collision before enabling movement. One custom streamer must own
+   the terrain projection collection; independent setters would replace it.
+
+6. Bad documents leave generated ports intact and receive a concrete rejection
+   report. A bad later replacement must retain the last good port. Loading a
+   file grants no currency, cargo custody, captain ownership or home teleport.
+   Workshop vessel/account fixtures must not become live fleet/economy records.
+
+Passive directory and chart contract
+
+Do NOT call the existing PortCatalog.register_port() for a passive custom port.
+That method forces zero berths to one and preserves old capabilities on empty
+updates (scripts/port/port_catalog.gd:49-85). Reusing an ID can retain a legacy
+definition, freight berths, imports and exports.
+
+More importantly, ChartDataSnapshot.from_live_tree() copies every catalog entry
+(scripts/ui/chart/chart_data_snapshot.gd:58). ChartLayerRenderer asks for a
+harbour plan for visible ports (chart_layer_renderer.gd:552). Without a live
+PortPlot, ChartHarbourPlan.resolve_port_data() synthesizes a PortDefinition and
+calls PortExpander.expand() (chart_harbour_plan.gd:130-161). An ordinary custom
+marker would therefore acquire invented generated-port geometry.
+
+Smallest isolated directory addition, in the EXISTING PortCatalog:
+  register_custom_summary(summary, source_owner)
+  get_custom_port_summaries()
+  unregister_custom_summary(id, source_owner)
+These are proposed APIs. Keep a separate collection and leave current
+get_port_ids(), nearest_port_id() and legacy freight queries unchanged. Use
+the directory revision to invalidate chart snapshots. Owner-scoped cleanup
+must not erase an entry installed by a replacement World instance.
+
+Suggested passive summary:
+  {id, source:"custom", revision, world, display_name, owner_company_id,
+   position_m:[x,y,z], built_bounds_m:[x,z,width,depth],
+   derived_berth_count, services_ready:false}
+Counts describe derived construction, not available bookings. Do not include
+commodity exports/imports, fake freight_berths, a fabricated spawn_pos or money.
+Keep receipts, reservations and private stock out of public summaries.
+
+ChartDataSnapshot should explicitly merge these summaries for display only.
+ChartLayerRenderer must branch on source==custom BEFORE requesting a legacy
+harbour plan. Initially draw the true-position marker/name and a concise custom
+port inspector; a selection bound is not an invented quay footprint. Later
+actual platform geometry can be projected from the custom record. Never feed
+the custom record into PortExpander to obtain an outline or NPC service list.
+
+Why a separate passive path matters:
+- FreightService._generated_offers() forwards every legacy catalog entry
+  (scripts/cargo/freight_service.gd:69). Fresh empty imports/exports do NOT create
+  offers, but mapping finite custom stores into these arrays would create
+  seeded offers without stock/custody checks (freight_offer_generator.gd:27).
+- PortProximity also uses every legacy entry to update the current port within
+  3.5 km (scripts/world/port_proximity.gd:20). A marker must not reroute existing
+  cargo/NPC interactions to a port with no operating service adapter.
+- World._setup_ports selects homes from generated definitions; unknown saved
+  home IDs fall back, and _spawn_player requires a PortPlot. Directory metadata
+  alone cannot implement a custom home. The captain picker is a separate seeded
+  preview and should stay unchanged in this slice.
+
+Lifecycle and eventual network events
+
+World._rebuild() clears PortCatalog and queues old scene children for deletion.
+Unregister only this source's passive entries on exit; never clear the entire
+catalog from an adapter. Teardown must be owner-scoped because deferred old
+children may exit after the replacement world has registered its entries.
+CustomPortStreamer already clears its environment layers on exit. The forest
+streamer now releases only its owned static exclusion layers, including a
+forest-first teardown. Preserve all generated/bridge layers and original files.
+Disconnect projection subscriptions and release owned interests on world exit.
+
+Future projection adapter semantics must distinguish three different events:
+  - newer complete snapshot: upsert_record(snapshot)
+  - distance unload or loss of subscription interest: no demolition
+  - explicit authority deletion with newer revision: remove_record(id, revision)
+WorldProjectionStore.replace_all() emits an empty projection both for absent
+and newly inaccessible records. WorldRecordBinding.removed has NO deletion
+revision. Neither may be blindly connected to remove_record. Gateway stop also
+clears its store without individual removal callbacks, so session_closed/world
+exit need explicit cleanup. Reconnect should use the atomic state/cursor path,
+and a real deletion protocol must retain revisioned tombstones. Lightweight
+public footprints may stay subscribed while private service data leaves scope.
+
+What remains before these are real player/NPC businesses
+
+The existing authority must own the durable world directory, globally exclusive
+plots, authenticated company membership and command execution. Resolve
+actor_company_id from the selected authenticated captain/account membership;
+never trust the workshop's actor switch or document owner string. The live
+CompanyService is bound to PlayerData, while the typed authority lab has separate
+company records. Choose the existing authoritative path deliberately, rather
+than adding another balance or fleet owner. The 13 October foundation docs
+describe staged migrations, not proof that all live systems use the lab model.
+
+CustomPortState already returns events, receipts and account_changes. A live
+adapter must commit these with existing company, vessel, cargo and property
+records in ONE durable transaction. Repository.save() of a port alone cannot
+atomically debit the company, move ship cargo or reserve globally owned land.
+Trusted water surveys and catalog geometry must originate at the authority.
+Public construction/visible contents need an explicit projection that excludes
+private receipts, reservation details and business stock where appropriate.
+
+Live crane/berth/NPC adapters, genuine vessel identity/capacity binding, finite
+stock-backed contracts and server command/projection support remain separate
+work. Do not register fake HarbourRegistry/PortData services to conceal them.
+Existing docs/authoritative-data-foundation.txt and
+docs/data-model-review-after-fish-landing-2026-10-13.txt explain the current
+authority split; scripts/port/state/README.txt defines the new simulator boundary.
+
+Acceptance for the first slice (now implemented)
+
+Two explicit local records appear at their real coordinates in a normal world
+and on the chart; no invented harbour outline, extra live vessels, freight
+offers, money or home-spawn change. Wrong-world/duplicate/invalid records reject.
+Sailing out and back preserves data; exiting/re-entering leaves no stale markers
+or forest cuts. MP refuses local imports. The later implementation and verified
+27 source, 15 passive-projection and 21 actual main-World native checks are
+recorded in docs/custom-port-local-world-import.txt. This completes the explicit,
+default-off local projection slice; it does not add the business authority above.

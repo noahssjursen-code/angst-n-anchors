@@ -160,6 +160,8 @@ static func apply_identity(boat: BoatBody, record: Dictionary) -> void:
 	var layout_hash := str(record.get("layout_hash", "")).strip_edges()
 	if not layout_hash.is_empty():
 		boat.set_meta("layout_hash", layout_hash)
+	if not Engine.is_editor_hint():
+		for hold in boat.get_catch_holds(): LocalCatchStore.restore.call_deferred(hold)
 	for field in ["construction_id", "catalog_hash"]:
 		boat.set_meta(field, str(record.get(field, "")).strip_edges())
 

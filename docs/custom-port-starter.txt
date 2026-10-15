@@ -1,0 +1,70 @@
+FIRST PORT — LITTLEHAVEN
+15 October 2026
+
+Open scenes/showcases/custom_port_starter_showcase.tscn with F6, or run:
+  ./start-port-workshop.ps1 -Starter
+The existing workshop also has a Starter port button. This is the same builder,
+authority, presenter, vessel session and asset library as the other port scenes.
+
+The first screen offers only Start at Littlehaven. It starts walking beside an
+owned fishing boat with a deployed boarding gangway. Building and expansion
+remain available later; there is no blank-plot choice in the starter flow.
+Starting first retains the previous harbour as a separate JSON document.
+The starter is a workshop scenario, not a repeatable grant on a live
+server. Production onboarding must use the existing company/land authority.
+
+THE READY-MADE PORT
+- One coastal plot and one owned fishing_hook_line vessel, with an empty hold.
+- One derived berth, 20m between bollards and 16m usable vessel length.
+- A 32 x 16m apron with two 4m angled corners, plus an 8 x 24m shore approach.
+- 688 square metres of constructed area: 42 square 4m tiles and 2 half tiles,
+  equivalent to 43 full 4 x 4m tiles. The long approach is specific to this shore.
+- One closed 8 x 8m red timber shed with pitched roof, signs and a covered porch.
+- Mooring posts, tyre fenders, ladder, life ring, lamps, rope, net cage, bench,
+  visual shore-service cabinet and approach railings.
+- 104 individually editable placements; same JSON representation as player work.
+
+The actual shore survey rejected the first, shallower position. Moving the quay
+8m seaward made it fit the fishing boat without overriding draft/depth checks.
+This template is reviewed at the workshop's known island site. Automatically
+fitting it to arbitrary coastlines is not implemented by this change.
+
+No industrial crane, fish pumping plant, crab rig, free catch, production or
+automatic employee is granted. The shed is exterior decoration, not a fabricated
+inventory service. The existing workshop construction budget is still a test
+allowance; construction costs and progression are not balanced here.
+
+AGREED PROGRESSION DIRECTION (FUTURE GAMEPLAY)
+1. Everyone begins by fishing and learning their first vessel.
+2. Buy a crabbing rig; fish while traps soak, then collect the traps.
+3. Save for a general-cargo vessel carrying four containers.
+4. Hire crew for the original fishing boat while personally running cargo.
+5. Add vessels, crew, storage, land and eventually production as the company grows.
+The existing Harbour Cargo stock model has two container beds; it must not be
+advertised as the four-container progression vessel without a real new fitout.
+Crew automation and economy/progression enforcement are not part of this port pass.
+
+VERIFIED
+tests/custom_port_starter_review.tscn: 16 native checks passed after removing
+the blank-start option. Covers the single starter action, company
+ownership, empty catch, actual berth, JSON reconstruction, walking spawn,
+boarding gangway, later construction, separate previous save and reopening.
+tests/custom_port_starter_sailing_test.tscn: 13 native checks passed. Uses the
+existing sailing harness and real F/B/I/W inputs: helm, authority departure,
+stowed gangway, running engine and forward motion. The harness positions the
+player at the helm for targeting; it does not claim an automated walking route.
+
+Screenshots archived and visually inspected in:
+C:/Users/noahs/Pictures/machinescreenshots/
+  custom-port-1792085184-10236-starter-choice.png
+  custom-port-1792085185-10236-starter-first-walk.png
+  custom-port-1792084393-5264-starter-overview.png
+  custom-port-1792084394-5264-starter-waterfront.png
+  custom-port-1792084394-5264-starter-shed.png
+  custom-port-1792084394-5264-starter-shore-access.png
+  custom-port-sailing-1792084561-25464-starter-departure.png
+
+Exact reviewed occupied document:
+resources/data/ports/examples/littlehaven-starter-2026-10-15.json
+Open it with the workshop Open button or start-port-workshop.ps1 -PortFile.
+No production deployment, save migration, reset or merge was performed.

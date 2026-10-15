@@ -9,7 +9,7 @@ const LEGACY_HARBOUR_PROFILE := 3
 
 const PRESET_NAMES: Array[String] = ["Navigation", "Weather"]
 const LAYER_ORDER: Array[String] = [
-	"base", "weather", "routes", "approaches",
+	"base", "weather", "plots", "routes", "approaches",
 	"traffic", "nav_vectors", "annotations",
 ]
 
@@ -18,6 +18,7 @@ var revision := 0
 var _layers: Dictionary = {
 	"base": true,
 	"weather": false,
+	"plots": true,
 	"fishing": false,
 	"routes": true,
 	"approaches": false,

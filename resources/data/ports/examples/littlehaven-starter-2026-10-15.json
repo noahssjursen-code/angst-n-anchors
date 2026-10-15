@@ -1,0 +1,7210 @@
+{
+	"file_format": "angst-custom-port",
+	"file_version": 1,
+	"snapshot": {
+		"deck_height_above_sea_m": 2.0,
+		"id": "starter-1792084391-8626837",
+		"name": "Littlehaven",
+		"origin_m": [
+			2724.0,
+			0.5,
+			-692.0
+		],
+		"owner_company_id": "company-starter",
+		"placements": [
+			{
+				"asset_id": "quay_triangle_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							-2.0
+						],
+						[
+							2.0,
+							2.0
+						],
+						[
+							-2.0,
+							2.0
+						]
+					],
+					"kind": "platform",
+					"placement_kind": "foundation",
+					"placement_layer": "platform",
+					"requires_support": false,
+					"support_depth_m": 19.21532349651015
+				},
+				"id": "quay--14-42",
+				"position_m": [
+					-14.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 17.772620731509065
+				},
+				"id": "quay--10-42",
+				"position_m": [
+					-10.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 16.30316040353867
+				},
+				"id": "quay--6-42",
+				"position_m": [
+					-6.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 14.82493989570276
+				},
+				"id": "quay--2-42",
+				"position_m": [
+					-2.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 13.354184466698388
+				},
+				"id": "quay-2-42",
+				"position_m": [
+					2.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 14.74975543201452
+				},
+				"id": "quay-6-42",
+				"position_m": [
+					6.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 16.300223722773094
+				},
+				"id": "quay-10-42",
+				"position_m": [
+					10.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_triangle_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							-2.0
+						],
+						[
+							2.0,
+							2.0
+						],
+						[
+							-2.0,
+							2.0
+						]
+					],
+					"kind": "platform",
+					"placement_kind": "foundation",
+					"placement_layer": "platform",
+					"requires_support": false,
+					"support_depth_m": 17.850618083134435
+				},
+				"id": "quay-14-42",
+				"position_m": [
+					14.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 16.19228946008751
+				},
+				"id": "quay--14-46",
+				"position_m": [
+					-14.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 14.756604869130664
+				},
+				"id": "quay--10-46",
+				"position_m": [
+					-10.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 13.320988735383002
+				},
+				"id": "quay--6-46",
+				"position_m": [
+					-6.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 11.88530414442616
+				},
+				"id": "quay--2-46",
+				"position_m": [
+					-2.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 11.81706940011727
+				},
+				"id": "quay-2-46",
+				"position_m": [
+					2.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 13.367463760478609
+				},
+				"id": "quay-6-46",
+				"position_m": [
+					6.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 14.91793205123718
+				},
+				"id": "quay-10-46",
+				"position_m": [
+					10.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 16.46832641159852
+				},
+				"id": "quay-14-46",
+				"position_m": [
+					14.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 13.426112251205891
+				},
+				"id": "quay--14-50",
+				"position_m": [
+					-14.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 11.99042766024905
+				},
+				"id": "quay--10-50",
+				"position_m": [
+					-10.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 10.554811526501387
+				},
+				"id": "quay--6-50",
+				"position_m": [
+					-6.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 9.400872745707725
+				},
+				"id": "quay--2-50",
+				"position_m": [
+					-2.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 10.177794829453765
+				},
+				"id": "quay-2-50",
+				"position_m": [
+					2.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 11.7281891898151
+				},
+				"id": "quay-6-50",
+				"position_m": [
+					6.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 13.278657480573674
+				},
+				"id": "quay-10-50",
+				"position_m": [
+					10.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 14.829051840935014
+				},
+				"id": "quay-14-50",
+				"position_m": [
+					14.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 10.65993504232428
+				},
+				"id": "quay--14-54",
+				"position_m": [
+					-14.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 9.224250451367435
+				},
+				"id": "quay--10-54",
+				"position_m": [
+					-10.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 8.070353260304753
+				},
+				"id": "quay--6-54",
+				"position_m": [
+					-6.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 7.761598175044216
+				},
+				"id": "quay--2-54",
+				"position_m": [
+					-2.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 8.538520258790257
+				},
+				"id": "quay-2-54",
+				"position_m": [
+					2.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 10.088914619151597
+				},
+				"id": "quay-6-54",
+				"position_m": [
+					6.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 11.639382909910168
+				},
+				"id": "quay-10-54",
+				"position_m": [
+					10.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 13.189777270271508
+				},
+				"id": "quay-14-54",
+				"position_m": [
+					14.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 8.449640048488089
+				},
+				"id": "shore-6-58",
+				"position_m": [
+					6.0,
+					0.0,
+					58.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 10.000096895353058
+				},
+				"id": "shore-10-58",
+				"position_m": [
+					10.0,
+					0.0,
+					58.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 6.810365477824583
+				},
+				"id": "shore-6-62",
+				"position_m": [
+					6.0,
+					0.0,
+					62.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 7.400839865863274
+				},
+				"id": "shore-10-62",
+				"position_m": [
+					10.0,
+					0.0,
+					62.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 4.211119892228401
+				},
+				"id": "shore-6-66",
+				"position_m": [
+					6.0,
+					0.0,
+					66.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 4.801582836373489
+				},
+				"id": "shore-10-66",
+				"position_m": [
+					10.0,
+					0.0,
+					66.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 4.0
+				},
+				"id": "shore-6-70",
+				"position_m": [
+					6.0,
+					0.0,
+					70.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 4.0
+				},
+				"id": "shore-10-70",
+				"position_m": [
+					10.0,
+					0.0,
+					70.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 4.0
+				},
+				"id": "shore-6-74",
+				"position_m": [
+					6.0,
+					0.0,
+					74.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 4.0
+				},
+				"id": "shore-10-74",
+				"position_m": [
+					10.0,
+					0.0,
+					74.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 4.0
+				},
+				"id": "shore-6-78",
+				"position_m": [
+					6.0,
+					0.0,
+					78.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "foundation",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						4.0
+					],
+					"kind": "platform",
+					"placement_layer": "platform",
+					"support_depth_m": 4.0
+				},
+				"id": "shore-10-78",
+				"position_m": [
+					10.0,
+					0.0,
+					78.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_edge_mitre_left",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-1.7183347775862954,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "front-coping--10",
+				"position_m": [
+					-10.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_edge_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "front-coping--6",
+				"position_m": [
+					-6.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_edge_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "front-coping--2",
+				"position_m": [
+					-2.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_edge_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "front-coping-2",
+				"position_m": [
+					2.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_edge_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "front-coping-6",
+				"position_m": [
+					6.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_edge_mitre_right",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							1.7183347775862954,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "front-coping-10",
+				"position_m": [
+					10.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_diagonal_coping_4m",
+				"attributes": {
+					"footprint_m": [
+						5.656854249492381,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.8284271247461903,
+							0.0
+						],
+						[
+							2.8284271247461903,
+							0.0
+						],
+						[
+							2.5467619023324857,
+							0.68
+						],
+						[
+							-2.5467619023324857,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "angle--14",
+				"position_m": [
+					-14.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 45.0
+			},
+			{
+				"asset_id": "quay_diagonal_coping_4m",
+				"attributes": {
+					"footprint_m": [
+						5.656854249492381,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.8284271247461903,
+							0.0
+						],
+						[
+							2.8284271247461903,
+							0.0
+						],
+						[
+							2.5467619023324857,
+							0.68
+						],
+						[
+							-2.5467619023324857,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "angle-14",
+				"position_m": [
+					14.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": -45.0
+			},
+			{
+				"asset_id": "quay_edge_mitre_right",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							1.7183347775862954,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "west-edge-46",
+				"position_m": [
+					-16.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_edge_mitre_left",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-1.7183347775862954,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "east-edge-46",
+				"position_m": [
+					16.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "quay_edge_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "west-edge-50",
+				"position_m": [
+					-16.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_edge_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "east-edge-50",
+				"position_m": [
+					16.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "quay_edge_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "west-edge-54",
+				"position_m": [
+					-16.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_edge_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.7
+					],
+					"footprint_polygon_m": [
+						[
+							-2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.0
+						],
+						[
+							2.0,
+							0.68
+						],
+						[
+							-2.0,
+							0.68
+						]
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "coping",
+					"requires_support": true
+				},
+				"id": "east-edge-54",
+				"position_m": [
+					16.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "quay_bollard",
+				"attributes": {
+					"footprint_m": [
+						1.1,
+						0.9
+					],
+					"kind": "bollard",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "bollard--10",
+				"position_m": [
+					-10.0,
+					0.0,
+					40.79999923706055
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_bollard",
+				"attributes": {
+					"footprint_m": [
+						1.1,
+						0.9
+					],
+					"kind": "bollard",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "bollard-10",
+				"position_m": [
+					10.0,
+					0.0,
+					40.79999923706055
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "tractor_tire_fender",
+				"attributes": {
+					"footprint_m": [
+						1.5,
+						0.62
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "edge",
+					"requires_support": true
+				},
+				"id": "fender--8",
+				"position_m": [
+					-8.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "tractor_tire_fender",
+				"attributes": {
+					"footprint_m": [
+						1.5,
+						0.62
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "edge",
+					"requires_support": true
+				},
+				"id": "fender-0",
+				"position_m": [
+					0.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "tractor_tire_fender",
+				"attributes": {
+					"footprint_m": [
+						1.5,
+						0.62
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "edge",
+					"requires_support": true
+				},
+				"id": "fender-8",
+				"position_m": [
+					8.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_ladder",
+				"attributes": {
+					"footprint_m": [
+						0.8,
+						0.65
+					],
+					"kind": "decoration",
+					"placement_kind": "edge",
+					"placement_layer": "edge",
+					"requires_support": true
+				},
+				"id": "ladder",
+				"position_m": [
+					-4.0,
+					0.0,
+					40.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "lifering_station",
+				"attributes": {
+					"footprint_m": [
+						1.0,
+						0.6
+					],
+					"kind": "decoration",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "lifering",
+				"position_m": [
+					-11.0,
+					0.0,
+					42.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "workshop_open_bay_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.52
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-front-0",
+				"position_m": [
+					-6.0,
+					0.0,
+					44.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "workshop_wall_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.28
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-back-0",
+				"position_m": [
+					-6.0,
+					0.0,
+					52.0
+				],
+				"yaw_degrees": 180.0
+			},
+			{
+				"asset_id": "workshop_door_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.28
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-front-1",
+				"position_m": [
+					-2.0,
+					0.0,
+					44.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "workshop_wall_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.28
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-back-1",
+				"position_m": [
+					-2.0,
+					0.0,
+					52.0
+				],
+				"yaw_degrees": 180.0
+			},
+			{
+				"asset_id": "workshop_window_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.38
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-left-0",
+				"position_m": [
+					-8.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "workshop_window_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.38
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-right-0",
+				"position_m": [
+					0.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "warehouse_roof_8x4",
+				"attributes": {
+					"footprint_m": [
+						8.0,
+						4.0
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "roof",
+					"requires_support": true
+				},
+				"id": "starter-shed-roof-0",
+				"position_m": [
+					-4.0,
+					0.0,
+					46.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "workshop_window_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.38
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-left-1",
+				"position_m": [
+					-8.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "workshop_window_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.38
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-right-1",
+				"position_m": [
+					0.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "warehouse_roof_8x4",
+				"attributes": {
+					"footprint_m": [
+						8.0,
+						4.0
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "roof",
+					"requires_support": true
+				},
+				"id": "starter-shed-roof-1",
+				"position_m": [
+					-4.0,
+					0.0,
+					50.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "warehouse_gable_8m",
+				"attributes": {
+					"footprint_m": [
+						8.0,
+						0.38
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "roof_trim",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-gable--1",
+				"position_m": [
+					-4.0,
+					0.0,
+					44.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "workshop_corner_trim",
+				"attributes": {
+					"footprint_m": [
+						0.32,
+						0.32
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "wall_trim",
+					"requires_support": true
+				},
+				"id": "starter-shed-trim--1--4",
+				"position_m": [
+					-8.0,
+					0.0,
+					44.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "workshop_corner_trim",
+				"attributes": {
+					"footprint_m": [
+						0.32,
+						0.32
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "wall_trim",
+					"requires_support": true
+				},
+				"id": "starter-shed-trim--1-4",
+				"position_m": [
+					0.0,
+					0.0,
+					44.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "warehouse_downpipe",
+				"attributes": {
+					"footprint_m": [
+						0.3,
+						0.4
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "wall_trim",
+					"requires_support": true
+				},
+				"id": "starter-shed-drain--1",
+				"position_m": [
+					-8.360000610351563,
+					0.0,
+					44.400001525878906
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "warehouse_gable_8m",
+				"attributes": {
+					"footprint_m": [
+						8.0,
+						0.38
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "roof_trim",
+					"requires_support": true,
+					"wall_colour": "944735"
+				},
+				"id": "starter-shed-gable-1",
+				"position_m": [
+					-4.0,
+					0.0,
+					52.0
+				],
+				"yaw_degrees": 180.0
+			},
+			{
+				"asset_id": "workshop_corner_trim",
+				"attributes": {
+					"footprint_m": [
+						0.32,
+						0.32
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "wall_trim",
+					"requires_support": true
+				},
+				"id": "starter-shed-trim-1--4",
+				"position_m": [
+					-8.0,
+					0.0,
+					52.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "workshop_corner_trim",
+				"attributes": {
+					"footprint_m": [
+						0.32,
+						0.32
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "wall_trim",
+					"requires_support": true
+				},
+				"id": "starter-shed-trim-1-4",
+				"position_m": [
+					0.0,
+					0.0,
+					52.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "warehouse_downpipe",
+				"attributes": {
+					"footprint_m": [
+						0.3,
+						0.4
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "wall_trim",
+					"requires_support": true
+				},
+				"id": "starter-shed-drain-1",
+				"position_m": [
+					0.3600001335144043,
+					0.0,
+					44.400001525878906
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "sign_fish",
+				"attributes": {
+					"footprint_m": [
+						3.2,
+						0.46
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "wall_trim",
+					"requires_support": true
+				},
+				"id": "starter-shed-sign",
+				"position_m": [
+					-4.0,
+					0.0,
+					43.970001220703125
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "door_canopy_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						2.0
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "covered-porch",
+				"position_m": [
+					-6.0,
+					0.0,
+					42.5
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "net_storage_cage",
+				"attributes": {
+					"footprint_m": [
+						1.2,
+						0.8
+					],
+					"kind": "decoration",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "net-cage",
+				"position_m": [
+					-11.0,
+					0.0,
+					52.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "mooring_warp_coil",
+				"attributes": {
+					"footprint_m": [
+						1.8,
+						1.2
+					],
+					"kind": "decoration",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "mooring-rope",
+				"position_m": [
+					12.0,
+					0.0,
+					43.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_bench",
+				"attributes": {
+					"footprint_m": [
+						2.0,
+						0.75
+					],
+					"kind": "decoration",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "bench",
+				"position_m": [
+					-12.0,
+					0.0,
+					47.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "dock_service_pedestal",
+				"attributes": {
+					"footprint_m": [
+						0.6,
+						0.6
+					],
+					"kind": "decoration",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "shore-supply",
+				"position_m": [
+					12.0,
+					0.0,
+					47.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_light",
+				"attributes": {
+					"footprint_m": [
+						0.5,
+						0.5
+					],
+					"kind": "decoration",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "lamp-(-14.0, 0.0, 54.0)",
+				"position_m": [
+					-14.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_light",
+				"attributes": {
+					"footprint_m": [
+						0.5,
+						0.5
+					],
+					"kind": "decoration",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "lamp-(14.0, 0.0, 54.0)",
+				"position_m": [
+					14.0,
+					0.0,
+					54.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_light",
+				"attributes": {
+					"footprint_m": [
+						0.5,
+						0.5
+					],
+					"kind": "decoration",
+					"placement_kind": "surface",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "lamp-(11.0, 0.0, 77.0)",
+				"position_m": [
+					11.0,
+					0.0,
+					77.0
+				],
+				"yaw_degrees": 0.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-west-58",
+				"position_m": [
+					4.25,
+					0.0,
+					58.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-east-58",
+				"position_m": [
+					11.75,
+					0.0,
+					58.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-west-62",
+				"position_m": [
+					4.25,
+					0.0,
+					62.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-east-62",
+				"position_m": [
+					11.75,
+					0.0,
+					62.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-west-66",
+				"position_m": [
+					4.25,
+					0.0,
+					66.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-east-66",
+				"position_m": [
+					11.75,
+					0.0,
+					66.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-west-70",
+				"position_m": [
+					4.25,
+					0.0,
+					70.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-east-70",
+				"position_m": [
+					11.75,
+					0.0,
+					70.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-west-74",
+				"position_m": [
+					4.25,
+					0.0,
+					74.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-east-74",
+				"position_m": [
+					11.75,
+					0.0,
+					74.0
+				],
+				"yaw_degrees": -90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-west-78",
+				"position_m": [
+					4.25,
+					0.0,
+					78.0
+				],
+				"yaw_degrees": 90.0
+			},
+			{
+				"asset_id": "quay_guardrail_4m",
+				"attributes": {
+					"footprint_m": [
+						4.0,
+						0.22
+					],
+					"kind": "decoration",
+					"placement_kind": "building",
+					"placement_layer": "surface",
+					"requires_support": true
+				},
+				"id": "path-east-78",
+				"position_m": [
+					11.75,
+					0.0,
+					78.0
+				],
+				"yaw_degrees": -90.0
+			}
+		],
+		"plots": [
+			{
+				"id": "coast:1:5bbc472cf2d05890d09168ec7ef229cf93dba62a7d72f4f09ad21e1e0cf1a7fc:13:-4",
+				"owner_company_id": "company-starter",
+				"rect_m": [
+					-124.0,
+					-108.0,
+					200.0,
+					200.0
+				]
+			}
+		],
+		"receipts": {
+			"starter-boat-arrival": {
+				"applied_revision": 1.0,
+				"fingerprint": "d38c4a50899647c7e153eb4557498a3f91b63f14fcafa1bdaffc1530bced75e8",
+				"result": {
+					"berth_id": "starter-1792084391-8626837:berth:bollard--10:bollard-10"
+				}
+			}
+		},
+		"reservations": [],
+		"revision": 1.0,
+		"schema_version": 1.0,
+		"stores": [],
+		"vessels": [
+			{
+				"accepted_container_types": [],
+				"accepted_handling_modes": [
+					"catch"
+				],
+				"beam_m": 5.0,
+				"berth_id": "starter-1792084391-8626837:berth:bollard--10:bollard-10",
+				"capacity_kg": 600.0,
+				"capacity_source": {
+					"container_mass": "none",
+					"fitout": "ImportedDraftVessel mounting rules",
+					"geometry": "ImportedHullCatalog"
+				},
+				"capacity_units": 0.0,
+				"cargo_holds": [
+					{
+						"capacity_kg": 600.0,
+						"handling_mode": "catch",
+						"id": "tank_24",
+						"position_m": [
+							-1.15,
+							2.92,
+							1.5
+						],
+						"source_asset": "insulated_catch_tank"
+					}
+				],
+				"container_beds": [],
+				"draft_m": 1.6,
+				"handling_capacity_kg": {
+					"catch": 600.0
+				},
+				"hull_id": "trawler_hull_14m",
+				"id": "starter-fishing-boat",
+				"length_m": 14.0,
+				"lots": [],
+				"name": "My fishing boat",
+				"owner_company_id": "company-starter",
+				"prebuilt_id": "fishing_hook_line"
+			}
+		],
+		"water_regions": [
+			{
+				"depth_m": 55.94141136023086,
+				"rect_m": [
+					-128.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 51.87056094565028,
+				"rect_m": [
+					-120.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 47.957779410173345,
+				"rect_m": [
+					-112.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 44.22029748719157,
+				"rect_m": [
+					-104.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 40.64818901283738,
+				"rect_m": [
+					-96.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 37.22874303550549,
+				"rect_m": [
+					-88.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 33.94702258388455,
+				"rect_m": [
+					-80.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 31.073201614729953,
+				"rect_m": [
+					-72.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 28.636699747407988,
+				"rect_m": [
+					-64.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 26.297904844668267,
+				"rect_m": [
+					-56.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.860119223594666,
+				"rect_m": [
+					-48.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.83403372764587,
+				"rect_m": [
+					-40.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.807806253433228,
+				"rect_m": [
+					-32.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.78144967556,
+				"rect_m": [
+					-24.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.754997968673703,
+				"rect_m": [
+					-16.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.728764295578003,
+				"rect_m": [
+					-8.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.70248281955719,
+				"rect_m": [
+					0.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.676167249679565,
+				"rect_m": [
+					8.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.650136828422543,
+				"rect_m": [
+					16.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.624109268188477,
+				"rect_m": [
+					24.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.59843635559082,
+				"rect_m": [
+					32.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.591854572296143,
+				"rect_m": [
+					40.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 26.97531755590154,
+				"rect_m": [
+					48.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 29.546807040636672,
+				"rect_m": [
+					56.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 32.65904177924887,
+				"rect_m": [
+					64.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 35.77129052863206,
+				"rect_m": [
+					72.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 34.68083795777013,
+				"rect_m": [
+					80.0,
+					-96.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 46.75242450535296,
+				"rect_m": [
+					-128.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 42.73617269723408,
+				"rect_m": [
+					-120.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 38.90329996030596,
+				"rect_m": [
+					-112.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 35.24621578056835,
+				"rect_m": [
+					-104.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 31.754140171053336,
+				"rect_m": [
+					-96.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 28.414375008954295,
+				"rect_m": [
+					-88.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.212139777601095,
+				"rect_m": [
+					-80.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.93716609477997,
+				"rect_m": [
+					-72.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.91171371936798,
+				"rect_m": [
+					-64.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.886023998260494,
+				"rect_m": [
+					-56.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.860119223594666,
+				"rect_m": [
+					-48.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.834295511245728,
+				"rect_m": [
+					-40.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.808348417282104,
+				"rect_m": [
+					-32.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.782297134399418,
+				"rect_m": [
+					-24.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.756158232688904,
+				"rect_m": [
+					-16.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.729954600334167,
+				"rect_m": [
+					-8.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.70369851589203,
+				"rect_m": [
+					0.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.677406549453735,
+				"rect_m": [
+					8.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.65108895301819,
+				"rect_m": [
+					16.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.624762296676636,
+				"rect_m": [
+					24.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.59843635559082,
+				"rect_m": [
+					32.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.572839379310608,
+				"rect_m": [
+					40.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.547339916229248,
+				"rect_m": [
+					48.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.540773391723633,
+				"rect_m": [
+					56.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 26.682559838296953,
+				"rect_m": [
+					64.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 30.175015040334955,
+				"rect_m": [
+					72.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 31.012262380688128,
+				"rect_m": [
+					80.0,
+					-88.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 37.53352115206357,
+				"rect_m": [
+					-128.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 33.604781933411005,
+				"rect_m": [
+					-120.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 29.85836764622141,
+				"rect_m": [
+					-112.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 26.28535662497376,
+				"rect_m": [
+					-104.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.01175212860107,
+				"rect_m": [
+					-96.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.987279176712036,
+				"rect_m": [
+					-88.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.96245515346527,
+				"rect_m": [
+					-80.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.937321305274963,
+				"rect_m": [
+					-72.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.911828844766205,
+				"rect_m": [
+					-64.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.886593570466175,
+				"rect_m": [
+					-56.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.8608280234439,
+				"rect_m": [
+					-48.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.835062476421623,
+				"rect_m": [
+					-40.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.809420943260193,
+				"rect_m": [
+					-32.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.783359250386862,
+				"rect_m": [
+					-24.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.757259078439574,
+				"rect_m": [
+					-16.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.731213212013245,
+				"rect_m": [
+					-8.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.70501148700714,
+				"rect_m": [
+					0.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.67876410484314,
+				"rect_m": [
+					8.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.65249276161194,
+				"rect_m": [
+					16.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.62620425224304,
+				"rect_m": [
+					24.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.59990656375885,
+				"rect_m": [
+					32.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.57361900806427,
+				"rect_m": [
+					40.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.547339916229248,
+				"rect_m": [
+					48.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.521953225135803,
+				"rect_m": [
+					56.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.496695160865784,
+				"rect_m": [
+					64.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.490145206451416,
+				"rect_m": [
+					72.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 27.16855429141401,
+				"rect_m": [
+					80.0,
+					-80.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 28.36363767127395,
+				"rect_m": [
+					-128.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.08226442337036,
+				"rect_m": [
+					-120.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.059059143066406,
+				"rect_m": [
+					-112.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.035502433776855,
+				"rect_m": [
+					-104.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.011610507965088,
+				"rect_m": [
+					-96.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.98737597465515,
+				"rect_m": [
+					-88.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.962730884552,
+				"rect_m": [
+					-80.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.93730657315427,
+				"rect_m": [
+					-72.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.912200090750048,
+				"rect_m": [
+					-64.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.88733606243386,
+				"rect_m": [
+					-56.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.861570515411582,
+				"rect_m": [
+					-48.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.835967461324117,
+				"rect_m": [
+					-40.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.8105229139328,
+				"rect_m": [
+					-32.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.784535053403715,
+				"rect_m": [
+					-24.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.758525604407623,
+				"rect_m": [
+					-16.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.73259818553925,
+				"rect_m": [
+					-8.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.70647430419922,
+				"rect_m": [
+					0.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.68030321598053,
+				"rect_m": [
+					8.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.65409815311432,
+				"rect_m": [
+					16.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.627865076065063,
+				"rect_m": [
+					24.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.601625084877018,
+				"rect_m": [
+					32.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.575377106666565,
+				"rect_m": [
+					40.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.549134850502018,
+				"rect_m": [
+					48.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.52290678024292,
+				"rect_m": [
+					56.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.496695160865784,
+				"rect_m": [
+					64.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.47157037258148,
+				"rect_m": [
+					72.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.45312249660492,
+				"rect_m": [
+					80.0,
+					-72.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.103338142756,
+				"rect_m": [
+					-128.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.08049270555875,
+				"rect_m": [
+					-120.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.057647268361507,
+				"rect_m": [
+					-112.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.03467415332898,
+				"rect_m": [
+					-104.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.01075762645496,
+				"rect_m": [
+					-96.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.986841099580943,
+				"rect_m": [
+					-88.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.962784301542342,
+				"rect_m": [
+					-80.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.937677819138116,
+				"rect_m": [
+					-72.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.912942582717733,
+				"rect_m": [
+					-64.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.888078554401545,
+				"rect_m": [
+					-56.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.862475500314076,
+				"rect_m": [
+					-48.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.83714326434097,
+				"rect_m": [
+					-40.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.811710119247437,
+				"rect_m": [
+					-32.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.785801579371764,
+				"rect_m": [
+					-24.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.76006429922927,
+				"rect_m": [
+					-16.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.73416304588318,
+				"rect_m": [
+					-8.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.708150506019592,
+				"rect_m": [
+					0.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.682083249092106,
+				"rect_m": [
+					8.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.655965089797977,
+				"rect_m": [
+					16.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.629817008972168,
+				"rect_m": [
+					24.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.60364520549774,
+				"rect_m": [
+					32.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.577462673187256,
+				"rect_m": [
+					40.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.551270961761475,
+				"rect_m": [
+					48.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.525083303451535,
+				"rect_m": [
+					56.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.49890434741974,
+				"rect_m": [
+					64.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.47273874282837,
+				"rect_m": [
+					72.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.44721555709839,
+				"rect_m": [
+					80.0,
+					-64.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.101242044901483,
+				"rect_m": [
+					-128.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.078396607704235,
+				"rect_m": [
+					-120.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.05623615623017,
+				"rect_m": [
+					-112.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.03367401695368,
+				"rect_m": [
+					-104.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.009757490079664,
+				"rect_m": [
+					-96.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.986341037512148,
+				"rect_m": [
+					-88.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.962976533490973,
+				"rect_m": [
+					-80.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.93824129707059,
+				"rect_m": [
+					-72.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.913506060650207,
+				"rect_m": [
+					-64.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.88891863822937,
+				"rect_m": [
+					-56.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.863597039314072,
+				"rect_m": [
+					-48.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.83826480334096,
+				"rect_m": [
+					-40.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.81304442882538,
+				"rect_m": [
+					-32.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.787399764340535,
+				"rect_m": [
+					-24.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.76166248419804,
+				"rect_m": [
+					-16.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.735980987548828,
+				"rect_m": [
+					-8.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.710107684135437,
+				"rect_m": [
+					0.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.68415895395856,
+				"rect_m": [
+					8.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.65816044807434,
+				"rect_m": [
+					16.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.6321142911911,
+				"rect_m": [
+					24.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.606035947799683,
+				"rect_m": [
+					32.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.57993197441101,
+				"rect_m": [
+					40.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.553809642791748,
+				"rect_m": [
+					48.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.52767777442932,
+				"rect_m": [
+					56.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.501540780067444,
+				"rect_m": [
+					64.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.475406169891357,
+				"rect_m": [
+					72.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.449275016784668,
+				"rect_m": [
+					80.0,
+					-56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.099145947046964,
+				"rect_m": [
+					-128.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.0769854955729,
+				"rect_m": [
+					-120.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.05523601985487,
+				"rect_m": [
+					-112.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.032673880578383,
+				"rect_m": [
+					-104.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.00925742801087,
+				"rect_m": [
+					-96.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.986354255425567,
+				"rect_m": [
+					-88.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.963002969317813,
+				"rect_m": [
+					-80.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.93826773289743,
+				"rect_m": [
+					-72.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.913882115926526,
+				"rect_m": [
+					-64.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.889772772789,
+				"rect_m": [
+					-56.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.86455578626351,
+				"rect_m": [
+					-48.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.839428027405575,
+				"rect_m": [
+					-40.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.814586520195007,
+				"rect_m": [
+					-32.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.789176419750675,
+				"rect_m": [
+					-24.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.763524891876383,
+				"rect_m": [
+					-16.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.7381010055542,
+				"rect_m": [
+					-8.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.712393760681152,
+				"rect_m": [
+					0.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.68660283088684,
+				"rect_m": [
+					8.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.660743713378903,
+				"rect_m": [
+					16.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.63482677936554,
+				"rect_m": [
+					24.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.60885775089264,
+				"rect_m": [
+					32.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.582852125167847,
+				"rect_m": [
+					40.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.556813955307007,
+				"rect_m": [
+					48.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.530751824378967,
+				"rect_m": [
+					56.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.5046706199646,
+				"rect_m": [
+					64.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.478577375411987,
+				"rect_m": [
+					72.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.45247447490692,
+				"rect_m": [
+					80.0,
+					-48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.097515364397623,
+				"rect_m": [
+					-128.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.0757658886796,
+				"rect_m": [
+					-120.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.054016412961573,
+				"rect_m": [
+					-112.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.03204248008751,
+				"rect_m": [
+					-104.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.00915252541563,
+				"rect_m": [
+					-96.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.986262570743747,
+				"rect_m": [
+					-88.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.963029405144653,
+				"rect_m": [
+					-80.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.93864378817375,
+				"rect_m": [
+					-72.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.914840862875963,
+				"rect_m": [
+					-64.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.89077877998352,
+				"rect_m": [
+					-56.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.86571901032812,
+				"rect_m": [
+					-48.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.84120468281571,
+				"rect_m": [
+					-40.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.81639587879181,
+				"rect_m": [
+					-32.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.79103882742902,
+				"rect_m": [
+					-24.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.76598758178852,
+				"rect_m": [
+					-16.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.74059021472931,
+				"rect_m": [
+					-8.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.71506865348465,
+				"rect_m": [
+					0.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.689470767974857,
+				"rect_m": [
+					8.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.663777112960815,
+				"rect_m": [
+					16.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.63800847530365,
+				"rect_m": [
+					24.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.61217427253723,
+				"rect_m": [
+					32.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.58628511428833,
+				"rect_m": [
+					40.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.56034779548645,
+				"rect_m": [
+					48.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.534369111061096,
+				"rect_m": [
+					56.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.508355617523193,
+				"rect_m": [
+					64.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.48231410980225,
+				"rect_m": [
+					72.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.456244945526123,
+				"rect_m": [
+					80.0,
+					-40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.09475955342714,
+				"rect_m": [
+					-128.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.07301007770911,
+				"rect_m": [
+					-120.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.052073532584473,
+				"rect_m": [
+					-112.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.03091249154113,
+				"rect_m": [
+					-104.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.008022536869248,
+				"rect_m": [
+					-96.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.985604521031743,
+				"rect_m": [
+					-88.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.963333800638793,
+				"rect_m": [
+					-80.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.939530875341006,
+				"rect_m": [
+					-72.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.91572795004322,
+				"rect_m": [
+					-64.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.891990780830383,
+				"rect_m": [
+					-56.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.867493058432046,
+				"rect_m": [
+					-48.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.84297873091964,
+				"rect_m": [
+					-40.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.818530797958378,
+				"rect_m": [
+					-32.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.79356325046592,
+				"rect_m": [
+					-24.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.768512004825425,
+				"rect_m": [
+					-16.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.743460759184927,
+				"rect_m": [
+					-8.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.718193057693497,
+				"rect_m": [
+					0.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.692750424486803,
+				"rect_m": [
+					8.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.66730779128011,
+				"rect_m": [
+					16.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.64172339439392,
+				"rect_m": [
+					24.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.61603552823908,
+				"rect_m": [
+					32.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.59028911590576,
+				"rect_m": [
+					40.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.564468145370483,
+				"rect_m": [
+					48.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.53858745098114,
+				"rect_m": [
+					56.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.512653827667236,
+				"rect_m": [
+					64.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.486673831939697,
+				"rect_m": [
+					72.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.460647702217106,
+				"rect_m": [
+					80.0,
+					-32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.092003742456654,
+				"rect_m": [
+					-128.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.071067197332013,
+				"rect_m": [
+					-120.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.05094354403809,
+				"rect_m": [
+					-112.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.02978250299475,
+				"rect_m": [
+					-104.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.007364487157247,
+				"rect_m": [
+					-96.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.98570088019278,
+				"rect_m": [
+					-88.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.96370816230774,
+				"rect_m": [
+					-80.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.939916311985144,
+				"rect_m": [
+					-72.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.916455963879343,
+				"rect_m": [
+					-64.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.893473744392395,
+				"rect_m": [
+					-56.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.86924877117417,
+				"rect_m": [
+					-48.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.84488453636095,
+				"rect_m": [
+					-40.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.82105398178101,
+				"rect_m": [
+					-32.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.796510457992554,
+				"rect_m": [
+					-24.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.771468430533787,
+				"rect_m": [
+					-16.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.74691104888916,
+				"rect_m": [
+					-8.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.72188186645508,
+				"rect_m": [
+					0.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.69671488298627,
+				"rect_m": [
+					8.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.6714289188385,
+				"rect_m": [
+					16.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.64602756500244,
+				"rect_m": [
+					24.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.620522260665897,
+				"rect_m": [
+					32.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.594920873641968,
+				"rect_m": [
+					40.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.56923282146454,
+				"rect_m": [
+					48.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.5434650182724,
+				"rect_m": [
+					56.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.51762366294861,
+				"rect_m": [
+					64.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.491713047027588,
+				"rect_m": [
+					72.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.465739965438843,
+				"rect_m": [
+					80.0,
+					-24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.090060862079554,
+				"rect_m": [
+					-128.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.069937208785632,
+				"rect_m": [
+					-120.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.04981355549171,
+				"rect_m": [
+					-112.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.029124453282748,
+				"rect_m": [
+					-104.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.00746084631828,
+				"rect_m": [
+					-96.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.98608631683692,
+				"rect_m": [
+					-88.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.964104673927068,
+				"rect_m": [
+					-80.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.940644325821268,
+				"rect_m": [
+					-72.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.918211676621468,
+				"rect_m": [
+					-64.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.895283460617065,
+				"rect_m": [
+					-56.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.87115457661548,
+				"rect_m": [
+					-48.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.847840962069313,
+				"rect_m": [
+					-40.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.82402014732361,
+				"rect_m": [
+					-32.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.799476101882647,
+				"rect_m": [
+					-24.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.77543067932129,
+				"rect_m": [
+					-16.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.750855445861816,
+				"rect_m": [
+					-8.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.726110100746155,
+				"rect_m": [
+					0.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.701207756996155,
+				"rect_m": [
+					8.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.676159143447876,
+				"rect_m": [
+					16.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.65097451210022,
+				"rect_m": [
+					24.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.625662803649902,
+				"rect_m": [
+					32.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.600234627723697,
+				"rect_m": [
+					40.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.574695348739624,
+				"rect_m": [
+					48.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.54905414581299,
+				"rect_m": [
+					56.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.523316860198975,
+				"rect_m": [
+					64.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.497488141059875,
+				"rect_m": [
+					72.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.471574783325195,
+				"rect_m": [
+					80.0,
+					-16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.087248441055635,
+				"rect_m": [
+					-128.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.067124787761713,
+				"rect_m": [
+					-120.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.047801380902456,
+				"rect_m": [
+					-112.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.02854233103517,
+				"rect_m": [
+					-104.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.007167801553805,
+				"rect_m": [
+					-96.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.98596290422483,
+				"rect_m": [
+					-88.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.96483268776319,
+				"rect_m": [
+					-80.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.94240003856339,
+				"rect_m": [
+					-72.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.919967389363592,
+				"rect_m": [
+					-64.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.897424616870012,
+				"rect_m": [
+					-56.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.874111002323843,
+				"rect_m": [
+					-48.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.850797387777675,
+				"rect_m": [
+					-40.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.827483773231503,
+				"rect_m": [
+					-32.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.80344056038211,
+				"rect_m": [
+					-24.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.77939734753272,
+				"rect_m": [
+					-16.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.563956956642993,
+				"rect_m": [
+					-8.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.511380833806356,
+				"rect_m": [
+					0.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.48673760779627,
+				"rect_m": [
+					8.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.480576654408537,
+				"rect_m": [
+					16.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.626648190511304,
+				"rect_m": [
+					24.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.631345435249383,
+				"rect_m": [
+					32.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.606206451655453,
+				"rect_m": [
+					40.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.58080907394833,
+				"rect_m": [
+					48.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.555256653859033,
+				"rect_m": [
+					56.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.529704233769735,
+				"rect_m": [
+					64.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.50397637288552,
+				"rect_m": [
+					72.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.47807429797831,
+				"rect_m": [
+					80.0,
+					-8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.084436020031717,
+				"rect_m": [
+					-128.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.06511261317246,
+				"rect_m": [
+					-120.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.047122899493843,
+				"rect_m": [
+					-112.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.027863849626556,
+				"rect_m": [
+					-104.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.006658952297585,
+				"rect_m": [
+					-96.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.9862882212974,
+				"rect_m": [
+					-88.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.965997457504272,
+				"rect_m": [
+					-80.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.943701306853654,
+				"rect_m": [
+					-72.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.921492223103996,
+				"rect_m": [
+					-64.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.900100469589233,
+				"rect_m": [
+					-56.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.87720075157449,
+				"rect_m": [
+					-48.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.853887137028323,
+				"rect_m": [
+					-40.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.831490993499756,
+				"rect_m": [
+					-32.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.80808973312378,
+				"rect_m": [
+					-24.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.592652951310026,
+				"rect_m": [
+					-16.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.34455187834284,
+				"rect_m": [
+					-8.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.291975755506204,
+				"rect_m": [
+					0.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.28581480211847,
+				"rect_m": [
+					8.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.431886338221233,
+				"rect_m": [
+					16.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.631904881148763,
+				"rect_m": [
+					24.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.638131380081177,
+				"rect_m": [
+					32.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.613099336624146,
+				"rect_m": [
+					40.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.58790612220764,
+				"rect_m": [
+					48.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.562559247016907,
+				"rect_m": [
+					56.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.537065029144287,
+				"rect_m": [
+					64.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.51143217086792,
+				"rect_m": [
+					72.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.48566317558289,
+				"rect_m": [
+					80.0,
+					0.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.082423845442463,
+				"rect_m": [
+					-128.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.064434131763846,
+				"rect_m": [
+					-120.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.04644441808523,
+				"rect_m": [
+					-112.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.027355000370335,
+				"rect_m": [
+					-104.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.00698426937015,
+				"rect_m": [
+					-96.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.987589489587663,
+				"rect_m": [
+					-88.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.967408299446102,
+				"rect_m": [
+					-80.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.94522614059406,
+				"rect_m": [
+					-72.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.924581972354645,
+				"rect_m": [
+					-64.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.903209686279297,
+				"rect_m": [
+					-56.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.88029050082514,
+				"rect_m": [
+					-48.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.858539918845963,
+				"rect_m": [
+					-40.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.836090326309204,
+				"rect_m": [
+					-32.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.621348945977054,
+				"rect_m": [
+					-24.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.373247873009873,
+				"rect_m": [
+					-16.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.125146800042685,
+				"rect_m": [
+					-8.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.10381491347724,
+				"rect_m": [
+					0.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.639764941684025,
+				"rect_m": [
+					8.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.4178882494946,
+				"rect_m": [
+					16.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.638915601391524,
+				"rect_m": [
+					24.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.645541667938232,
+				"rect_m": [
+					32.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.620734930038452,
+				"rect_m": [
+					40.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.59573781490326,
+				"rect_m": [
+					48.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.5705589056015,
+				"rect_m": [
+					56.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.545204758644104,
+				"rect_m": [
+					64.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.51968276500702,
+				"rect_m": [
+					72.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.49399960041046,
+				"rect_m": [
+					80.0,
+					8.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.080316552088338,
+				"rect_m": [
+					-128.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.062326838409717,
+				"rect_m": [
+					-120.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.044915005466464,
+				"rect_m": [
+					-112.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.0276803174429,
+				"rect_m": [
+					-104.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.008285537660413,
+				"rect_m": [
+					-96.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.988890757877925,
+				"rect_m": [
+					-88.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.96896005808412,
+				"rect_m": [
+					-80.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.948315889844707,
+				"rect_m": [
+					-72.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.927671721605293,
+				"rect_m": [
+					-64.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.56345063940886,
+				"rect_m": [
+					-56.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.541700057429683,
+				"rect_m": [
+					-48.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.519949475450503,
+				"rect_m": [
+					-40.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.631321725482223,
+				"rect_m": [
+					-32.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.383220652515035,
+				"rect_m": [
+					-24.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.13511957954785,
+				"rect_m": [
+					-16.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 19.91961876777768,
+				"rect_m": [
+					-8.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 18.78508939546095,
+				"rect_m": [
+					0.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 18.08097590545328,
+				"rect_m": [
+					8.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 19.93902059220782,
+				"rect_m": [
+					16.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 21.952715823887623,
+				"rect_m": [
+					24.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.68529804416189,
+				"rect_m": [
+					32.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.67312492531265,
+				"rect_m": [
+					40.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.78623420492607,
+				"rect_m": [
+					48.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.579320803552037,
+				"rect_m": [
+					56.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.55423355102539,
+				"rect_m": [
+					64.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.52883267402649,
+				"rect_m": [
+					72.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.503175346420903,
+				"rect_m": [
+					80.0,
+					16.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.07800515292547,
+				"rect_m": [
+					-128.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.060593319982218,
+				"rect_m": [
+					-120.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.044986111355684,
+				"rect_m": [
+					-112.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.028091851317186,
+				"rect_m": [
+					-104.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.008697071534694,
+				"rect_m": [
+					-96.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.989602601144497,
+				"rect_m": [
+					-88.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.97149538993835,
+				"rect_m": [
+					-80.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.95105301172657,
+				"rect_m": [
+					-72.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.53746515307318,
+				"rect_m": [
+					-64.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.170509307124128,
+				"rect_m": [
+					-56.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.14875872514495,
+				"rect_m": [
+					-48.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.260130975176665,
+				"rect_m": [
+					-40.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 20.10481375381582,
+				"rect_m": [
+					-32.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 19.85671268084863,
+				"rect_m": [
+					-24.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 17.641211869078457,
+				"rect_m": [
+					-16.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 14.769911144373951,
+				"rect_m": [
+					-8.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 13.010098478401057,
+				"rect_m": [
+					0.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 12.24044690646864,
+				"rect_m": [
+					8.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 16.601235627951073,
+				"rect_m": [
+					16.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 19.702098279070988,
+				"rect_m": [
+					24.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 20.446879992140147,
+				"rect_m": [
+					32.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 21.559989271753572,
+				"rect_m": [
+					40.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.791486969182166,
+				"rect_m": [
+					48.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.589218616485596,
+				"rect_m": [
+					56.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.564178586006165,
+				"rect_m": [
+					64.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.53891086578369,
+				"rect_m": [
+					72.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.513423442840576,
+				"rect_m": [
+					80.0,
+					24.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.07627163449797,
+				"rect_m": [
+					-128.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.060664425871437,
+				"rect_m": [
+					-120.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.04527053491256,
+				"rect_m": [
+					-112.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.028376274874063,
+				"rect_m": [
+					-104.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.009281804483862,
+				"rect_m": [
+					-96.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.992289328013385,
+				"rect_m": [
+					-88.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.97425615787506,
+				"rect_m": [
+					-80.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.560796048181484,
+				"rect_m": [
+					-72.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.144523820788446,
+				"rect_m": [
+					-64.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.777567974839393,
+				"rect_m": [
+					-56.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 21.88894022487111,
+				"rect_m": [
+					-48.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 19.733623003510264,
+				"rect_m": [
+					-40.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 17.578305782149418,
+				"rect_m": [
+					-32.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 15.36280497037924,
+				"rect_m": [
+					-24.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 12.491504245674736,
+				"rect_m": [
+					-16.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 9.620203520970232,
+				"rect_m": [
+					-8.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 7.005081788633502,
+				"rect_m": [
+					0.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 6.32468378178325,
+				"rect_m": [
+					8.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 10.80442422706249,
+				"rect_m": [
+					16.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 17.42795541857417,
+				"rect_m": [
+					24.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 19.333744338581074,
+				"rect_m": [
+					32.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 21.565242036009664,
+				"rect_m": [
+					40.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.802019452728903,
+				"rect_m": [
+					48.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.59992742538452,
+				"rect_m": [
+					56.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.57506108283997,
+				"rect_m": [
+					64.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.549936056137085,
+				"rect_m": [
+					72.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.52455687522888,
+				"rect_m": [
+					80.0,
+					32.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.07539572362066,
+				"rect_m": [
+					-128.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.060001832661783,
+				"rect_m": [
+					-120.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.04494731592149,
+				"rect_m": [
+					-112.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.028961007823227,
+				"rect_m": [
+					-104.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.01196853135275,
+				"rect_m": [
+					-96.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.994976054882272,
+				"rect_m": [
+					-88.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.483169233266697,
+				"rect_m": [
+					-80.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.06689700587366,
+				"rect_m": [
+					-72.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 21.650624778480623,
+				"rect_m": [
+					-64.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 18.81217031305638,
+				"rect_m": [
+					-56.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 16.656853091695535,
+				"rect_m": [
+					-48.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 14.501535870334685,
+				"rect_m": [
+					-40.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 12.067631604164688,
+				"rect_m": [
+					-32.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 9.254515301733235,
+				"rect_m": [
+					-24.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 6.559302828581988,
+				"rect_m": [
+					-16.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 4.101008701767464,
+				"rect_m": [
+					-8.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 1.9982361361332777,
+				"rect_m": [
+					0.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 1.5421479890272511,
+				"rect_m": [
+					8.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 5.153484314316042,
+				"rect_m": [
+					16.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 11.805570138950896,
+				"rect_m": [
+					24.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 15.442744679489174,
+				"rect_m": [
+					32.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 17.679522096208416,
+				"rect_m": [
+					40.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 21.502801427421236,
+				"rect_m": [
+					48.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.888449926977454,
+				"rect_m": [
+					56.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.870113427305025,
+				"rect_m": [
+					64.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.105929394926505,
+				"rect_m": [
+					72.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.53663339959121,
+				"rect_m": [
+					80.0,
+					40.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.074038226746325,
+				"rect_m": [
+					-128.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.058983710006032,
+				"rect_m": [
+					-120.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.0449820659278,
+				"rect_m": [
+					-112.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.030859151688674,
+				"rect_m": [
+					-104.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.013866675218196,
+				"rect_m": [
+					-96.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 21.802636870975736,
+				"rect_m": [
+					-88.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 19.28895095428451,
+				"rect_m": [
+					-80.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 18.6318668633045,
+				"rect_m": [
+					-72.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 15.88413523555682,
+				"rect_m": [
+					-64.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 12.678223459377744,
+				"rect_m": [
+					-56.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 10.522906238016898,
+				"rect_m": [
+					-48.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 8.147241677143427,
+				"rect_m": [
+					-40.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 5.646036576579448,
+				"rect_m": [
+					-32.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 3.3998403540721363,
+				"rect_m": [
+					-24.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 1.511572081186758,
+				"rect_m": [
+					-16.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 0.08379146110106461,
+				"rect_m": [
+					-8.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 0.8405359226079527,
+				"rect_m": [
+					16.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 6.189942666650381,
+				"rect_m": [
+					24.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 10.244230620509608,
+				"rect_m": [
+					32.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 14.067509951722428,
+				"rect_m": [
+					40.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 20.53506001000092,
+				"rect_m": [
+					48.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.92682789629074,
+				"rect_m": [
+					56.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.16264386391222,
+				"rect_m": [
+					64.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.109451135854044,
+				"rect_m": [
+					72.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.54973793029785,
+				"rect_m": [
+					80.0,
+					48.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.073020104090578,
+				"rect_m": [
+					-128.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.05901846001234,
+				"rect_m": [
+					-120.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.046617348792097,
+				"rect_m": [
+					-112.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 25.032494434552973,
+				"rect_m": [
+					-104.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 21.821264630310512,
+				"rect_m": [
+					-96.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 18.608418591993548,
+				"rect_m": [
+					-88.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 16.068395992282063,
+				"rect_m": [
+					-80.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 11.570712265863891,
+				"rect_m": [
+					-72.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 9.018252702123696,
+				"rect_m": [
+					-64.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 6.544276605699109,
+				"rect_m": [
+					-56.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 4.323303432356697,
+				"rect_m": [
+					-48.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 2.3585280267982505,
+				"rect_m": [
+					-40.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 0.767273415721812,
+				"rect_m": [
+					-32.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 1.6285154887077056,
+				"rect_m": [
+					24.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 6.6322184760236205,
+				"rect_m": [
+					32.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 13.099768534302113,
+				"rect_m": [
+					40.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 19.567318592580605,
+				"rect_m": [
+					48.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 22.219358332897933,
+				"rect_m": [
+					56.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 23.16616560483976,
+				"rect_m": [
+					64.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.1235849190669,
+				"rect_m": [
+					72.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			},
+			{
+				"depth_m": 24.563790202140808,
+				"rect_m": [
+					80.0,
+					56.0,
+					8.0,
+					8.0
+				]
+			}
+		],
+		"world": {
+			"checksum": "958e2b48373a83ce38701567efcdde6c612df0b8941a4d72819bfa2695582de1",
+			"generation_version": 12.0,
+			"seed": 73119.0
+		}
+	},
+	"snapshot_sha256": "421de2385d41a905938c81783d334b2469e976535307d76261e7f21061c9244f"
+}

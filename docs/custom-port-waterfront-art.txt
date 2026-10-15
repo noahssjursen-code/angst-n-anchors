@@ -1,0 +1,79 @@
+NORDVIK WATERFRONT — 15 OCTOBER 2026
+
+OPEN THE PORT
+Run scenes/showcases/plot_building_showcase.tscn or custom_port_showcase.tscn.
+Both scene names now use the same custom_port_showcase.gd workshop.
+The older plot scene no longer launches a separate obsolete builder.
+
+To reopen the exact reviewed harbour with two docked vessels:
+  ./start-port-workshop.ps1 -PortFile ./resources/data/ports/examples/nordvik-waterfront-2026-10-15.json
+The supplied JSON stays unchanged; the workshop edits a separate imported copy.
+Its company, ships and stock are explicit scenario data, not production saves.
+
+LAYOUT AND ASSETS
+The shared data fixture contains 1,019 placements and four derived berths:
+two container-quay slots, a projecting bulk berth, and a sheltered fishing berth.
+A western pier and inlet, deeper bulk apron, 45-degree heads and varied wharf
+depths replace the rectangular outline. A broad shore approach connects the site.
+Crane dimensions and existing cargo services determine the working apron size.
+The container yard remains unmarked asphalt, without the rejected yellow grid.
+
+Five timber buildings use player-placeable parts: red net loft and warehouse,
+ochre workshop, blue chandlery and a taller ivory harbour office. Gabled charcoal
+roofs, signs, gutters, downpipes, covered porch, rope coils, net cages, benches,
+guardrails, shore cabinets and bulk retaining walls add detail at walking scale.
+The library now renders 54 actual placement thumbnails. The Blender manifest
+contains 45 authored/reused assets; other library entries are existing factories.
+
+Buildings are EXTERIOR DECORATIONS. Doors and roller shutters are closed and
+solid. Windows are opaque reflective panes. The upper office is a facade only:
+no staircase, interior floor or accessible room. NPCs and services remain outside.
+Existing entrance asset IDs are retained so old port documents still load.
+Older door_open attributes do not open the decorative assets.
+
+Angled foundations include 4 m and 8 m pieces. They share square-pad concrete,
+extend below the water to the seabed, and use exact polygon collision. Mitred
+coping follows the diagonal boundaries without overlapping top faces.
+Every placement remains on the common sea-referenced deck datum.
+
+AUTHORING
+Editable Blender source and generator:
+  resources/models/_source/custom_harbour/build_custom_harbour.py
+  resources/models/_source/custom_harbour/waterfront_parts.py
+  resources/models/_source/custom_harbour/*.blend
+Runtime exports: resources/models/parts/custom_harbour/*.glb
+Dimensions, collision and placement metadata:
+  resources/data/ports/custom_harbour_assets.json
+Shared injected layout: scripts/port/building/custom_port_example.gd
+
+VERIFICATION
+Native custom_port_waterfront_review: 2,119 checks passed. Reconstructs the
+complete JSON, compares derived berths, checks the fixed datum, actual model
+instances, roof snapping and every model thumbnail. Docks Nordlys and Harbour
+Cargo through the existing authority and saves the resulting document.
+Custom harbour asset review: all 45 assets match authored metre bounds and
+have editable source. Closed door/shutter collision and old-state refusal pass.
+Actual first-person walking interaction: 20 checks passed, including NPC talk
+and a walking player physically blocked by the decorative entrance.
+Actual placement picking: 43 checks passed after the entrance change.
+Home clearance: 10 checks passed, including refusal to stand inside a closed
+door from a legacy save. This headless fixture reports two objects leaked at
+test teardown; the native waterfront and walking reviews exit cleanly.
+Earlier in this layout pass: example reconstruction, berth/cargo projection
+(38), shape geometry (16), library (47) and passive projection (15) passed.
+
+NATIVE SCREENSHOTS
+C:/Users/noahs/Pictures/machinescreenshots/
+  custom-port-1792082669-7180-finished-waterfront.png
+  custom-port-1792082669-7180-inlet-with-nordlys.png
+  custom-port-1792082670-7180-angled-quay-and-loft.png
+  custom-port-1792082670-7180-workshop-frontage.png
+  custom-port-1792082671-7180-harbour-office.png
+  custom-port-1792082672-7180-waterfront-model-library.png
+
+SCOPE
+This pass changes the isolated port workshop, shared assets and its example.
+No deployment, merge or save wipe. No new multiplayer authority, production,
+market or crew simulation. Shore utility cabinets are visual fittings; placing
+them does not invent electricity/water services. Game integration remains a
+separate step after the user is happy with this construction/visual result.

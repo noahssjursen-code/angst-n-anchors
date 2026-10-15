@@ -64,6 +64,24 @@ func send_command(command: Dictionary) -> void:
 	var expected := int(command.get("expected_revision", -1))
 	var result: Dictionary
 	match name:
+		"fishing.catch.sell":
+			var berth: Dictionary = _projections.get(_projection_key("vessel_berth", str(body.get("vessel_id", ""))), {}).get("state", {})
+			var accepted := HomeFishSale.execute_local(body, str(_session.actor_id), berth)
+			result = {"request_id":request_id,"ok":accepted.get("ok",false),"data":accepted.get("data",{}),"message":accepted.get("message","")}
+			if result.ok and not _projections.has(_projection_key("fish_landing", str(body.operation_id))):
+				_publish("fish-landing/"+str(body.operation_id), "fishing.catch.landed", result.data, "fish_landing", str(body.operation_id))
+		"port.home.options", "port.home.claim":
+			var accepted:=HomePortService.local_command(name,body,str(_session.actor_id))
+			result={"request_id":request_id,"ok":accepted.get("ok",false),"data":accepted.get("data",{}),"message":accepted.get("message","")}
+			if result.ok and name=="port.home.claim":
+				_publish("custom_port/"+str(accepted.data.port.id),"port.created",accepted.data.port,"custom_port",str(accepted.data.port.id))
+				_publish("player-inventory/"+str(_session.actor_id),"inventory.changed",PlayerSession.data.personal_inventory,"player_inventory",str(_session.actor_id))
+		"inventory.ensure", "inventory.purchase", "inventory.move", "inventory.select":
+			var accepted:=PersonalInventory.execute_local(name,body,request_id)
+			if bool(accepted.get("ok",false)):
+				var event:=_publish("player-inventory/"+str(_session.actor_id),"inventory.changed",accepted.inventory,"player_inventory",str(_session.actor_id))
+				result=_success(request_id,event,{"inventory":accepted.inventory})
+			else:result=WorldContracts.result_error(request_id,"command_rejected",str(accepted.get("message","Inventory change failed.")))
 		WorldContracts.COMMAND_VESSEL_BERTH_CLAIM:
 			result = _claim_vessel_berth(request_id, body)
 		WorldContracts.COMMAND_VESSEL_MOORING_SET:
@@ -443,6 +461,7 @@ func _publish(stream: String, event_type: String, body: Dictionary, kind: String
 
 
 func _scope_for(kind: String, body: Dictionary, id: String) -> String:
+	if kind == "player_inventory":return "actor:"+id
 	if kind == "port_operation" or kind == "vessel_berth":
 		return "port:%s" % str(body.get("port_id", ""))
 	if kind == "interaction":

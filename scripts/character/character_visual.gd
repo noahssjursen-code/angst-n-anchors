@@ -2,13 +2,18 @@
 class_name CharacterVisual
 extends Node3D
 
-## One imported Blender skeleton shared by body, clothes and accessories.
-const MODEL = preload("res://resources/models/characters/mariner.glb")
+## Shared unclothed base for the player, remote players and NPCs.
+## Old saved wardrobe IDs remain data only; they cannot select the rejected model.
+const MODEL_PATH := "res://resources/models/crew_base/crew_base.glb"
+const HAND_CONTACTS_PATH := "res://resources/models/crew_base/hand_contacts.json"
+const HAND_GRIPS_PATH := "res://resources/models/crew_base/hand_grips.json"
 const LEG_IK := preload("res://scripts/character/character_leg_ik.gd")
+const FIRST_PERSON_SETBACK_M := .14
 var appearance := CharacterAppearance.default_appearance()
 var skeleton: Skeleton3D
 var animation_player: AnimationPlayer
 var _model: Node3D
+var _authored_model_transform := Transform3D.IDENTITY
 var _meshes: Array[MeshInstance3D] = []
 var _decorated := true
 var _local_first_person := false
@@ -20,23 +25,33 @@ func _ready() -> void:
 	rebuild()
 
 func rebuild() -> void:
-	if _model != null:
-		_model.free()
+	if is_instance_valid(_model): _model.free()
+	_model = null
+	skeleton = null
+	animation_player = null
+	ik = null
 	_meshes.clear()
 	_anchors.clear()
-	_model = MODEL.instantiate()
+	var scene := load(MODEL_PATH) as PackedScene
+	if scene == null:
+		push_error("Character base could not be loaded: " + MODEL_PATH)
+		return
+	_model = scene.instantiate() as Node3D
+	_authored_model_transform = _model.transform
 	add_child(_model)
-	for child in _model.find_children("*", "MeshInstance3D", true, false):
-		_meshes.append(child)
-		for surface in range(child.mesh.get_surface_count()):
-			var material: Material = child.mesh.surface_get_material(surface)
+	for child: Node in _model.find_children("*", "MeshInstance3D", true, false):
+		var mesh := child as MeshInstance3D
+		_meshes.append(mesh)
+		for surface in mesh.mesh.get_surface_count():
+			var material := mesh.mesh.surface_get_material(surface)
 			if material != null:
-				child.set_surface_override_material(surface, SurfaceMaterialLibrary.character_material(material,str(child.name)))
+				# Tint one actor without modifying any other instance of the shared asset.
+				mesh.set_surface_override_material(surface, material.duplicate())
 	var rigs := _model.find_children("*", "Skeleton3D", true, false)
-	if not rigs.is_empty(): skeleton = rigs[0]
+	if not rigs.is_empty(): skeleton = rigs[0] as Skeleton3D
 	var players := _model.find_children("*", "AnimationPlayer", true, false)
 	if not players.is_empty():
-		animation_player = players[0]
+		animation_player = players[0] as AnimationPlayer
 		for clip in animation_player.get_animation_list():
 			animation_player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
 	if skeleton != null:
@@ -48,8 +63,7 @@ func rebuild() -> void:
 			_anchors[side] = anchor
 	apply_appearance(appearance)
 	play_motion(&"idle")
-	if _balance_ik:
-		_attach_balance_ik()
+	if _balance_ik: _attach_balance_ik()
 
 
 func enable_balance_ik() -> void:
@@ -77,51 +91,33 @@ func _attach_balance_ik() -> void:
 
 func apply_appearance(value: CharacterAppearance) -> void:
 	appearance = value.duplicate() if value != null else CharacterAppearance.default_appearance()
-	var visibility := {
-		"Body_Torso": not (_decorated and appearance.top_id == "sweater"),
-		"Body_Arms": not (_decorated and appearance.top_id == "sweater"),
-		"Body_Legs": not (_decorated and appearance.trousers_id == "work"),
-		"Body_Feet": not (_decorated and appearance.footwear_id == "boots"),
-		"Base_Shorts": not (_decorated and appearance.trousers_id == "work"),
-		"Hair_Crop": appearance.hair_id == "crop" and not (_decorated and appearance.headwear_id in ["cap", "hardhat"]),
-		"Top_Sweater": _decorated and appearance.top_id == "sweater",
-		"Top_Trim": _decorated and appearance.top_id == "sweater",
-		"Trousers_Work": _decorated and appearance.trousers_id == "work",
-		"Footwear_Boots": _decorated and appearance.footwear_id == "boots",
-		"Outerwear_Vest": _decorated and appearance.outerwear_id == "vest",
-		"Headwear_Cap": _decorated and appearance.headwear_id == "cap",
-		"Headwear_Hardhat": _decorated and appearance.headwear_id == "hardhat",
-		"FacialHair_Moustache": appearance.facial_hair_id == "moustache",
-		"Eyewear_Glasses": _decorated and appearance.eyewear_id == "glasses",
-		"Accessory_Pipe": _decorated and appearance.face_accessory_id == "pipe",
-		"Utility_Belt": _decorated and appearance.utility_id == "belt",
-	}
-	var age_weight := (appearance.age - 18.0) / 62.0
-	var colors := {
-		"Skin": appearance.skin_color, "Top": appearance.top_color,
-		"Trousers": appearance.trousers_color, "Footwear": appearance.footwear_color,
-		"Hair": appearance.hair_color.lerp(Color(.55,.55,.52), age_weight * .8),
-		"Headwear": appearance.headwear_color, "Outerwear": appearance.accent_color,
-		"Lips": appearance.skin_color.darkened(.28),
-	}
-	var morphs := {"Build": appearance.build, "Belly": appearance.belly, "Frame": appearance.frame, "Age": age_weight}
+	var morphs := {"Build": appearance.build, "Belly": appearance.belly,
+		"Frame": appearance.frame, "Age": (appearance.age - 18.0) / 62.0}
 	for item in _meshes:
-		item.visible = visibility.get(str(item.name), true)
-		for index in range(item.mesh.get_blend_shape_count()):
-			item.set_blend_shape_value(index, morphs.get(str(item.mesh.get_blend_shape_name(index)), 0.0))
-		for surface in range(item.mesh.get_surface_count()):
+		for index in item.mesh.get_blend_shape_count():
+			item.set_blend_shape_value(index, float(morphs.get(str(item.mesh.get_blend_shape_name(index)), 0.0)))
+		for surface in item.mesh.get_surface_count():
 			var material := item.get_surface_override_material(surface) as StandardMaterial3D
-			if material != null and colors.has(material.resource_name):
-				material.albedo_color = colors[material.resource_name]
-
+			if material != null and material.resource_name.begins_with("Skin"):
+				material.albedo_color = appearance.skin_color
 	set_local_first_person(_local_first_person)
 
 func set_local_first_person(enabled: bool) -> void:
 	_local_first_person = enabled
+	if is_instance_valid(_model):
+		# The camera stays in its gameplay position. Only the locally viewed body
+		# sits behind the eye, so looking down sees its outside rather than its neck cut.
+		_model.transform = _authored_model_transform
+		if enabled:
+			_model.position += Vector3.BACK * FIRST_PERSON_SETBACK_M
 	for item in _meshes:
-		if str(item.name) in ["Head", "Neck", "Face", "Hair_Crop", "Headwear_Cap", "Headwear_Hardhat", "Eyewear_Glasses", "FacialHair_Moustache", "Accessory_Pipe"]:
-			# Shadows retain the complete head; only this camera hides its geometry.
+		if str(item.name) in ["Head", "Neck", "Eyes", "Teeth", "Mouth"]:
 			item.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if enabled else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
+func presentation_offset_world() -> Vector3:
+	# Equipment shares the local visual setback, independent of camera pitch.
+	if not is_instance_valid(_model): return Vector3.ZERO
+	return _model.global_position - global_position
 
 func set_decorated(value: bool) -> void:
 	_decorated = value

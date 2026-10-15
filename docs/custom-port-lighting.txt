@@ -1,0 +1,40 @@
+Custom harbour lights
+=====================
+
+Placed quay lights now reuse the existing HarbourAreaLight component from
+generated ports. Previously the custom asset factory loaded only the Blender
+model and collider; no light component was created, so a custom harbour stayed
+dark even when its poles were installed.
+
+HarbourEnvironmentKit.attach_area_light supplies the shared authored offset
+(0, 7.4, -1.2), diffuser material override and daylight-controlled spotlight.
+The generated-port model factory now calls this same helper. The existing
+energy, colour, shadow settings, distance fading and daylight logic are
+unchanged. The helper is idempotent for its named child.
+
+CustomHarbourAssetLibrary.instantiate has an optional runtime_lighting argument
+(default true). CustomPortPresenter explicitly passes false for a placement
+ghost. This avoids tying light behavior to whether a non-preview display model
+needs physical collision. Ghosts own no Light3D or periodic lamp updater.
+
+The component belongs to the model, so moving, replacing or unloading a port
+placement frees its light with the old model. Repeated identical snapshots do
+not create a second light. No new saved data, service, stock or authority command
+is introduced.
+
+Verification
+------------
+tests/custom_port_lighting_test.tscn -- --shipyard-playtest --capture renders
+the custom placed light alongside the existing generated-port light under the
+same conditions. Native D3D12 verification passed 20 checks: day/night energy,
+authored lens emission, shadows/distance limits, zero ghost lights, identical
+snapshot idempotence, moved/rotated light position, port unload and preservation
+of an externally-owned comparison light.
+
+Archived and visually reviewed captures (15 October 2026):
+C:/Users/noahs/Pictures/machinescreenshots/custom-harbour-assets-1792031097-56-custom-port-light-night.png
+  Before: custom side has no illuminated pool; existing side works.
+C:/Users/noahs/Pictures/machinescreenshots/custom-harbour-assets-1792031157-945-custom-port-light-night.png
+  After: matching illumination and shadows on both concrete aprons.
+C:/Users/noahs/Pictures/machinescreenshots/custom-harbour-assets-1792031158-595-custom-port-light-day.png
+  Day: both automatic lights and diffuser emission are off.

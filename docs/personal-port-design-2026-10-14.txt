@@ -1,0 +1,406 @@
+PERSONAL PORTS: DATA MODEL, BUILDING KIT AND IMPLEMENTATION ORDER
+14 October 2026 | Research/design proposal, not an implemented save format
+
+Scope
+-----
+Reviewed the current game on feature/player-inventory and the sibling
+angst-n-anchors-mp service. Commissioned an independent source/capture review.
+No gameplay, database, deployed server or existing save was changed in this pass.
+The accompanying JSON is a proposed fixture, not something today's loader accepts.
+Example: docs/examples/personal-port-snapshot-v1.example.json
+It is a coal-port extract: 35 placed pieces, one berth, 25 tonnes in stock,
+a 10-tonne buy order, and 12,000 NOK plus receiving space reserved for that order.
+Company/account/geography records remain explicit external dependencies. It is
+not a complete world backup. JSON syntax, ID references and sample reservation
+totals were checked; production schema/engine validation does not yet exist.
+All proposed dimensions/capacities/prices below are game design starting points,
+not real port engineering standards.
+
+Recommendation
+--------------
+Define the persistent port records and their rules FIRST. Then implement a small
+working kit against those records. Do not create an extensive decorative library
+and discover later that none of its equipment has stock, ownership or service data.
+
+Prove two complete loops before factories:
+1. Build quay + coal storage + compatible crane, publish a funded coal buy order,
+   receive another company's coal, preserve the stock and payment across restart.
+2. Build fish receiving + chilled storage, buy landed catch, preserve species,
+   quantity/quality and ownership, then sell or collect it from that inventory.
+
+The same port model must serve NPC companies and player companies. Company control
+(player/NPC) changes who issues commands, not storage or trading rules. A solo
+proprietor can own land directly initially; later transferring ownership to a
+company must not move or recreate the port.
+
+WHAT EXISTS TODAY
+-----------------
+- PlotBuildLayout v3 is a useful construction document: plot, revision, item IDs,
+  integer 2 m cells, quarter turns, and saved support depth. It round-trips JSON.
+  The showcase holds documents only in RAM. It has no persistent ownership,
+  port identity, inventory, company access policy or operational berths.
+- CoastalPlotIndex derives 200 x 200 m parcels and world-qualified plot IDs.
+  It deliberately does NOT implement ownership. Its geography includes review
+  flags for ambiguous/multiple coastline sections; not every green square is
+  automatically suitable for private construction.
+- Generated ports use PortData + PortLayoutGraph (foundation, berth_plan,
+  land_plan/facility_plan). PortFacilityPlan already reasons about commodity
+  families, access routes and compatible berths. Do not throw this away.
+- WorldGateway exposes send_command, query_projections, projection caches,
+  interest retention and event subscriptions. LocalWorldBackend handles part
+  of that contract, but its projection dictionaries are transient. Do not assume
+  that the existence of query APIs already provides durable local world saves.
+- The Go server already has versioned command/result/event/projection envelopes,
+  request IDs, expected revisions, commit cursors and PostgreSQL transactions.
+  Its existing command_receipts, world_events and world_projections tables are
+  reusable infrastructure, not yet a player-port feature.
+- The Go gameplay domain contains Company (including members), Cargo, Contract,
+  Vessel and Construction records. Some of that domain is exercised in an
+  isolated gameplay lab, not yet a complete production company economy.
+  GDScript CompanyContracts also embeds inventory_lots, warehouse_leases and
+  facility summaries. Reconcile these representations; do not invent a second
+  unrelated company or inventory authority.
+- Current cargo manifests are explicitly presentation records. They cannot be
+  trusted to create saleable inventory or credit a player's account.
+- OreMound.take returns the quantity requested without depleting a stock balance.
+  The local fish-landing path clears the receiving buffer after settlement.
+  Neither behaviour is sufficient for persistent player-owned depot stock.
+
+UNITS AND CONSTRUCTION
+----------------------
+Current visible kit:
+  foundation: 4 x 4 m
+  quay / timber pier: 8 x 4 m (4 x 2 internal cells, NOT 4 x 2 metres)
+  workshop: 8 x 8 m
+  warehouse: 12 x 8 m
+  all deck tops: 2 m above the fixed sea datum
+
+Retain the ONE construction plane. Camera height never changes it.
+Keep 4 x 4 m as the ordinary structural tile. Add an 8 x 8 brush and rectangular
+fill for larger yards, potentially storing the resulting ordinary tiles first.
+Keep 8 x 4 quays: useful rectangles are not inherently a mistake. A quay edge,
+a platform slab, and a complete berth are different concepts.
+Use automatic edge fittings and dedicated sockets for small items, rather than
+requiring bollards, ladders, fenders or lights to occupy a whole 4 m tile.
+
+Keep footprint stepping for painting platforms. For buildings, adopt the hovered
+foundation corner/edge or a shared 4 m origin: a 12 x 8 warehouse must fit a
+12 x 8 foundation patch starting 4 m from the plot origin. Do not force each
+building onto an unrelated 12 m lattice. This is a change to propose, not applied.
+
+Separate:
+  physical footprint = the space the object occupies
+  support footprint = the area that must be built underneath
+  working clearance = door access, crane sweep, handling aisle, hose approach
+  water clearance = berth length/beam/draft and route into navigable water
+
+The current crane pedestal is 3.6 x 3.6 m before its default 1.5 scale, or
+5.4 x 5.4 m: an 8 x 4 slab alone is too narrow. Joined slabs / an 8 x 8 equipment
+pad can support the base, but do not represent its whole operational area.
+Validate both ends of a crane transfer against its actual reach and access.
+
+Immediate construction gaps:
+- Require complete appropriate support below facilities.
+- Reject buried buildings/obstructed doors at the fixed plane. Show unsuitable
+  terrain clearly; excavation/earthworks can be a separate later feature.
+- Block removal of occupied support, or present a deliberate dependent removal.
+- Validate ownership across the UNION of adjacent owned plots, not one square
+  at a time. Allow a building to cross an internal boundary between owned plots.
+- Reserve open water for berth approach/turning. Owning shoreline must not let
+  a player silently block a public fairway.
+- Bound support depth and construction cost; do not make deep-ocean foundations
+  free merely because the renderer can draw long concrete columns.
+- Distinguish structural undo from rewinding commerce: on a live server Ctrl+Z
+  requests a validated inverse edit. It must not erase stock, completed sales
+  or another player's work after dependencies have changed.
+
+MINIMUM PRACTICAL KIT
+--------------------
+Infrastructure:
+  4 x 4 foundation; larger fill brush; quay edge/corner; supported pier;
+  usable shore/deck connection; automatic bollard/fender/ladder sockets;
+  berth selection and visible depth/approach/clearance; pedestrian access.
+  Do not require a full office building just to own a small landing.
+
+Coal / iron ore:
+  bounded stockpile bay, retaining walls, suitable grab crane, receiving/loading
+  point and safe clear path. Each bay has a finite volume/mass capacity and an
+  accepted commodity rule. Coal and ore occupy separate inventory compartments.
+  Larger terminals can later add hoppers, conveyors and loaders.
+  Pile size/fill derives from stock; individual lumps are not network entities.
+
+Fish:
+  landing/receiving point compatible with the current boat catch system,
+  weighing/sorting function, chilled storage and a collection/loading point.
+  Current pumped catch and future boxed fish need different handling adapters.
+  A small depot can package these services in one placeable.
+  Water, ice, drainage and power are credible visual/service requirements;
+  bespoke pipe/electrical networks are not required for the first playable loop.
+
+Timber / steel:
+  open or covered laydown bays; logs, bundled timber, plate stacks and coils
+  are different cargo presentations. Iron ORE can be a pile; manufactured steel
+  plates should be stacked/bundled, not represented by the ore mound.
+  Stocks need commodity IDs, unit/mass/volume and storage rules regardless of art.
+
+Containers / general cargo:
+  marked actual-size storage slots, handling space and a compatible lifting
+  point. A 20 ft box is about 6.058 x 2.438 m; 40 ft is 12.192 x 2.438 m.
+  A 4 x 4 structural module is not a container slot. Reserve separate working
+  lanes. Support mixed contents in one container; the container is packaging,
+  not a commodity that replaces its contents.
+
+Later:
+  grain silos, product-specific liquid tanks/pumps, drying/salting/freezing,
+  sawmill, metal processing, shipyard input/output stores, residents' shops.
+  Do not implement them all before there is a conserved inventory/transfer loop.
+  Recipes consume specified input lots and produce specified output lots.
+  Residents/NPC buyers must actually consume purchased goods according to a
+  demand rule; a market sign alone must not mint unlimited revenue.
+
+DATA CONTRACT TO ESTABLISH
+-------------------------
+Use one versioned JSON-compatible contract at both authority backends.
+Storage adapters differ; meaning, units and validation do not.
+
+Port:
+  stable id, world_id, name, owner {kind,id}, operator_company_id, claimed plot
+  IDs, build origin, access policy, layout revision and construction reference.
+  The company refers to the port by ID, not an embedded second copy.
+  Public discovery shows useful services and offers; internal account/member
+  data is private.
+
+PlotClaim:
+  world_id + plot_id unique; owner; port_id; claim revision; authority timestamp.
+  Claim acquisition and payment are atomic. Check adjacency/ownership and
+  navigable access. Geography IDs are derived; deeds are durable world records.
+
+PortConstruction:
+  layout ID/revision; pinned module catalogue revision; explicit coordinate and
+  deck datum; placements with stable IDs, definition ID/version, local position,
+  rotation, finishes, support extent and mounting relationships.
+  Use integer millimetres for authored positions/support dimensions. The
+  4 m structural grid is an editing policy (4000 mm), not the precision of
+  every asset or a reason to resize ISO containers.
+  No independently adjustable placement Y for this kit: deck attachment is
+  declared, support extends downward, building geometry upward.
+  Preserve immutable snapshots/catalogue definitions when replay is promised.
+  Unknown definitions must produce an explicit compatibility error, not silently
+  vanish as the current prototype importer can do with invalid rows.
+
+Facility:
+  id, port_id, placed_instance_ids, definition/version, operator/owner,
+  configuration, state, inventory IDs and service bindings.
+  A definition supplies allowed capabilities; user configuration can narrow
+  them, not grant a tiny shed unlimited capacity or incompatible handling.
+  Typed modules: storage, transfer, processing, service, market access.
+  A fish depot can have receiving + cold-storage modules; a crane has transfer
+  capability and links to a berth and compatible inventories. A coal store
+  does not need its own custom economy singleton.
+
+Berth:
+  stable id, port_id, edge/pose, length/beam/draft limits, approach/keepout,
+  mooring/access sockets and equipment bindings. Runtime occupancy is separate.
+  Do not advertise a trade service just because a decorative crane exists.
+
+Inventory and lots:
+  inventory_id, physical location/capacity, permitted commodity/condition rules;
+  lots with stable IDs, commodity_id, owner, custodian, quantity/unit, condition
+  and origin; reservations as separate referenced records.
+  Ownership and location are independent: another company's consignment may
+  occupy your yard without becoming your property.
+  Quantities use canonical integer base units: grams, millilitres or pieces.
+  Catalogued units cannot be mixed. Display kg/tonnes/litres as appropriate.
+  Capacity has independent mass and volume limits, and slot limits when relevant.
+  Keep fish species/condition/traceability through transfers; preserve individual
+  catch records where needed for the library, aggregate compatible lots for trade.
+  Existing float kg/tonne/unit records require explicit adapters and migration.
+
+Packaging / cargo:
+  extend the existing Cargo/ContainerUnit/BulkCargoLot/CargoConsignment contracts.
+  A container holds lot references and quantities, plus its own dimensions,
+  colour, carrier, slot location and delivery references.
+  A pile/tank/crate is a visual/storage form, not an independent copy of stock.
+  One physical quantity has one custody location: ship, crane payload, quay slot
+  or storage. A transfer-in-progress must never duplicate both ends.
+
+MarketOrder:
+  buy/sell, commodity and quality filters, quantity/price basis, owner, port and
+  inventory IDs, delivery/pickup terms, expiry/status and resource reservations.
+  A buy order reserves money and receiving capacity; a sell order reserves stock.
+  Accepting a delivery releases neither until success/cancel/expiry rules apply.
+  Storage and a crane make receiving possible. An explicit funded BUY ORDER makes
+  "sell coal here" available. A sell listing and freight contract are separate:
+  changing owner does not teleport cargo to the buyer.
+
+Money:
+  use NOK explicitly. The current canonical Go company uses integer balance_nok.
+  Keep integer NOK settlement initially, with an explicit quantity price basis
+  and documented rounding at settlement; do not invent ambiguous new marks fields.
+  Existing legacy *_marks/value_gold fields remain compatibility adapters only.
+  Fractional pricing can later introduce a versioned minor-unit money contract,
+  but must not silently reinterpret any existing balance.
+
+ProcessingJob (later, but leave the reference seam):
+  facility/recipe version, input reservations, output inventory, start/due world
+  tick and status. Reserve inputs and output space. Completion must be idempotent.
+  Persist work/timestamps, not frame-by-frame machinery or physics.
+
+SAVE, FETCH AND SUBSCRIBE
+------------------------
+Local:
+  Store durable WORLD state separately from a captain's personal loadout.
+  A versioned world snapshot contains records + applied event cursor + pinned
+  world/catalogue identity. Durable command receipts survive restart.
+  Use an atomic snapshot replacement with backup and/or a transactional local
+  store; append-only committed events allow replay since a checkpoint.
+  Extending LocalWorldBackend with durable world storage is real work still
+  required. Its current in-memory projection cache is not that implementation.
+
+Server:
+  Extend the existing Go authority handlers and PostgreSQL transaction.
+  Reuse world_events, command_receipts and world_projections for ordered changes.
+  Add queryable port/claim/facility/inventory/order records or transactional
+  indexed projections where required. Use a database uniqueness constraint for
+  (world_id,plot_id), not only a client check. The current generic projection
+  key is (kind,entity_id): IDs must be world-qualified, or migrate the key.
+  State rows, money/stock/capacity reservations, receipt and emitted events must
+  commit together. Cache mutation and publication happen after success.
+  Don't post a client-authored full inventory or bank balance as trusted truth.
+
+Commands through WorldGateway (proposed names, not existing endpoints):
+  property.claim, port.create, port.build.apply, port.facility.configure,
+  market.order.place/cancel, cargo.transfer.request/complete.
+  Every request carries request_id and the relevant expected revision.
+  Authentication supplies actor; server checks company permissions, definitions,
+  physical feasibility and resource availability. Never trust owner fields.
+
+Queries / subscriptions:
+  Reuse /v2/commands, /v2/projections, /v2/events and /v2/state transport.
+  Add bounded/paginated port discovery and market queries; these are not complete
+  today. Keep remote market queries independent of visual render range.
+  Nearby clients retain a port interest, receive a snapshot at cursor C, then
+  apply committed events after C. Confirm interest establishment and close the
+  fetch/subscribe race using the existing cursor/replay mechanism.
+  Gaps trigger resync; stale/duplicate events are ignored by revision.
+  Public port/layout/service/visible-stock projections are separate from private
+  company lots, money, reservations and procurement terms.
+  Unloading a port's scene removes meshes and subscriptions, not world stock,
+  buildings, claims or processing jobs. The authority keeps operating.
+  Start with bounded whole-port snapshots. Add spatial layout chunks and cached
+  immutable construction hashes when measured size requires it; do not send all
+  ports' detailed inventories to every client.
+
+Reconstruction:
+  Snapshot + catalogue/version + world identity + subsequent committed events
+  rebuild data and then presentation. No saved physics is required.
+  Exact historical replay additionally requires retaining checkpoints/events and
+  old definitions; simply storing only the latest JSON cannot recreate yesterday.
+  Live construction changes need derived terrain/berth/navigation/chart/LOD cache
+  invalidation. Generated NPC ports must seed once, then evolve through the same
+  persistent records instead of regenerating over player edits.
+
+HANDLING THE EXISTING PORT SYSTEM
+--------------------------------
+Keep PortLayoutGraph as the construction/geometry seam; evolve it with an explicit
+player-built layout variant or adapter for PlotBuildLayout. Do not force a player's
+arbitrary slab layout into initial generated berth_plan assumptions.
+Add a common Port aggregate that references geometry, facilities, berths and stock.
+Generated NPC ports become seed producers for those records. PortData/chart views
+read projections. Retire overlapping legacy facility/inventory copies only through
+explicit migration, rather than bolting a new economy alongside them.
+Keep broad NPC starter services initially so new worlds remain playable. Let player
+ports compete on capacity, location, price and processing; do not slash NPC ports
+before the replacement economy is functional.
+
+IMPLEMENTATION ORDER AND ACCEPTANCE
+-----------------------------------
+1. Versioned records, catalogue definitions, identity/units, validators and sample
+   fixtures. Choose the first coal and fish service definitions.
+2. Snapshot/load/restart through local world storage and Go/PostgreSQL.
+   Run identical rule fixtures in Godot and Go; do not assume code sharing.
+3. Connect the builder to authoritative build commands, claims and construction
+   projections. Add support, access/terrain and berth-clearance validation.
+4. Finite coal/fish inventories, commodity-compatible transfer, funded buy orders,
+   other-company delivery, settlement, collection and restart.
+5. Production recipes and public sell orders; later resident/NPC demand,
+   shipyard bills of materials, utilities and specialised terminal types.
+
+Required data-only scenarios:
+- Rebuild identical placement IDs, support depths and contents after restart.
+- Repeated request ID charges/builds/transfers exactly once.
+- Two players edit the same revision: one rejects/rebases cleanly.
+- Two companies attempt the same claim or last stock: exactly one succeeds.
+- Reject unsupported/blocked/overlapping/outside-owned-land construction.
+- Full depot, wrong commodity, inaccessible berth or out-of-reach crane rejects.
+- Partial unload conserves cargo across ship / suspended payload / depot.
+- Interrupted job resumes or rolls back according to persisted state.
+- Cancel/expiry releases only its own reservations, with no vanished goods.
+- Rejoining/out-of-range clients reconstruct new and deleted pieces correctly.
+- Company access rules protect stock and funds while publishing allowed offers.
+- Undo cannot remove a busy crane or a warehouse containing/reserving goods.
+- Missing catalogue version or wrong world checksum fails explicitly.
+- When processing arrives: offline elapsed time uses saved world rules, outputs
+  are produced once, and paused single-player does not silently gain MP elapsed time.
+
+INDEPENDENT REVIEW
+------------------
+A separate agent received a fresh context and reviewed source plus the archived
+native capture; it did not run a second interactive playtest or change files.
+It independently recommended:
+  keep 4 x 4 m foundations and the single sea+2 m plane;
+  fix support/terrain/deletion rules before adding many assets;
+  anchor large buildings to actual foundation patches;
+  treat the 8 x 4 m quay as a component rather than a berth;
+  reuse existing handling presentation but replace infinite/cleared stock with
+  finite owned depot inventories;
+  defer factories, conveyor networks and a mandatory large harbour office.
+
+Source evidence:
+  scripts/port/building/plot_build_layout.gd:51,78,110
+  scripts/port/building/plot_building_showcase.gd:549,582
+  scripts/port/blender_bulk_crane_rig.gd:16
+  scripts/port/bulk_crane.gd:70
+  scripts/port/bulk_crane_auto_operator.gd:225
+  scripts/port/ore_mound.gd:36
+  scripts/port/bulk_material_drop.gd:85
+  scripts/port/fish_landing_equipment_job.gd:116
+  scripts/port/port_facility_plan.gd
+  scripts/company/company_contracts.gd
+  scripts/network/world_gateway.gd
+  scripts/network/local_world_backend.gd
+  sibling angst-n-anchors-mp/internal/gameplay/models.go
+  sibling angst-n-anchors-mp/internal/authority/cargo_manifest.go
+  sibling angst-n-anchors-mp/internal/db/authority_store.go
+  sibling angst-n-anchors-mp/internal/db/db.go
+
+REAL-WORLD RESEARCH AND GAME INTERPRETATION
+-------------------------------------------
+FAO identifies fish landing infrastructure together with ice, clean water,
+electricity and efficient handling/storage as important parts of the supply chain.
+Game inference: a fish depot represents receiving plus preservation, not just
+a crate and a sales trigger.
+https://www.fao.org/flw-in-fish-value-chains/multidimensional-approach/services-and-infrastructure/en
+https://www.fao.org/4/T0388E/T0388E03.htm
+
+Port of Rotterdam describes distinct dry-bulk products with terminal handling,
+storage and onward transport. Game inference: stock compartments and handling
+compatibility matter more than one generic infinite resource heap.
+https://www.portofrotterdam.com/en/logistics/cargo/dry-bulk
+
+Euroports' own terminal description lists steel plates/coils/beams and forest
+products with dedicated equipment, warehousing and cargo-specific handling.
+Game inference: separate ore piles, manufactured metal bundles and timber stores.
+Do not copy its huge terminal scale into a starter player port.
+https://www.euroports.com/terminal/break-bulk-terminal-ta1207-antwerp-belgium/
+
+Carrier specifications provide real container dimensions; keep those independent
+of the construction tile size. Internal game ContainerUnit already models the
+20/40 ft external dimensions.
+https://www.rclgroup.com/ContainerSpecification
+https://www.hapag-lloyd.com/en/services-information/cargo-fleet/container.html
+
+Related earlier project research:
+  docs/port-facility-asset-plan.txt
+That document is useful background, but statements about active generators must
+be checked against today's code rather than copied as current implementation.

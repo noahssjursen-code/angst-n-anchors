@@ -41,6 +41,10 @@ signal helm_activated
 signal helm_deactivated
 
 var _active: bool = false
+## Optional isolated authority seam. Production continues to use MooringComponent.
+var mooring_order_override: Callable
+## A surrounding editor/modal can own input without changing the last engine order.
+var input_suspended := false
 
 ## 0 = off, 1 = bow-only (yaw), 2 = crab (lateral drift)
 var _thruster_mode: int = 0
@@ -100,7 +104,7 @@ func deactivate() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if Engine.is_editor_hint() or not _active:
+	if Engine.is_editor_hint() or not _active or input_suspended:
 		return
 	# A modal owns input, but never changes the last engine/steering order.
 	var menu := get_node_or_null("/root/GameMenu")
@@ -188,7 +192,7 @@ func _accumulate_distance_sailed(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if Engine.is_editor_hint() or not _active:
+	if Engine.is_editor_hint() or not _active or input_suspended:
 		return
 	if GameMenu.is_modal_open():
 		return
@@ -357,6 +361,12 @@ func _order_mooring_lines() -> void:
 		return
 	if _autopilot != null and _autopilot.is_engaged():
 		_autopilot.disengage("manual")
+	if mooring_order_override.is_valid():
+		mooring_order_override.call()
+		_set_stage_stop()
+		_throttle = 0.0
+		_lateral = 0.0
+		return
 	var mooring := _boat_body.get_node_or_null("ShipGameplay/MooringComponent") as MooringComponent
 	if mooring == null:
 		return

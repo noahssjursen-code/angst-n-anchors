@@ -28,6 +28,8 @@ const REQUEST_MOVE_THRESHOLD_M := 50.0
 var _distant: Node3D
 var _layout: Object
 var _flatten_zones: Array = []
+var _base_flatten_zones: Array = []
+var _custom_port_exclusions: Dictionary = {}
 var _chunks: Dictionary = {}
 var _jobs: Array[Dictionary] = []
 var _queued: Dictionary = {}
@@ -40,8 +42,11 @@ var boot_focus := Vector3(INF,INF,INF)
 
 func configure(layout: Object, flatten_zones: Array = []) -> void:
 	_clear_chunks()
+	_release_custom_port_layers()
 	_layout = layout
-	_flatten_zones = flatten_zones
+	_base_flatten_zones = flatten_zones.duplicate(true)
+	_flatten_zones = _base_flatten_zones.duplicate()
+	_custom_port_exclusions.clear()
 	_frame_index = 0
 	_last_request_xz = Vector2(INF, INF)
 	set_process(_layout != null)
@@ -64,8 +69,9 @@ func _ready() -> void:
 
 ## A new bridge clears its corridor, not every forest chunk in the world.
 func add_exclusions(zones: Array) -> void:
-	_flatten_zones = _flatten_zones.duplicate()
-	_flatten_zones.append_array(zones)
+	_base_flatten_zones = _base_flatten_zones.duplicate()
+	_base_flatten_zones.append_array(zones.duplicate(true))
+	_rebuild_exclusion_list()
 	for key in _chunks.keys():
 		var local_zones := STREAMER.zones_intersecting_chunk(zones,key,CHUNK_SIZE_M)
 		if local_zones.is_empty(): continue
@@ -85,12 +91,66 @@ func add_exclusions(zones: Array) -> void:
 	if is_instance_valid(_distant): _distant.add_exclusions(zones)
 
 
+## Call after configure. A custom port retains its layer while its presenter is
+## unloaded; pass [] only when its built footprint is removed. This single seam
+## updates exact coverage sampling, near patches and persistent distant canopy.
+func set_custom_port_exclusions(owner_key: String, zones: Array) -> bool:
+	if owner_key.is_empty() or _custom_port_exclusions.get(owner_key, []) == zones:
+		return false
+	var changed_zones: Array = _custom_port_exclusions.get(owner_key, []).duplicate(true)
+	changed_zones.append_array(zones)
+	if zones.is_empty():
+		_custom_port_exclusions.erase(owner_key)
+	else:
+		_custom_port_exclusions[owner_key] = zones.duplicate(true)
+	_rebuild_exclusion_list()
+	ForestField.set_custom_port_exclusions(owner_key, zones, get_instance_id())
+	var changed_bounds: Array[Rect2] = []
+	for zone in changed_zones:
+		changed_bounds.append(STREAMER._zone_influence_bounds(zone))
+	# Empty remembered chunks must be discarded as well: removal can restore all
+	# of their trees. Unaffected patches keep their nodes and prepared placements.
+	for key in _chunks.keys():
+		if _chunk_intersects_bounds(key, changed_bounds):
+			_unload_chunk(key)
+	for job in _jobs:
+		if _chunk_intersects_bounds(job.coord, changed_bounds):
+			job.erase("placement")
+	_last_request_xz = Vector2(INF, INF)
+	if is_instance_valid(_distant):
+		_distant.set_custom_port_exclusions(owner_key, zones)
+	return true
+
+
+static func _chunk_intersects_bounds(coord: Vector2i, bounds: Array[Rect2]) -> bool:
+	var chunk_bounds := Rect2(Vector2(coord) * CHUNK_SIZE_M, Vector2.ONE * CHUNK_SIZE_M)
+	for candidate in bounds:
+		if candidate.size == Vector2.ZERO or chunk_bounds.intersects(candidate, true):
+			return true
+	return false
+
+
+func _rebuild_exclusion_list() -> void:
+	_flatten_zones = _base_flatten_zones.duplicate()
+	var owners := _custom_port_exclusions.keys()
+	owners.sort()
+	for owner in owners:
+		_flatten_zones.append_array(_custom_port_exclusions[owner])
+
+
 func _exit_tree() -> void:
+	_release_custom_port_layers()
 	TREE_MESH.finish_pending_requests()
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null and telemetry.has_method("unregister_provider"):
 		telemetry.unregister_provider(&"world.forest", self)
 	_clear_chunks()
+
+
+func _release_custom_port_layers() -> void:
+	for owner in _custom_port_exclusions:
+		ForestField.set_custom_port_exclusions(owner, [], get_instance_id())
+	_custom_port_exclusions.clear()
 
 
 func _process(_delta: float) -> void:
@@ -406,7 +466,13 @@ static func advance_placement_job(layout: Object, job: Dictionary, flatten_zones
 	var coord: Vector2i = job.coord
 	if not job.has("zones"):
 		job.zones = STREAMER.zones_intersecting_chunk(flatten_zones, coord, CHUNK_SIZE_M)
-	var local_zones: Array = job.zones
+		job.zone_index = ForestField.exclusion_index(job.zones)
+		# Pure tree masks cannot change root heights. Keeping hundreds of such
+		# tiles in three terrain modifier loops per grid sample adds no result.
+		job.terrain_zones = []
+		for zone in job.zones:
+			if not bool(zone.get("forest_clear_only", false)) or bool(zone.get("carve", false)) or bool(zone.get("reclaim", false)):
+				job.terrain_zones.append(zone)
 	var origin := Vector2(coord) * CHUNK_SIZE_M
 	var cells: int = job.cells
 	var step_m: float = job.step
@@ -430,9 +496,9 @@ static func advance_placement_job(layout: Object, job: Dictionary, flatten_zones
 		if h > density:
 			continue
 		# Flatten pads already zero ForestField; keep a hard reject for safety.
-		if _in_flatten(world_xz, local_zones):
+		if _in_flatten_indexed(world_xz, job.zone_index):
 			continue
-		var height := sample_root_height(layout, world_xz, local_zones, job.terrain_samples)
+		var height := sample_root_height(layout, world_xz, job.terrain_zones, job.terrain_samples)
 		if height < 1.2:
 			continue
 		var yaw := _hash01(x, z, coord.y, coord.x + 117) * TAU
@@ -510,6 +576,14 @@ static func _in_flatten(world_xz: Vector2, flatten_zones: Array) -> bool:
 		if absf(local.x) <= pad.x and absf(local.y) <= pad.y:
 			return true
 	return false
+
+
+static func _in_flatten_indexed(world_xz: Vector2, index: Dictionary) -> bool:
+	if index.is_empty(): return false
+	var key := Vector2i(floori(world_xz.x / ForestField.EXCLUSION_CELL_M), floori(world_xz.y / ForestField.EXCLUSION_CELL_M))
+	# Preserve this safety predicate's legacy half-falloff behavior. The field
+	# mask itself still uses its full original exclusion test.
+	return _in_flatten(world_xz, index.buckets.get(key, [])) or _in_flatten(world_xz, index.large)
 
 
 static func _hash01(a: int, b: int, c: int, d: int) -> float:

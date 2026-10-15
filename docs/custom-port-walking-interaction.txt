@@ -1,0 +1,39 @@
+CUSTOM PORT WALKING INTERACTION ACCEPTANCE
+
+Run tests/custom_port_walking_interaction_test.tscn natively with
+-- --shipyard-playtest --capture and an isolated APPDATA profile.
+
+This starts the actual fishing workshop, waits for walking terrain readiness,
+and uses the real PlayerCamera. Teleports arrange two short approaches; public
+look-yaw control plus ordinary mouse motion aims the camera. Physical F and
+Escape key events pass through the normal input pipeline. The test never calls
+the operator interaction handler or inspector opening method.
+
+Verified natively on 15 October 2026 after the exterior-only change: 20 checks passed.
+The player stands on the quay; F targets the placed fish operator and opens
+Cargo for fish-receiver and Nordlys. The panel pauses walking without changing
+the port record. Escape resumes the same first-person walking controls. F at
+the decorative workshop entrance does nothing and publishes no revision. The
+actual walking player is blocked by its closed collision. Buildings have no
+accessible interiors; NPCs remain outside.
+
+Three first-person captures were saved in the required machinescreenshots
+archive and visually inspected: facing the operator, the Cargo panel beside
+the operator, and the closed decorative door. This complements the
+separate cargo-transfer tests; it does not claim automated pathfinding or
+multiplayer interaction integration.
+
+PAUSED-CAMERA INPUT REGRESSION
+
+tests/custom_port_modal_interaction_test.tscn reproduces the paused-camera case
+with the same actual player and operator. Before the fix, F opened Cargo while
+building or with a released cursor, replaced an open chart, reset the selected
+inspector tab, and toggled a door while the cursor was released.
+
+The workshop now consumes world-interaction presses while construction,
+modal UI, surveying, or a ground-readiness transition owns input. Printable
+input still reaches an editable text field, so typing f in the asset search
+does not disappear. Normal walking and active helm routing remain unchanged;
+production NPC classes are not modified. The focused native regression checks
+the four paused modes, real search typing, door blocking, and immediate return
+to ordinary walking interaction.

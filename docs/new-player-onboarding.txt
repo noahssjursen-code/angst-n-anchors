@@ -1,0 +1,86 @@
+NEW PLAYER ONBOARDING — IMPLEMENTED FLOW
+15 October 2026
+
+Play from scenes/ui/main_menu.tscn (or run the project normally).
+Create a NEW captain to review onboarding. Existing captains keep their saved
+home, fleet, balances and contracts; this does not reset or migrate them.
+
+1. Choose singleplayer or a multiplayer server; create captain/company identity.
+2. Select a coastal plot on the native map. No fishing/cargo/bulk career screen.
+3. Confirm the included finished Littlehaven port. The local authority or MP
+   server claims it, persists its complete construction and grants a personal rod.
+   The existing captain setup grants one Coastal Line Fisher into fleet storage.
+4. Spawn on the actual quay. The tablet welcomes you on My fleet.
+5. View the fishing boat -> Select berth and deploy -> click the green berth in
+   the overhead view -> Deploy vessel. Normal ship/gangway/ownership systems apply.
+6. J opens the tablet. Shipyard purchases go into the existing fleet; Harbour
+   services handles storage, crane/landing actions and passenger terminals.
+   Contracts uses existing cargo offers and cancellation. TAB remains inventory.
+
+Physical service characters are hidden, including their interaction colliders.
+Their existing service adapters remain as invisible facilities. No duplicate
+ship economy, cargo simulation or second port renderer was introduced.
+
+Data and authority
+- HomePortService routes port.home.options / port.home.claim through WorldGateway.
+- Local captain saves contain home_port_document, with full-precision JSON.
+- MP owns custom_port (public), player_home (private), and player_inventory
+  (private). Claim and starter rod commit in one authority transaction.
+- Retry/reconnect returns the same home. Different players cannot claim one plot.
+- Server claims use a trusted surveyed template, never client-uploaded geometry.
+- Other clients fetch the public document and reconstruct it using the existing
+  CustomPortStreamer/CustomPortPresenter. Scene residency is distance controlled.
+- PlayerPortPlot connects derived berths to HarbourController and normal vessel
+  deployment. Server checks the stored berth's allowed hulls before accepting it.
+- Unknown/broken custom homes fail closed rather than replacing the saved home
+  with a generated port. Existing generated ports still provide commercial work.
+
+Coastal survey
+StarterPortSites fits the common starter layout to cardinal shoreline orientations,
+checks plot containment, terrain access, water depth and vessel fit, excludes world
+edges, generated ports and bridge corridors, and extends supports to the seabed.
+Singleplayer surveys the chosen world's sites. Multiplayer embeds a compressed
+trusted catalogue: seed 72482, generation 12, standard 40 km world, 1,076 sites.
+A changed MP seed/geography requires regenerating that catalogue before new claims.
+Existing homes retain their own full documents.
+
+Regenerate MP survey
+Run tests/export_starter_sites.tscn headless using the project's Godot executable.
+Optional arguments after --: --seed=<seed> --output=<absolute JSON file>.
+Compress that output to internal/authority/starter_sites.json.gz in the MP repo,
+then rebuild the server. Do not commit the uncompressed intermediate catalogue.
+The checksum and generation must match the game build.
+
+Review and tests
+- tests/home_onboarding_review.tscn -- --shipyard-playtest --full-world
+  Uses an isolated in-memory captain, the real map, actual world/port renderer,
+  fleet/shipyard tablet and clickable berth camera. Saves screenshots under
+  C:/Users/noahs/Pictures/machinescreenshots. Does not alter normal captain saves.
+- MP tests/home_ports_integration.ps1: disposable PostgreSQL/server, two accounts,
+  ownership/isolation, plot conflict, public document, berth dimensions, restart,
+  retry and exactly-one starter rod. Removes only its own test resources.
+- Pass -Godot <executable> to that script to also run tests/home_remote_review.tscn
+  from the sibling game repo. This checks two real HTTP gateway connections and
+  reconstructs both server-owned ports through the native port presenter.
+- Go tests: ./internal/authority ./internal/db ./internal/transport/httpapi.
+
+Scope and remaining boundaries
+This integrates the starter port and tablet onboarding. It does not expose the
+workshop's arbitrary port editing/plot expansion as MP-authorized commands yet.
+Production, processing, hired crews and future industry remain separate work.
+The commercial generated harbours retain their existing capabilities. Littlehaven
+is a fishing home; its small berth cannot take a larger cargo ship until expanded.
+The matching localhost Docker server was rebuilt and reports ready with generation
+12. Its existing database was preserved. DigitalOcean was not deployed.
+
+Verified results (15 October evening)
+- Real-world native onboarding: all checks passed, including actual purchase,
+  exact wallet debit, visible berth click and fishing-vessel deployment.
+- Native menu regression: 23 passed. Tablet regression: 29 passed; existing
+  tablet fixture reports ObjectDB cleanup leaks at shutdown, with no failed checks.
+- HTTP/PostgreSQL and two native remote gateways: all checks passed, including
+  the live custom-port event reaching the second client and both renderers loading.
+- Screenshots reviewed: home-onboarding-1792088323-29764-{choose-plot,welcome,choose-berth}.png
+  and home-onboarding-1792088674-11484-{arrive,shipyard,deployed}.png in the archive.
+- Full MP gameplay with two visible sailing clients has not been replayed in
+  this pass; port publication/reconstruction and berth claims were exercised.

@@ -1,0 +1,38 @@
+CUSTOM PORT COMMAND VALIDATION
+
+The mutable cargo/berth state and the construction geometry share one authority
+document. A cargo operation must still validate stock, installed hold packing,
+permissions, reservations, occupancy and all quantities. It need not derive the
+same platform union, support polygons and berth topology again.
+
+CustomPortState reuses geometry only from its own successfully validated current
+revision, with an internally copied catalog. The candidate must have exactly
+the same port/world identity, origin, plane, plots, placements, water evidence,
+berth rules and store metadata. Only store lots may differ. A fresh from_dict
+always validates construction in full. Failed previews and speculative event
+candidates cannot replace the committed geometry cache. Public projections are
+copies, so a caller cannot edit the cache through an accessor.
+
+Measured locally on the complete 674-placement Nordvik example, 15 October 2026:
+                       Before             After
+  Initial import       77.7 ms            76.3 ms
+  Dock                 95.6 ms            33-34 ms
+  Reserve cargo        91.4 ms            33-34 ms
+  Load                 93.2 ms            33-34 ms
+  Unload               92.4 ms            33-34 ms
+  Undock               68.1 ms            33-34 ms
+
+These are single-machine probe results, not frame-time guarantees or server
+capacity claims. Cold imports and structural edits still do full validation.
+Serialization and validation of the dynamic document remain measurable work.
+
+tests/custom_port_performance_probe.tscn reproduces the isolated probe.
+tests/custom_port_data_test.tscn passed 423 checks after this change, including
+failed speculative edits, accepted structural removal, dock/cargo commands,
+event reconstruction and comparison against fresh full validation after each
+command. Fresh documents with altered sea plane or inadequate water still fail.
+The catch-specific authority suite passed 65 checks without changes to packing.
+
+Evidence is in the chat outputs/custom-port-performance-before.log,
+custom-port-performance-after.log, custom-port-data-cache.log and
+custom-port-catch-cache.log. No network service or production deployment changed.

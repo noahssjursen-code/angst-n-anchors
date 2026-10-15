@@ -735,6 +735,8 @@ func _remote_document_state() -> Dictionary:
 	state.erase("owned_vessels")
 	state.erase("active_vessel")
 	state.erase("ship_runtime_state")
+	state.erase("personal_inventory")
+	state.erase("local_fishing")
 	return state
 
 

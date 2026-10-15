@@ -2,7 +2,7 @@ class_name ShipGangway
 extends Node3D
 
 ## Boarding stays down while both helm-ordered lines are fast. Cast-off stows it.
-## Authored ship-end hinge follows the hull; shore rollers land on actual quay physics.
+## Authored ship-end hinge follows the hull; the shore tongue lands on actual quay physics.
 const SPAN_MODEL := "res://resources/models/parts/gangway/boarding_gangway_4m.glb"
 const ROLLER_MODEL := "res://resources/models/parts/gangway/gangway_landing_rollers.glb"
 const WIDTH := .90
@@ -21,6 +21,7 @@ var _active_gate: Node3D
 var _active_closed := Transform3D.IDENTITY
 var _walk: AnimatableBody3D
 var _floor: CollisionShape3D
+var _landing_floor: CollisionShape3D
 var _guards: Array[CollisionShape3D] = []
 var _span: Node3D
 var _rollers: Node3D
@@ -29,6 +30,28 @@ var _shore_valid := false
 var _berth: QuayBerthSlot
 var _side := 0
 var _heard_deployed := false
+var _has_berth_projection := false
+var _projected_berth: QuayBerthSlot
+var _projected_secured := false
+
+## Read-only scene projection for an already accepted berth assignment. This
+## supplies the same semantic inputs as live mooring without registering a
+## second harbour authority or staging legacy freight. Ordinary ships never
+## enable this override and keep the existing two-lines-fast requirement.
+func apply_berth_projection(slot: QuayBerthSlot, secured: bool) -> void:
+	if _has_berth_projection and _projected_berth==slot and _projected_secured==secured: return
+	_has_berth_projection=true
+	_projected_berth=slot
+	_projected_secured=secured
+	_probe_time=0
+	_shore_valid=false
+	if not secured or not is_instance_valid(slot): _stow("Not moored")
+
+func clear_berth_projection() -> void:
+	_has_berth_projection=false
+	_projected_berth=null
+	_projected_secured=false
+	_stow("Not moored")
 
 func _ready() -> void:
 	process_physics_priority = -5
@@ -42,6 +65,7 @@ func _ready() -> void:
 	_walk.top_level = true
 	_walk.set_meta("_boat_owner", boat)
 	_floor = _box(Vector3(WIDTH,.10,4), Vector3(0,-.05,-2))
+	_landing_floor = _box(Vector3(.88,.025,.50), Vector3.ZERO)
 	for side in [-1,1]:
 		_guards.append(_box(Vector3(.07,.98,4), Vector3(side*.49,.51,-2)))
 	_span = (load(SPAN_MODEL) as PackedScene).instantiate()
@@ -96,10 +120,11 @@ func refresh_gates() -> void:
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(boat) or _walk == null: return
 	var mooring := boat.get_node_or_null("ShipGameplay/MooringComponent") as MooringComponent
-	var berth := boat.get_moored_berth() as QuayBerthSlot
+	var berth := _projected_berth if _has_berth_projection else boat.get_moored_berth() as QuayBerthSlot
+	var secured := _projected_secured if _has_berth_projection else (mooring!=null and mooring.bow_line_tied and mooring.stern_line_tied)
 	# Both lines, ordered from the helm. A single bollard toggle must not
 	# drop the span out from under someone crossing to the quay.
-	if mooring == null or not mooring.bow_line_tied or not mooring.stern_line_tied or berth == null:
+	if not secured or not is_instance_valid(berth):
 		_stow("Not moored")
 		return
 	var toward := boat.to_local(berth.global_position)
@@ -129,7 +154,7 @@ func _physics_process(delta: float) -> void:
 	# Overlap the deck with a slightly buried toe. A raised 35 mm vertical lip
 	# can arrest CharacterBody movement when the hull rolls during disembarking.
 	var local_end := closed * Vector3(0,-.015,-.5)
-	local_end.x -= side*.45
+	local_end.x -= side*.55
 	ship_end = boat.to_global(local_end)
 	if probing:
 		_shore_valid = _find_shore(berth)
@@ -146,10 +171,17 @@ func _physics_process(delta: float) -> void:
 		_active_gate = gate
 		_active_closed = closed
 	gate.transform = closed * Transform3D(Basis(Vector3.UP,-side*PI*.5),Vector3.ZERO)
+	# Frozen snapshot ships do not run their vessel physics tick. The existing
+	# moving gate collider must still follow its hinge before someone boards.
+	if _has_berth_projection: boat._sync_moving_part_colliders()
 	var length := span.length()
 	_walk.global_transform = Transform3D(Basis.looking_at(span,Vector3.UP),ship_end)
 	_span.scale.z = length/4.0
-	_rollers.position.z = -length
+	# The shore tongue rests on the quay independently of the hull's slope.
+	var flat_direction := Vector3(span.x,0,span.z).normalized()
+	_rollers.global_transform = Transform3D(Basis.looking_at(flat_direction,Vector3.UP),shore_end)
+	var tongue_direction := flat_direction*.5-Vector3.UP*.05
+	_landing_floor.global_transform = Transform3D(Basis.looking_at(tongue_direction,Vector3.UP),shore_end+tongue_direction*.5-Vector3.UP*.0125)
 	(_floor.shape as BoxShape3D).size.z = length
 	_floor.position.z = -length*.5
 	for guard in _guards:
@@ -199,7 +231,9 @@ func _clear_gate(side: int) -> Dictionary:
 func _find_shore(berth: QuayBerthSlot) -> bool:
 	var water := berth.water_dir_local.normalized()
 	var point := berth.to_local(ship_end)
-	point += water*(berth.face_offset_m-.9-point.dot(water))
+	# Meet the actual lip: a sloping ramp aimed 0.9 m inland intersects the quay.
+	# Keep the final frame outside the face; the shallow hinged tongue overlaps it.
+	point += water*(berth.face_offset_m-.04-point.dot(water))
 	var target := berth.to_global(point)
 	var query := PhysicsRayQueryParameters3D.create(target+Vector3.UP*5,target-Vector3.UP*8,BoatBody.LAYER_WORLD)
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
@@ -214,12 +248,13 @@ func _find_shore(berth: QuayBerthSlot) -> bool:
 	clearance.transform.origin = hit.position+Vector3.UP*.96
 	clearance.collision_mask = BoatBody.LAYER_WORLD
 	if not get_world_3d().direct_space_state.intersect_shape(clearance,1).is_empty(): return false
-	shore_end = hit.position+Vector3.UP*.035
+	shore_end = hit.position+Vector3.UP*.05
 	return true
 
 func _close_gate() -> void:
 	if is_instance_valid(_active_gate):
 		_active_gate.transform = _active_closed
+		if _has_berth_projection and is_instance_valid(boat) and boat.is_inside_tree(): boat._sync_moving_part_colliders()
 	_active_gate = null
 
 func _stow(reason: String, clear_berth := true) -> void:

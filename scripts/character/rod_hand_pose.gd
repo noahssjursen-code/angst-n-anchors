@@ -13,8 +13,8 @@ func _process_modification_with_delta(_delta: float) -> void:
 	var skeleton := get_skeleton()
 	if skeleton == null or not is_instance_valid(rod): return
 	if _bones.is_empty():
-		_contacts = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/characters/hand_contacts.json"))
-		_grips = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/characters/hand_grips.json"))
+		_contacts = JSON.parse_string(FileAccess.get_file_as_string(CharacterVisual.HAND_CONTACTS_PATH))
+		_grips = JSON.parse_string(FileAccess.get_file_as_string(CharacterVisual.HAND_GRIPS_PATH))
 		for side in ["L", "R"]:
 			for part in ["upper_arm", "forearm", "forearm_twist", "hand", "index_01", "index_02", "index_03", "middle_01", "middle_02", "middle_03", "ring_01", "ring_02", "ring_03", "little_01", "little_02", "little_03", "thumb_01", "thumb_02"]:
 				var name: String = part + "." + side
@@ -40,7 +40,8 @@ func _process_modification_with_delta(_delta: float) -> void:
 		var fingers := (-rod.global_basis.x*.9396926+rod.global_basis.y*.3420201) if side == "L" else -rod.global_basis.z
 		var knuckles := (rod.global_basis.x*.3420201+rod.global_basis.y*.9396926) if side == "L" else rod.global_basis.y
 		if handline:
-			fingers=-rod.global_basis.y
+			# Support the handline from below; downward fingers force wrist hyperflexion.
+			fingers=rod.global_basis.y
 			knuckles=rod.global_basis.z
 		var hand_basis := Basis(fingers.cross(knuckles),fingers,knuckles).orthonormalized()
 		var contact_data: Array = _contacts[side].palm_contact
@@ -62,6 +63,7 @@ func _process_modification_with_delta(_delta: float) -> void:
 		pole=(pole-axis*pole.dot(axis)).normalized()
 		_aim(skeleton,upper,lower,shoulder+axis*along+pole*height)
 		_aim(skeleton,lower,hand,shoulder+axis*distance)
+		preload("res://scripts/character/forearm_pronation.gd").align(skeleton,lower,hand,_bones["forearm_twist."+side],knuckles)
 		var pose := skeleton.get_bone_global_pose(hand)
 		# Blender-authored hand frame: +Y fingers, +Z knuckles, -Z palm.
 		# Fingers cross the handle; palms face into it, not away from the body.

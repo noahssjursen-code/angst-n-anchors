@@ -24,6 +24,7 @@ var _halo: MeshInstance3D
 var _body: StaticBody3D
 var _decorative_only: bool = false
 var _lifting_frame: Node3D
+var service_discovery_enabled := true
 
 func dimensions_m() -> Vector3:
 	return unit.dimensions_m() if unit != null else ContainerUnit.TYPES["20ft"]
@@ -33,7 +34,7 @@ func lift_height_m() -> float:
 
 
 func _ready() -> void:
-	add_to_group(GROUP)
+	if service_discovery_enabled:add_to_group(GROUP)
 
 
 func setup(u: ContainerUnit, decorative_only: bool = false) -> void:

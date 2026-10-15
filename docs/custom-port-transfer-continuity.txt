@@ -1,0 +1,55 @@
+Custom port transfer continuity — 15 October 2026
+
+Opening an office door previously stopped every active crane/grab/pump because
+the transfer facade reset on every newer snapshot. The suspended container or
+interpolated fish/bulk fill then jumped directly to its committed destination.
+The focused reproduction failed for all three cargo families.
+
+CustomPortTransferPresenter now keeps playback for a deliberately narrow set of
+contiguous, receipt-matched authority updates:
+- edit_assets changing only door_open or wall_colour on existing, unrelated
+  decoration placements;
+- rename_port changing only the harbour name.
+
+All other document fields, stores, vessel records, reservations, derived berths,
+and existing receipts must remain identical. The selected equipment, store,
+ship, installed cargo interfaces and container destinations must remain the same
+live nodes at the same stationary world transforms. A door's full rotation
+envelope must stay clear of the active handling bounds. The presenter applies
+the new door/name immediately without rebuilding the unchanged handling nodes.
+
+This is visual continuity, not another job authority. Committed cargo records
+remain authoritative. New transfers, revision gaps, unaccompanied snapshots,
+departures, cancellations, replaced resources, changed poses and unknown edits
+continue to reset playback and reveal the accepted destination state. A nearby
+door that intersects the conservative handling bounds may still interrupt;
+this deliberately favors safe cleanup over assuming new geometry is harmless.
+
+The replacement checks also exposed existing freed-object cleanup failures:
+assigning a freed crane/pump to a typed variable raised before the validity
+check. Container, bulk and catch cleanup now validate such references before
+typed access, so replaced equipment does not strand jobs or temporary visuals.
+
+Focused verification
+Run tests/custom_port_transfer_update_test.tscn with --shipyard-playtest and an
+isolated APPDATA profile; add --capture for the native archived review.
+
+Native D3D12 run: 106 checks passed; no script errors or leaked-object warnings.
+It uses the actual full Nordvik harbour, compact fishing pier, installed ships,
+authority-issued transfers and the same owner edit_assets remove/place door
+command used by the walking workshop. It verifies suspended container/grab and
+connected hose continuation, exact completion amounts, unchanged manifests,
+rename continuity, departure cleanup for every cargo family, snapshot gaps,
+replacement snapshots, a new transfer, moved vessel, an unsafe door sweep,
+freed/replaced equipment for every cargo family, and reservation cancellation.
+
+Evidence in the chat outputs directory:
+custom-port-transfer-update-before.log — original interruption reproduction.
+custom-port-transfer-update-native.log — final 106-check native result.
+
+Native capture, visually reviewed:
+C:/Users/noahs/Pictures/machinescreenshots/custom-harbour-assets-1792033253-585-door-update-fish-pump.png
+The connected Nordlys hose remains visible after the office door/name updates.
+
+No production authority, cargo accounting, workshop input handling or broad
+unchanged test suites were changed or rerun for this fix.

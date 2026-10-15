@@ -1,0 +1,136 @@
+CUSTOM PORT DISTANCE STREAMING
+15 October 2026
+
+Open scenes/showcases/custom_port_streaming_showcase.tscn with
+-- --shipyard-playtest, or run start-port-workshop.ps1 -Travel.
+Add -Capture to run the native travel checks and archive the four views.
+
+To travel between your own saved documents, pass one or more absolute or relative
+file paths from PowerShell:
+
+  .\start-port-workshop.ps1 -Travel -TravelPortFiles @('C:\Ports\home.json', 'C:\Ports\yard.json')
+
+Add -Capture to visit each imported port, depart beyond every registered port's
+unload radius, return and verify the reconstructed data. The native views are
+archived in C:/Users/noahs/Pictures/machinescreenshots. Nearby imported ports may
+load together; review assertions account for their actual distance and hysteresis.
+The engine equivalent repeats --travel-port-document=<absolute path> after --.
+
+The file selection is checked as a whole before any port is installed: repository
+format/checksum, expected world identity, construction plane, and real vessel
+fitout must all validate. Choose only one document per port id, including when
+you have both an initial and a later operating snapshot of that port. Duplicate
+ids and conflicting revisions reject the entire selection without loading a
+partial result. A recovered backup is visibly reported and also stays unchanged.
+Different port ids also cannot claim overlapping world plots or conflicting plot
+identities. Adjacent plots sharing only their boundary are valid. Plot coordinates
+are compared in world space using each document's saved origin.
+
+Imported travel is read-only. There is no autosave, no demo pallet-edit command,
+and no alteration of the input files. Capture review compares their bytes before
+and after travelling. The dropdown contains every saved port's actual name;
+1 and 2 visit the first two when available, 3 travels offshore. Tab/WASD/Q/E/Shift
+retain the normal free-camera controls. TravelPortFiles requires -Travel and
+cannot be combined with the editable workshop's -PortFile or -Empty.
+
+Without TravelPortFiles, 1 visits Nordvik, 2 visits a separate woodland cliff workshop, 3 moves offshore,
+and 4 edits Nordvik through CustomPortState while the camera can be elsewhere.
+Tab releases/captures the free camera; WASD, Q/E and Shift move it. The cliff
+workshop is a deliberate deep-excavation stress case, not a surveyed cargo berth.
+This review has no walking player; the editable workshop supplies actual walking,
+boarding and terrain-collision review.
+
+HOW IT WORKS
+
+CustomPortStreamer is a scene-owned, read-only consumer of authorized snapshots.
+It uses the existing ProximityLoader and the same CustomPortPresenter as the
+workshop. Configure the expected world identity and catalog, bind the terrain
+and forest streamers, then call upsert_record(snapshot). No new autoload exists.
+
+The load radius is 1,400 m plus half the diagonal of the built bounds. Unloading
+adds the existing 800 m hysteresis. ProximityLoader performs one lifecycle
+operation per frame and checks distance every second. Telemetry uses a separate
+world.custom_ports provider. Expanding a port updates its bounds automatically.
+
+Distance unloading removes models, not records, cargo, reservations, terrain cuts
+or tree clearance. A newer record received while away becomes visible on return.
+The actual player standing within the built bounds plus 4 m keeps an already
+loaded port resident if freecam travels away. This does not load distant ships.
+
+Only explicit authority deletion calls remove_record(id, revision). Its revision
+must advance a live record; a retained tombstone rejects delayed older snapshots.
+It is different from interest loss. Feed complete snapshots from the eventual
+WorldGateway source; do not interpret an omitted interest result as demolition.
+
+Invalid or wrong-world records leave the last valid record intact. Older updates
+reject before geometric validation. Exact and canonical duplicate snapshots are
+safe no-ops; new content still receives full CustomPortState validation. Reads
+return copies. Conflicting content at the same revision cannot overwrite a port.
+The shared real-world import policy also requires the single deck plane at 2 m
+above sea level (world Y=0.5). Generic data simulations can still represent other
+explicit world datums. Physical vessel evidence must match its actual prebuilt
+layout; changing a declared hold capacity cannot create invisible cargo space.
+
+World origins are applied once, including under a transformed scene parent.
+The presenter skips simulation vessels. Production vessel replicas keep their
+own lifetime and authority; port unloading cannot delete an independent ship.
+Presenter-owned crane callbacks stop safely when their port leaves the tree.
+
+clear() and configure() return a result. If an integration incorrectly parents
+the active player boat beneath a port, the existing loader protection refuses
+cleanup atomically with occupied_presentation; bookkeeping is not discarded.
+Detach the vessel into its normal owner before retrying. The freecam walking
+retention rule only affects distance unloading, not explicit authority deletion.
+
+ENVIRONMENT
+
+Known documents supply CustomPortEarthworks projections for terrain and exact
+forest-clearance polygons. Those projections survive model unloading. Building,
+removing and undoing footprints updates near/distant trees reversibly. Actual
+geometry signatures prevent cargo-only updates rebuilding ground or forests.
+
+Use one CustomPortStreamer for a world's terrain collection. Its environment
+binding owns that custom-port collection; multiple independent consumers sharing
+one terrain setter would overwrite each other's lists. Generated-port and bridge
+modifiers remain separate and are preserved. Rebinding or leaving the scene
+clears this consumer's environmental projections, without writing saved data.
+
+LIMITS
+
+This is a verified presentation integration, not a deployed multiplayer service.
+No custom-port DB endpoints, company ledger transactions, production directory
+registration or NPC trade service is added by this consumer. Live vessel binding
+for crane playback must use the existing replicas; the current transfer workshop
+still uses its own isolated fixture vessels. Do not advertise an unsurveyed quay
+as a working production freight terminal merely because its model is loaded.
+
+A genuinely new 674-placement snapshot currently validates in about 85-90 ms on
+the review machine. Duplicate processing is about 11 ms (canonical equivalent
+about 19 ms), and a stale revision about 0.007 ms. One queued operation per frame
+does not make an entire new port build asynchronous. Large new records can still
+cause a brief hitch; do not claim constant 60 fps or send full snapshots per frame.
+
+VERIFICATION
+
+The travel review also exposes M / Chart. It shows exact constructed footprints
+and passive company references from the latest retained documents, including
+ports currently unloaded by distance. Closing the chart restores the previous
+fly/cursor state. See docs/custom-port-chart.txt for the deliberately limited
+public data contract and no-generated-port fallback checks.
+
+tests/custom_port_streaming_test.tscn covers revisions, canonical retries,
+tombstones, queued cancellation, world identity, atomic cleanup, walking-player
+retention and separate identical loader registrations.
+tests/custom_port_streaming_lifecycle_test.tscn checks presenter modes, teardown,
+discovery groups and external vessel survival.
+tests/custom_port_travel_documents_test.tscn checks one/many source files,
+duplicate ids, whole-batch rejection, world/plane/fitout incompatibility,
+reported read-only recovery and preservation of every source file.
+The native travel scene verifies actual near/far terrain, forest and port models,
+remote edits while away and reconstruction on return. Screenshots are archived in
+C:/Users/noahs/Pictures/machinescreenshots.
+
+Direct F6 launch is included in ShipyardPlaytestMode's early detection, before
+autoloads may open saves. A fresh-profile launch without the explicit flag created
+only world-generation caches, with no captain/save index. The helper additionally
+supplies the flag and a separate profile.

@@ -1,5 +1,35 @@
 extends Node
 
+## Tablet services use the same authority adapters as the former walk-up staff.
+func get_tablet_port_services() -> Array[NpcInteractable]:
+	var result:Array[NpcInteractable]=[]
+	var player:=get_tree().get_first_node_in_group("player") as Node3D
+	if player==null:return result
+	for node in get_tree().get_nodes_in_group("port_tablet_service"):
+		if node is NpcInteractable and node.global_position.distance_to(player.global_position)<=600.0:
+			result.append(node)
+	result.sort_custom(func(a,b):return a.global_position.distance_squared_to(player.global_position)<b.global_position.distance_squared_to(player.global_position))
+	return result
+
+func sell_home_catch(port_id: String) -> Dictionary:
+	return await HomeFishSale.sell(port_id)
+
+func get_tablet_harbour() -> HarbourMasterNpc:
+	for service in get_tablet_port_services():
+		if service is HarbourMasterNpc:return service
+	return null
+
+func get_tablet_vessel_market() -> Dictionary:
+	# Reading the catalogue does not require a character at the player's port.
+	var adapter:=ShipwrightNpc.new()
+	var result:=PortServiceDesk.describe(adapter)
+	adapter.free()
+	return result
+
+func buy_tablet_vessel(payload:Dictionary) -> Dictionary:
+	if PlayerSession.is_remote_voyage():return await PlayerSession.purchase_remote_yard_vessel(payload)
+	return PlayerSession.purchase_yard_vessel(payload)
+
 ## Per-client view of the player and their world. Single source of truth
 ## that UIs consult to ask "what is *my* player doing?".
 
@@ -37,11 +67,13 @@ func service_snapshot(npc: NpcInteractable) -> Dictionary:
 
 func get_voyage_snapshot() -> Dictionary:
 	var ship := get_active_ship() as BoatBody
-	_view_rod = ship.get_node_or_null("RodFishingStation") as RodFishingStation if ship != null else null
-	var result := {"helming": is_helming(), "ship": false, "name": "", "objective": "Speak to the shipwright to buy your first vessel."}
+	var person:=get_tree().get_first_node_in_group("player")
+	var gear:=person.get_node_or_null("PersonalFishingEquipment") if person!=null else null
+	_view_rod=gear.station if gear!=null and is_instance_valid(gear.station) else null
+	var result := {"helming": is_helming(), "ship": false, "name": "", "objective": "Open your tablet's Shipyard to buy a vessel."}
 	if ship == null:
 		if _session != null and not _session.data.owned_vessels.is_empty():
-			result.objective = "Ask the harbourmaster to deploy your vessel at a suitable quay."
+			result.objective = "Press J · My fleet · Select a berth to deploy your vessel."
 		return result
 	var sounder := ship.get_node_or_null("ShipSounder")
 	if sounder != null: result["sonar"] = sounder.snapshot()
@@ -74,16 +106,16 @@ func get_voyage_snapshot() -> Dictionary:
 		result["rudder"] = rudder.rudder_input*rudder.max_rudder_angle_deg if rudder != null else 0.0
 		result["autopilot"] = controller.get_autopilot() != null and controller.get_autopilot().is_engaged()
 	var contracts := get_active_contracts()
-	result.objective = "Speak to the cargo agent for compatible work, or prepare your fishing gear."
+	result.objective = "Open Contracts on your tablet for work, or prepare your fishing gear."
 	for job in contracts:
 		if str(job.get("vessel_uid","")) != str(get_active_vessel_record().get("uid","")): continue
 		var quantity := float(job.get("quantity",0))
 		var loaded := float(job.get("loaded_quantity",0))
 		var delivered := float(job.get("delivered_quantity",0))
 		var destination := get_port_display_name(str(job.get("destination_port_id","")))
-		if loaded < quantity: result.objective = "Ask the quay operator to load your booked cargo."
+		if loaded < quantity: result.objective = "Open Harbour services on your tablet to load cargo."
 		elif ship.get_harbour_port_id() == str(job.get("destination_port_id","")):
-			result.objective = "Ask the receiving operator to unload. %.0f / %.0f delivered." % [delivered,quantity]
+			result.objective = "Open Harbour services to unload. %.0f / %.0f delivered." % [delivered,quantity]
 		else: result.objective = "Deliver cargo to %s. Open the chart to plan your passage." % destination
 		break
 	var passengers := get_passenger_voyage_snapshot()
@@ -106,7 +138,9 @@ func get_catch_library(hold_id: String) -> Dictionary:
 func get_interaction_hint() -> String:
 	if is_helming(): return "F  Leave helm"
 	var ship := get_active_ship()
-	var rod := ship.get_node_or_null("RodFishingStation") as RodFishingStation if ship != null else null
+	var person:=get_tree().get_first_node_in_group("player")
+	var gear:=person.get_node_or_null("PersonalFishingEquipment") if person!=null else null
+	var rod:RodFishingStation=gear.station if gear!=null and is_instance_valid(gear.station) else null
 	if rod != null:
 		if rod.can_interact(): return rod.equipment_prompt()
 	var pots: Node = ship.get_node_or_null("CrabPotStation") if ship != null else null
@@ -222,6 +256,10 @@ func get_helmed_boat() -> Node:
 
 
 func get_active_ship() -> Node:
+	var person:=get_tree().get_first_node_in_group("player")
+	if person!=null and person.has_method("standing_vessel"):
+		var aboard:=person.standing_vessel() as BoatBody
+		if aboard!=null:return aboard
 	return PlayerVessel.find_active_ship(get_tree())
 
 
@@ -415,3 +453,9 @@ func get_tablet_snapshot() -> Dictionary:
 	return {"company": company, "captain": get_display_name(), "balance": get_marks(),
 		"voyage": get_voyage_snapshot(), "fleet": fleet, "jobs": get_active_contracts(),
 		"passenger": get_passenger_voyage_snapshot(), "remote": WorldGateway.is_remote(), "connected": WorldGateway.is_ready()}
+
+func get_personal_inventory() -> Dictionary:
+	return PersonalInventory.snapshot()
+
+func get_personal_inventory_ready() -> bool:
+	return PersonalInventory.ready_for_use and WorldGateway.is_ready()

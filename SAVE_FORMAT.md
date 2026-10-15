@@ -197,3 +197,14 @@ fish (up to 5 kg each); the heavy-pilk rod targets individuals from 1.5 kg.
 Both lower vertically with RMB and retrieve with LMB. Trap consumable use remains
 outside this fishing-boat feature.
 Tests: vessel_equipment_test, voyage_ui_test; F6 equipment_shop_showcase.
+
+## Personal inventory (v7)
+
+`player.personal_inventory` is `{version:1, slots:[30 item records], selected_slot:-1..5, clothing:{}}`.
+Slots 0-5 are quick access and 6-29 are the bag. An empty slot is `{}`. Items have
+`uid`, `item_id`, `quantity` and JSON-safe `attributes`. Selection references a
+hotbar slot; moving selected gear stows it. Paid legacy rod/harpe purchases migrate
+to personal slots once; unconverted overflow stays in the vessel record.
+Multiplayer personal inventory is a private `player_inventory` authority projection,
+excluded from the client captain document. Server commands commit item purchases,
+NOK debits, receipts and events together. Company warehouse lots stay independent.

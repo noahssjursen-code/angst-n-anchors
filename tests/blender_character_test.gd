@@ -20,18 +20,15 @@ func _ready() -> void:
 	appearance.skin_color = Color(.25,.13,.08)
 	actor.apply_appearance(appearance)
 	assert(appearance.to_dict() == CharacterAppearance.from_json_string(appearance.to_json_string()).to_dict())
-	assert(not visual.get_part("Body_Torso").visible)
-	assert(not visual.get_part("Body_Arms").visible)
-	assert(not visual.get_part("Body_Legs").visible)
-	assert(not visual.get_part("Body_Feet").visible)
-	assert(not visual.get_part("Base_Shorts").visible)
-	assert(visual.get_part("Headwear_Hardhat").visible)
-	assert(not visual.get_part("Headwear_Cap").visible)
-	assert(not visual.get_part("Hair_Crop").visible)
+	# Saved wardrobe IDs remain compatible data; the replacement is one unclothed base.
+	for part in ["Body", "Hands", "Head", "Neck", "Eyes"]:
+		assert(visual.get_part(part) is MeshInstance3D, "New base component: " + part)
+		assert(visual.get_part(part).visible)
+	for retired in ["Body_Torso", "Body_Arms", "Body_Legs", "Body_Feet", "Base_Shorts", "Headwear_Hardhat", "Headwear_Cap", "Hair_Crop", "Top_Sweater"]:
+		assert(visual.get_part(retired) == null, "Retired wardrobe must not load: " + retired)
 	for item in visual.find_children("*", "MeshInstance3D", true, false):
 		assert(item.skin != null, "Every component must share the authored rig")
-		assert(item.mesh.get_blend_shape_count() == 4)
-		for i in range(4): assert(is_equal_approx(item.get_blend_shape_value(i),1.0))
+		assert(item.mesh.get_blend_shape_count() == 0, "The new base does not claim unsupported body morphs")
 	var head := visual.get_part("Head") as MeshInstance3D
 	var other_head := other.visual.get_part("Head") as MeshInstance3D
 	assert(head.get_surface_override_material(0) != other_head.get_surface_override_material(0))
@@ -98,7 +95,7 @@ func _ready() -> void:
 					assert(initial[bone].angle_to(rotation)<.005, "Clip joins without a pose jump: "+clip+"/"+name)
 				previous[bone] = rotation
 	# Heel/toe roll can lift the ankle; horizontal stance still cancels travel.
-	var contract: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/characters/animation_contract.json"))
+	var contract: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/models/crew_base/animation_contract.json"))
 	for clip in ["walk", "run"]:
 		visual.animation_player.play(clip,0.0)
 		visual.animation_player.seek(0.0,true)
@@ -144,13 +141,10 @@ func _ready() -> void:
 	appearance.trousers_id = "none"
 	appearance.footwear_id = "none"
 	actor.apply_appearance(appearance)
-	assert(visual.get_part("Body_Torso").visible)
-	assert(visual.get_part("Body_Arms").visible)
-	assert(visual.get_part("Body_Legs").visible)
-	assert(visual.get_part("Body_Feet").visible)
-	assert(visual.get_part("Base_Shorts").visible)
-	assert(not visual.get_part("Top_Sweater").visible)
+	for part in ["Body", "Hands", "Head", "Neck", "Eyes"]:
+		assert(visual.get_part(part).visible, "Legacy clothing choices cannot hide the new base: " + part)
+	assert(visual.get_part("Top_Sweater") == null)
 	for folder in ["res://resources/data/models/characters", "res://resources/data/meshes/characters"]:
 		assert(not DirAccess.dir_exists_absolute(folder), "Do not restore retired JSON geometry")
-	print("BLENDER CHARACTER PASS: 50 bones, articulated fingertips, fixed joint positions/scales, continuous FK arms, seamless loops, palms inward, foot travel, morphs, coverage and save round-trip")
+	print("BLENDER CHARACTER PASS: 50 bones, articulated fingertips, fixed joint positions/scales, continuous FK arms, seamless loops, palms inward, foot travel, shared unclothed base, isolated skin tint and save round-trip")
 	get_tree().quit()

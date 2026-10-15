@@ -8,6 +8,8 @@ signal close_requested
 signal home_port_confirmed(port_id: String)
 signal home_port_cancelled
 signal port_selected(port_id: String)
+signal plot_selected(plot: Dictionary)
+signal plot_action_requested(plot: Dictionary)
 
 enum Mode { NAVIGATION, HOME_PORT_PICK }
 
@@ -24,6 +26,7 @@ const OVERLAY_DEBOUNCE_S := 0.28
 const INTERACTION_SETTLE_S := 0.16
 
 var mode := Mode.NAVIGATION
+var preview_mode := false
 var data
 var camera := CameraModel.new()
 var layers := LayerManager.new()
@@ -31,6 +34,8 @@ var renderer := Renderer.new()
 var nav := ChartNavSnapshot.new()
 
 var selected_port := ""
+var selected_plot := ""
+var hover_plot := ""
 var home_port_required_family := ""
 var hover_screen := Vector2(-1.0, -1.0)
 var dragging := false
@@ -41,6 +46,8 @@ var nav_elapsed := NAV_REFRESH_S
 var overlay_debounce := 0.0
 var overlays_dirty := true
 var first_visible_frame := true
+var camera_initialized := false
+var weather_elapsed := 0.0
 var interaction_settle := 0.0
 var last_ctx: Dictionary = {}
 var hover_rows: Array[String] = []
@@ -52,6 +59,20 @@ var hint_label: Label
 var weather_button: Button
 var center_button: Button
 var close_button: Button
+var plots_button: Button
+var zoom_in_button: Button
+var zoom_out_button: Button
+var plot_panel: PanelContainer
+var plot_heading: Label
+var plot_meta: Label
+var plot_body: Label
+var plot_focus: Button
+var plot_action: Button
+var plot_note: Label
+var plot_inspector_provider := Callable()
+var chart_clip: Control
+var geography_surface: ChartSurface
+var contact_surface: ChartSurface
 
 var pick_panel: PanelContainer
 var pick_title: Label
@@ -63,12 +84,19 @@ var pick_back: Button
 
 func _ready() -> void:
 	add_to_group("marine_chart")
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# CanvasLayer / Node parents do not supply a Control layout rectangle.
+	# This is a full-viewport overlay in gameplay and in isolated previews.
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_sync_viewport_size()
+	get_viewport().size_changed.connect(_sync_viewport_size)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_build_surfaces()
 	_build_toolbar()
 	_build_pick_panel()
+	_build_plot_panel()
+	resized.connect(_redraw_geography)
 	_load_layer_preferences()
 	_apply_mode_ui()
 	_refresh_pick_panel()
@@ -79,23 +107,35 @@ func _exit_tree() -> void:
 
 
 func set_data_snapshot(snapshot) -> void:
+	var same_world: bool = data != null and snapshot != null \
+		and data.layout_checksum == snapshot.layout_checksum \
+		and data.world_size_m == snapshot.world_size_m
 	data = snapshot
 	renderer.set_snapshot(data)
 	if data != null and data.layout != null:
 		camera.configure_world(float(data.layout.half_extent_m))
-	camera.user_moved = false
+	if not same_world:
+		camera.user_moved = false
+		camera_initialized = false
 	overlays_dirty = true
 	first_visible_frame = true
+	if not selected_plot.is_empty() and (renderer.plots.index == null \
+			or renderer.plots.index.get_plot(selected_plot).is_empty()):
+		selected_plot = ""
+	_refresh_plot_panel()
+	_redraw_geography()
 
 
 func enter_home_port_pick_mode(preselect_port_id: String = "") -> void:
 	mode = Mode.HOME_PORT_PICK
+	camera_initialized = false
 	selected_port = preselect_port_id.strip_edges()
 	layers.apply_preset(ChartLayerManager.Preset.NAVIGATION)
 	layers.set_visible("routes", false)
 	layers.set_visible("approaches", false)
 	## Home-port selection shows geography, not hidden fish populations.
 	layers.set_visible("weather", false)
+	layers.set_visible("plots", false)
 	_apply_mode_ui()
 	_refresh_mode_buttons()
 	_refresh_pick_panel()
@@ -104,6 +144,7 @@ func enter_home_port_pick_mode(preselect_port_id: String = "") -> void:
 	overlay_debounce = 0.0
 	first_visible_frame = true
 	visible = true
+	_redraw_geography()
 
 
 func set_home_port_required_family(family: String) -> void:
@@ -129,7 +170,7 @@ func get_selected_port_id() -> String:
 
 func open_navigation() -> void:
 	mode = Mode.NAVIGATION
-	if data == null or not data.is_valid() or not data.matches_live_tree(get_tree()):
+	if not preview_mode and (data == null or not data.is_valid() or not data.matches_live_tree(get_tree())):
 		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
 	## Reload prefs — home-port pick forces its own overlay set and must not
 	## stick on the shared gameplay chart after the captain sails.
@@ -139,6 +180,7 @@ func open_navigation() -> void:
 	overlay_debounce = 0.0
 	first_visible_frame = true
 	visible = true
+	_redraw_geography()
 
 
 func get_debug_stats() -> Dictionary:
@@ -150,7 +192,7 @@ func get_debug_stats() -> Dictionary:
 func ensure_live_data() -> bool:
 	## Home-port pick uses the preview snapshot only — never rebuild from the
 	## live world tree (and never thrash PortCatalog while the menu is up).
-	if mode == Mode.HOME_PORT_PICK:
+	if mode == Mode.HOME_PORT_PICK or preview_mode:
 		return data != null and data.is_valid()
 	if data == null or not data.is_valid() or not data.matches_live_tree(get_tree()):
 		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
@@ -180,18 +222,19 @@ func _process(delta: float) -> void:
 		return
 	if not ensure_live_data():
 		return
-	if ChartBaseRaster.poll_detail():
-		queue_redraw()
+	if ChartBaseRaster.poll_detail() or renderer.base.needs_redraw():
+		_redraw_geography()
 	if interaction_settle > 0.0:
 		interaction_settle = maxf(interaction_settle - delta, 0.0)
 		if interaction_settle <= 0.0:
 			## One detailed redraw after movement settles. Expensive layers never
 			## execute in the mouse-motion path.
-			queue_redraw()
+			_redraw_geography()
 	if first_visible_frame:
 		if mode != Mode.HOME_PORT_PICK:
 			_capture_nav()
-		_home()
+		if not camera_initialized:
+			_home()
 		first_visible_frame = false
 		if mode != Mode.HOME_PORT_PICK:
 			overlays_dirty = true
@@ -201,7 +244,14 @@ func _process(delta: float) -> void:
 		if nav_elapsed >= NAV_REFRESH_S:
 			nav_elapsed = 0.0
 			_capture_nav()
-			queue_redraw()
+			_redraw_contacts()
+		weather_elapsed += delta
+		if weather_elapsed >= 1.0 and layers.is_visible("weather") and not dragging:
+			weather_elapsed = 0.0
+			var previous := renderer.weather.rebuild_count
+			renderer.prepare_overlays(_camera_bounds(), layers, WeatherField.current_game_time())
+			if renderer.weather.rebuild_count != previous:
+				_redraw_geography()
 	if overlays_dirty:
 		overlay_debounce -= delta
 		if overlay_debounce <= 0.0 and not dragging:
@@ -211,7 +261,7 @@ func _process(delta: float) -> void:
 				WeatherField.current_game_time(),
 			)
 			overlays_dirty = false
-			queue_redraw()
+			_redraw_geography()
 
 
 func _input(event: InputEvent) -> void:
@@ -230,13 +280,14 @@ func _input(event: InputEvent) -> void:
 			)
 			## Skip weather/fishing hover samples while panning — those compose
 			## per cursor move and dominate drag lag when overlays are on.
-			queue_redraw()
+			_redraw_geography()
 			return
 		_refresh_hover_readout()
-		queue_redraw()
+		_redraw_contacts()
 		return
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
+		hover_screen = mouse.position
 		## Let the pick panel / toolbar own their clicks (Confirm, Back, etc.).
 		if _pointer_over_chrome(mouse.position):
 			if not mouse.pressed and dragging:
@@ -294,6 +345,9 @@ func _input(event: InputEvent) -> void:
 	elif key.keycode == KEY_W and mode != Mode.HOME_PORT_PICK:
 		_toggle_overlay("weather")
 		get_viewport().set_input_as_handled()
+	elif key.keycode == KEY_G and mode != Mode.HOME_PORT_PICK:
+		_toggle_overlay("plots")
+		get_viewport().set_input_as_handled()
 
 
 func _draw() -> void:
@@ -307,18 +361,156 @@ func _draw() -> void:
 		"world_bounds": bounds,
 		"world_span": camera.span,
 	}
-	renderer.render(
-		self,
-		last_ctx,
-		layers,
-		nav,
-		selected_port,
-		mode != Mode.HOME_PORT_PICK,
-		dragging or interaction_settle > 0.0,
-	)
-	_draw_compass(chart)
-	_draw_scale(chart, bounds)
 	_draw_status(chart)
+
+
+func _build_surfaces() -> void:
+	chart_clip = Control.new()
+	chart_clip.name = "ChartClip"
+	chart_clip.clip_contents = true
+	chart_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(chart_clip)
+	geography_surface = ChartSurface.new()
+	geography_surface.name = "CachedGeography"
+	geography_surface.chart = self
+	geography_surface.geography = true
+	geography_surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chart_clip.add_child(geography_surface)
+	contact_surface = ChartSurface.new()
+	contact_surface.name = "NavigationAndSelection"
+	contact_surface.chart = self
+	contact_surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chart_clip.add_child(contact_surface)
+
+
+func _sync_viewport_size() -> void:
+	position = Vector2.ZERO
+	size = get_viewport_rect().size
+	_redraw_geography()
+
+
+func surface_context() -> Dictionary:
+	var chart := _chart_rect()
+	return {"chart_rect": Rect2(Vector2.ZERO, chart.size),
+		"world_bounds": camera.world_bounds(chart.size), "world_span": camera.span}
+
+
+func _redraw_geography() -> void:
+	var chart := _chart_rect()
+	last_ctx = {"chart_rect": chart, "world_bounds": camera.world_bounds(chart.size),
+		"world_span": camera.span}
+	if chart_clip != null:
+		chart_clip.position = chart.position
+		chart_clip.size = chart.size
+		geography_surface.size = chart.size
+		contact_surface.size = chart.size
+		geography_surface.queue_redraw()
+	_redraw_contacts()
+
+
+func _redraw_contacts() -> void:
+	if contact_surface != null:
+		contact_surface.queue_redraw()
+	queue_redraw()
+
+
+func _build_plot_panel() -> void:
+	plot_panel = Ui.sheet()
+	plot_panel.name = "CoastalPlotInspector"
+	plot_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	plot_panel.offset_left = -FRAME - 294.0
+	plot_panel.offset_right = -FRAME - 12.0
+	plot_panel.offset_top = TOP_H + 14.0
+	plot_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(plot_panel)
+	var body := Ui.vbox(9)
+	plot_panel.add_child(body)
+	body.add_child(Ui.eyebrow("Coastal plots"))
+	plot_heading = Ui.heading("Choose a stretch of coast")
+	plot_heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(plot_heading)
+	plot_meta = Ui.caption("200 × 200 m per plot", "positive")
+	body.add_child(plot_meta)
+	plot_body = Ui.caption("Click a green square to inspect it.\nAdjoining coast plots are highlighted.")
+	plot_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	plot_body.custom_minimum_size.x = 246.0
+	body.add_child(plot_body)
+	plot_focus = Ui.button("Zoom to plot", "secondary", _focus_plot)
+	body.add_child(plot_focus)
+	plot_action = Ui.button("Buy plot", "primary", _request_plot_action)
+	body.add_child(plot_action)
+	plot_note = Ui.caption("Property purchases come later.")
+	body.add_child(plot_note)
+	_refresh_plot_panel()
+
+
+## Optional host-owned plot information/action. The ordinary navigation chart
+## remains inspection-only unless a host explicitly supplies this presentation.
+func set_plot_inspector(provider: Callable) -> void:
+	plot_inspector_provider = provider
+	_refresh_plot_panel()
+
+
+func _request_plot_action() -> void:
+	if plot_action == null or not plot_action.visible or plot_action.disabled or not plot_inspector_provider.is_valid(): return
+	var row := renderer.plots.index.get_plot(selected_plot) if renderer.plots.index != null else {}
+	if not row.is_empty(): plot_action_requested.emit(row.duplicate(true))
+
+
+func _refresh_plot_panel() -> void:
+	if plot_panel == null:
+		return
+	plot_panel.visible = mode == Mode.NAVIGATION and layers.is_visible("plots")
+	var row := renderer.plots.index.get_plot(selected_plot) if renderer.plots.index != null else {}
+	plot_focus.visible = not row.is_empty()
+	plot_action.hide()
+	plot_note.visible = not plot_inspector_provider.is_valid()
+	if plot_inspector_provider.is_valid():
+		var content: Variant = plot_inspector_provider.call(row.duplicate(true))
+		if content is Dictionary:
+			plot_heading.text = str(content.get("heading", "Choose a plot"))
+			plot_meta.text = str(content.get("meta", ""))
+			plot_body.text = str(content.get("body", ""))
+			plot_action.text = str(content.get("action_text", "Buy plot"))
+			plot_action.visible = bool(content.get("action_visible", false)) and not row.is_empty()
+			plot_action.disabled = not bool(content.get("action_enabled", false))
+			return
+	if row.is_empty():
+		plot_heading.text = "Choose a stretch of coast"
+		plot_meta.text = "200 × 200 m · 4 hectares"
+		plot_body.text = "Click a green square to inspect it.\nAdjoining coast plots are highlighted."
+		return
+	var grid: Array = row.get("grid", [0, 0])
+	plot_heading.text = "Coast plot %s / %s" % [grid[0], grid[1]]
+	plot_meta.text = "200 × 200 m · 4 hectares"
+	plot_body.text = "Shoreline  %.0f m\nAdjoining plots  %d\n\n%s" % [
+		float(row.get("shore_length_m", 0.0)), renderer.plots.index.neighbour_ids(selected_plot).size(),
+		"Near an existing harbour" if _plot_near_port(row) else "Coastal land and waterfront"]
+	if bool(row.get("boundary_review_required", false)):
+		plot_body.text += "\nBoundary needs review before purchase."
+
+
+func _plot_near_port(row: Dictionary) -> bool:
+	if data == null:
+		return false
+	var bounds := ChartPlotLayer.plot_rect(row).grow(400.0)
+	for port in data.ports:
+		var point := port.get("position", Vector3.INF) as Vector3
+		if point.is_finite() and bounds.has_point(Vector2(point.x, point.z)):
+			return true
+	return false
+
+
+func _focus_plot() -> void:
+	if renderer.plots.index == null:
+		return
+	var row := renderer.plots.index.get_plot(selected_plot)
+	if row.is_empty():
+		return
+	var rect := ChartPlotLayer.plot_rect(row)
+	camera.focus_harbour(rect.get_center(), 1800.0)
+	_schedule_overlays()
+	_redraw_geography()
 
 
 func _build_pick_panel() -> void:
@@ -384,6 +576,7 @@ func _confirm_home_port() -> void:
 		return
 	if selected_port.is_empty():
 		return
+	if data!=null and str(data.port_info(selected_port).get("source",""))=="custom":return
 	home_port_confirmed.emit(selected_port)
 
 
@@ -411,6 +604,11 @@ func _refresh_pick_panel() -> void:
 			pick_confirm.disabled = true
 		return
 	pick_title.text = str(info.get("display_name", selected_port))
+	if str(info.get("source",""))=="custom":
+		pick_meta.text="Constructed port · %d constructed berths"%int(info.get("derived_berth_count",0))
+		pick_body.text="Company ref: %s\nHome-port selection is unavailable for this constructed port."%str(info.get("owner_company_id","—"))
+		if pick_confirm!=null:pick_confirm.disabled=true
+		return
 	var region := str(info.get("region", "coastal")).capitalize()
 	var size_n := int(info.get("size", 0))
 	pick_meta.text = "%s  ·  size %d  ·  %d berths" % [
@@ -451,6 +649,7 @@ func _refresh_pick_panel() -> void:
 
 
 func _home_port_supports_required_family(info: Dictionary) -> bool:
+	if str(info.get("source",""))=="custom":return false
 	if home_port_required_family.is_empty():
 		return true
 	if home_port_required_family == "fishing":
@@ -498,8 +697,21 @@ func _build_toolbar() -> void:
 	weather_button = Ui.button("Weather", "chip")
 	weather_button.pressed.connect(_toggle_overlay.bind("weather"))
 	bar.add_child(weather_button)
+	plots_button = Ui.button("Coastal plots · G", "chip")
+	plots_button.toggle_mode = true
+	plots_button.pressed.connect(_toggle_overlay.bind("plots"))
+	bar.add_child(plots_button)
 	var depth_key := Ui.caption("Depth m: light <10 / 25 / 50 / 100 / 200+ dark")
+	depth_key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(depth_key)
+	zoom_out_button = Ui.button("−", "secondary", func() -> void:
+		_zoom_at(_chart_rect().get_center(), -1))
+	zoom_out_button.tooltip_text = "Zoom out"
+	bar.add_child(zoom_out_button)
+	zoom_in_button = Ui.button("+", "secondary", func() -> void:
+		_zoom_at(_chart_rect().get_center(), 1))
+	zoom_in_button.tooltip_text = "Zoom in"
+	bar.add_child(zoom_in_button)
 
 	center_button = Ui.button("Center", "secondary", _home)
 	bar.add_child(center_button)
@@ -527,11 +739,16 @@ func _apply_mode_ui() -> void:
 		pick_panel.visible = picking
 	if pick_back != null:
 		pick_back.visible = picking
+	if plots_button != null:
+		plots_button.visible = not picking
+	_refresh_plot_panel()
 
 
 func _refresh_mode_buttons() -> void:
 	if weather_button != null:
 		weather_button.set_pressed_no_signal(layers.is_visible("weather"))
+	if plots_button != null:
+		plots_button.set_pressed_no_signal(layers.is_visible("plots"))
 
 
 func _toggle_overlay(layer_name: String) -> void:
@@ -539,11 +756,12 @@ func _toggle_overlay(layer_name: String) -> void:
 		return
 	layers.toggle(layer_name)
 	_refresh_mode_buttons()
+	_refresh_plot_panel()
 	if mode != Mode.HOME_PORT_PICK:
 		_persist_chart_settings()
 	_refresh_hover_readout(true)
 	_schedule_overlays()
-	queue_redraw()
+	_redraw_geography()
 
 
 func _load_layer_preferences() -> void:
@@ -552,6 +770,7 @@ func _load_layer_preferences() -> void:
 		return
 	## Legacy fishing preferences are ignored.
 	layers.apply_preset(int(settings.get("chart_profile")))
+	layers.set_visible("plots", true)
 	layers.set_overlay_preferences(
 		bool(settings.get("chart_weather_enabled")),
 		false,
@@ -572,26 +791,40 @@ func _persist_chart_settings() -> void:
 
 func _click_chart(screen: Vector2) -> void:
 	var hit := renderer.hit_test_port(screen, last_ctx, 28.0 if mode == Mode.HOME_PORT_PICK else 18.0)
+	if hit.is_empty() and mode == Mode.NAVIGATION and layers.is_visible("plots") and renderer.plots.index != null:
+		var row := renderer.plots.index.plot_at(renderer.world_at(screen, last_ctx))
+		if not row.is_empty() and renderer.plots.allows_plot(str(row.get("id", ""))):
+			selected_plot = str(row.get("id", ""))
+			selected_port = ""
+			_refresh_plot_panel()
+			plot_selected.emit(row.duplicate(true))
+			_redraw_contacts()
+			return
 	if hit.is_empty():
 		if mode == Mode.NAVIGATION:
 			selected_port = ""
-			queue_redraw()
+			selected_plot = ""
+			_refresh_plot_panel()
+			_redraw_contacts()
 		return
 	selected_port = hit
+	selected_plot = ""
+	_refresh_plot_panel()
 	if mode == Mode.HOME_PORT_PICK:
 		_refresh_pick_panel()
-		queue_redraw()
+		_redraw_contacts()
 	else:
 		port_selected.emit(hit)
-		queue_redraw()
+		_redraw_contacts()
 
 
 func _home() -> void:
 	if data == null:
 		return
 	camera.home(nav.ship_position, data.port_positions())
+	camera_initialized = true
 	_schedule_overlays()
-	queue_redraw()
+	_redraw_geography()
 
 
 func _zoom_at(screen: Vector2, steps: int) -> void:
@@ -602,9 +835,10 @@ func _zoom_at(screen: Vector2, steps: int) -> void:
 	var uv := (screen - chart.position) / chart.size
 	var after := bounds.position + uv * bounds.size
 	camera.center += before - after
+	camera._clamp_center()
 	interaction_settle = INTERACTION_SETTLE_S
 	_schedule_overlays()
-	queue_redraw()
+	_redraw_geography()
 
 
 func _schedule_overlays() -> void:
@@ -640,6 +874,8 @@ func _screen_to_world(screen: Vector2) -> Vector2:
 func _pointer_over_chrome(screen: Vector2) -> bool:
 	if pick_panel != null and pick_panel.visible and pick_panel.get_global_rect().has_point(screen):
 		return true
+	if plot_panel != null and plot_panel.visible and plot_panel.get_global_rect().has_point(screen):
+		return true
 	var toolbar := get_node_or_null("ChartToolbar") as Control
 	if toolbar != null and toolbar.get_global_rect().has_point(screen):
 		return true
@@ -649,6 +885,7 @@ func _pointer_over_chrome(screen: Vector2) -> bool:
 func _refresh_hover_readout(force: bool = false) -> void:
 	if not _chart_rect().has_point(hover_screen) or _pointer_over_chrome(hover_screen):
 		hover_rows.clear()
+		hover_plot = ""
 		return
 	if (
 		not force
@@ -657,6 +894,7 @@ func _refresh_hover_readout(force: bool = false) -> void:
 	):
 		return
 	hover_sample_screen = hover_screen
+	hover_plot = ""
 	hover_layer_revision = layers.revision
 	if mode == Mode.HOME_PORT_PICK:
 		var hit := renderer.hit_test_port(hover_screen, last_ctx, 28.0)
@@ -675,14 +913,20 @@ func _refresh_hover_readout(force: bool = false) -> void:
 		layers,
 		WeatherField.current_game_time(),
 	)
+	if layers.is_visible("plots") and renderer.plots.index != null:
+		var row := renderer.plots.index.plot_at(_screen_to_world(hover_screen))
+		if not row.is_empty() and renderer.plots.allows_plot(str(row.get("id", ""))):
+			hover_plot = str(row.get("id", ""))
+			var grid: Array = row.get("grid", [0, 0])
+			hover_rows.append("COAST PLOT %s / %s · 200 × 200 m" % [grid[0], grid[1]])
 
 
-func _draw_compass(chart: Rect2) -> void:
+func _draw_compass(chart: Rect2, canvas: CanvasItem) -> void:
 	var center := chart.position + Vector2(34.0, 35.0)
-	draw_circle(center, 22.0, Color(0.94, 0.93, 0.84, 0.90))
-	draw_arc(center, 22.0, 0.0, TAU, 32, Color(0.10, 0.18, 0.20), 1.0)
-	draw_line(center, center + Vector2(0.0, -17.0), Color(0.78, 0.12, 0.10), 2.0)
-	draw_string(
+	canvas.draw_circle(center, 22.0, Color(0.94, 0.93, 0.84, 0.90))
+	canvas.draw_arc(center, 22.0, 0.0, TAU, 32, Color(0.10, 0.18, 0.20), 1.0)
+	canvas.draw_line(center, center + Vector2(0.0, -17.0), Color(0.78, 0.12, 0.10), 2.0)
+	canvas.draw_string(
 		ThemeDB.fallback_font,
 		center + Vector2(-4.0, -4.0),
 		"N",
@@ -690,16 +934,16 @@ func _draw_compass(chart: Rect2) -> void:
 	)
 
 
-func _draw_scale(chart: Rect2, bounds: Rect2) -> void:
+func _draw_scale(chart: Rect2, bounds: Rect2, canvas: CanvasItem) -> void:
 	var metres_per_px := bounds.size.x / chart.size.x
 	var target_m := metres_per_px * 100.0
 	var nice := _nice_distance(target_m)
 	var width := nice / metres_per_px
 	var origin := chart.position + Vector2(18.0, chart.size.y - 22.0)
-	draw_line(origin, origin + Vector2(width, 0.0), Color(0.08, 0.14, 0.15), 2.0)
-	draw_line(origin, origin + Vector2(0.0, -5.0), Color(0.08, 0.14, 0.15), 2.0)
-	draw_line(origin + Vector2(width, 0.0), origin + Vector2(width, -5.0), Color(0.08, 0.14, 0.15), 2.0)
-	draw_string(
+	canvas.draw_line(origin, origin + Vector2(width, 0.0), Color(0.08, 0.14, 0.15), 2.0)
+	canvas.draw_line(origin, origin + Vector2(0.0, -5.0), Color(0.08, 0.14, 0.15), 2.0)
+	canvas.draw_line(origin + Vector2(width, 0.0), origin + Vector2(width, -5.0), Color(0.08, 0.14, 0.15), 2.0)
+	canvas.draw_string(
 		ThemeDB.fallback_font,
 		origin + Vector2(0.0, -7.0),
 		_format_distance(nice),
